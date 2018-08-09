@@ -1,0 +1,13 @@
+language: rust
+rust: nightly
+
+script:
+  - ci/check-basic-style.sh
+  - cargo build --verbose
+  - cargo test --verbose
+
+env:
+  - RUSTFLAGS="--deny warnings"
+
+# speeds up travis build
+cache: cargo
