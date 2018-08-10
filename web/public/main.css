@@ -1,0 +1,24 @@
+/* Web fonts */
+@import url('https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,500,900');
+
+
+body, html {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    text-align: center;
+    background-color: #23242a;
+    color: white;
+    font-family: 'Roboto', sans-serif;
+}
+
+#mainScreen {
+    border: 5px solid black;
+    border-radius: 5px;
+    width: 60%;
+    max-width: 80vh;
+    box-shadow: 0px 0px 25px rgba(0, 0, 0, 0.5);
+    background-color: #306230;
+}

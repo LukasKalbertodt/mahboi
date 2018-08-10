@@ -1,0 +1,16 @@
+{
+  "name": "mahboi-web",
+  "version": "0.1.0",
+  "description": "Yet another Game Boy emulator",
+  "repository": "https://github.com/LukasKalbertodt/mahboi",
+  "author": "Lukas Kalbertodt <lukas.kalbertodt@gmail.com>",
+  "license": "(MIT OR Apache-2.0)",
+
+  "scripts": {
+    "serve": "http-server"
+  },
+  "devDependencies": {
+    "http-server": "^0.11.1",
+    "typescript": "^3.0.1"
+  }
+}
