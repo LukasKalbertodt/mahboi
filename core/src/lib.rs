@@ -1,7 +1,8 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+//! Mahboi!
+
+
+/// Width of the Game Boy screen in pixels.
+pub const SCREEN_WIDTH: usize = 160;
+
+/// Height of the Game Boy screen in pixels.
+pub const SCREEN_HEIGHT: usize = 144;
