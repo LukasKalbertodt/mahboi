@@ -1,0 +1,12 @@
+cargo-features = ["edition"]
+
+[package]
+name = "mahboi-desktop"
+version = "0.1.0"
+authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+mahboi = { path = "../core" }
+minifb = "0.10"
+structopt = "0.2"
