@@ -1,6 +1,10 @@
 language: rust
 rust: nightly
 
+
+before_script:
+  - sudo apt-get install xorg-dev
+
 script:
   - ci/check-basic-style.sh
   - cargo build --verbose
