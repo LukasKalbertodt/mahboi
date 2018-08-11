@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "outDir": "./public/generated/",
+    "strict": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
