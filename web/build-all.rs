@@ -1,8 +1,16 @@
 #!/usr/bin/env run-cargo-script
-
 // cargo-deps: failure, term-painter
 //
-// This file should instead be called `build.rs`, but this is currently not
+// # THE BUILD SYSTEM
+//
+// This file contains the build system. It consists of four steps, each defined
+// in its own function. You can read the function documentation to learn more
+// about each step.
+//
+// To run this file, you need `cargo-script`. You can install it via:
+// `cargo install cargo-script`. Afterwards you can just run `./build-all.rs`.
+//
+// TODO: This file should be called `build.rs`, but this is currently not
 // possible. See: https://github.com/DanielKeep/cargo-script/issues/58
 
 #[macro_use]
@@ -56,7 +64,10 @@ fn run() -> Result<(), Error> {
     Ok(())
 }
 
-/// Run `cargo build --target wasm32-unknown-unknown`.
+/// Runs `cargo build --target wasm32-unknown-unknown`.
+///
+/// This generates the actualy wasm file in the shared `target/` folder located
+/// `../target/`.
 fn cargo_build(release_mode: bool) -> Result<(), Error> {
     println!(
         "  [1/4] 🌀 {} (`cargo build{}`) ...",
@@ -82,7 +93,19 @@ fn cargo_build(release_mode: bool) -> Result<(), Error> {
     Ok(())
 }
 
-/// Run `wasm-bindgen --no-modules ...`
+/// Runs `wasm-bindgen --no-modules ...`.
+///
+/// So the WASM file output by `cargo build` is not that nice yet. To have a
+/// nice interface, `wasm-bindgen` postprocesses the file and creates a JS
+/// wrapper with a nice interface. It also outputs a TypeScript declaration
+/// file.
+///
+/// Running this build step results in:
+/// - `dist/mahboi_web.js`
+/// - `dist/mahboi_web_bg.wasm`
+/// - `src/mahboi.d.ts` (the TS declaration file)
+///
+/// TODO: We might want to put the TS declaration file somewhere else...
 fn wasm_bindgen(release_mode: bool, out_dir: &Path) -> Result<(), Error> {
     println!(
         "  [2/4] 🔗 {} ... ",
@@ -115,8 +138,8 @@ fn wasm_bindgen(release_mode: bool, out_dir: &Path) -> Result<(), Error> {
     }
 
     // We need to postprocess the typescript definition file emitted by
-    // wasm-bg. We wrap the whole file into `namespace mahboi_web { ... }` and
-    // add a `mahboi_web` function at the end.
+    // wasm-bg. We wrap the whole file into `namespace wasm_bindgen { ... }` and
+    // add a `wasm_bindgen` function at the end.
     let type_decl_path = out_dir.join("mahboi_web.d.ts");
     let orig = BufReader::new(File::open(&type_decl_path)?);
 
@@ -139,32 +162,33 @@ fn wasm_bindgen(release_mode: bool, out_dir: &Path) -> Result<(), Error> {
 }
 
 /// Just execute `tsc`.
+///
+/// This build steps takes the file `src/main.ts` and generates the file
+/// `dist/main.js`. The typescript compiler is only run if either `src/main.ts`
+/// or `src/mahboi.d.ts` is newer than the `dist/main.js`.
 fn compile_typescript(out_dir: &Path) -> Result<(), Error> {
     println!(
         "  [3/4] 🔬 {} ...",
         Attr::Bold.paint("Compiling TypeScript"),
     );
 
-    let src_file = Path::new("src").join("main.ts").metadata()?;
-    let decl_file = Path::new("src").join("mahboi.d.ts").metadata()?;
-    let out_file = out_dir.join("main.js").metadata()?;
+    let src_modified = Path::new("src").join("main.ts").metadata()?.modified();
+    let decl_modified = Path::new("src").join("mahboi.d.ts").metadata()?.modified();
+    let out_modified = out_dir.join("main.js").metadata()?.modified();
 
     // The TS compiler can be super slow, so we check if compilation is
     // necessary.
-    let is_up_to_date = src_file.modified()? < out_file.modified()?
-        && decl_file.modified()? < out_file.modified()?;
-    if is_up_to_date {
+    if src_modified < out_modified && decl_modified < out_modified {
         println!("           ... files up to date.");
-        return Ok(());
-    }
+    } else {
+        let status = Command::new("tsc")
+            .spawn()
+            .context("failed to spawn `tsc`")?
+            .wait()?;
 
-    let status = Command::new("tsc")
-        .spawn()
-        .context("failed to spawn `tsc`")?
-        .wait()?;
-
-    if !status.success() {
-        bail!("Failed to run `tsc` (exit code {:?})", status.code());
+        if !status.success() {
+            bail!("Failed to run `tsc` (exit code {:?})", status.code());
+        }
     }
 
     Ok(())
