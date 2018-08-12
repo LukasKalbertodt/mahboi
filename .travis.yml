@@ -1,21 +1,25 @@
-language: rust
-rust: nightly
-
-
-before_script:
-  - sudo apt-get install xorg-dev
-  - cargo install cargo-script
-  - cargo install wasm-bindgen-cli
-  - rustup target add wasm32-unknown-unknown
-
-script:
-  - ci/check-basic-style.sh
-  - cargo build --verbose
-  - cargo test --verbose
-  - cd web && ./build-all.rs
-
-env:
-  - RUSTFLAGS="--deny warnings"
-
-# speeds up travis build
-cache: cargo
+# We define two jobs:
+# - "Check Style": it only runs a simple style checker script
+# - "Compile & Test": this actually needs Rust and compiles everything
+matrix:
+  fast_finish: true
+  include:
+    - name: "Check style"
+      language: generic
+      script: ./ci/check-basic-style.sh
+    - name: "Compile & Test"
+      language: rust
+      rust: nightly
+      env:
+        - RUSTFLAGS="--deny warnings"
+      # speeds up travis build
+      cache: cargo
+      before_script:
+        - sudo apt-get install xorg-dev
+        - hash cargo-script 2>/dev/null || cargo install -f cargo-script
+        - hash wasm-bindgen 2>/dev/null || cargo install -f wasm-bindgen-cli
+        - rustup target add wasm32-unknown-unknown
+      script:
+        - cargo build --verbose
+        - cargo test --verbose
+        - cd web && ./build-all.rs
