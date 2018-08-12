@@ -119,6 +119,19 @@ fn wasm_bindgen(release_mode: bool, out_dir: &Path) -> Result<(), Error> {
     };
     let input = format!("../target/wasm32-unknown-unknown/{}/mahboi_web.wasm", folder);
 
+    // Only build if the WASM file has changed. We don't do it here for the
+    // speed, but to avoid overwriting already existing files and thus changing
+    // the modified date. Otherwise, the next build step couldn't tell if
+    // modifications are necessary.
+    let out_wasm = out_dir.join("mahboi_web_bg.wasm");
+    let needs_rebuild = !out_wasm.exists()
+        || Path::new(&input).metadata()?.modified()? >= out_wasm.metadata()?.modified()?;
+
+    if !needs_rebuild {
+        println!("           ... files up to date.");
+        return Ok(());
+    }
+
     // Execute `wasm-bindgen` and let it put all the files in `dist`. Three
     // files are written:
     // - `mahboi_web.js` (JS shim)
@@ -172,15 +185,17 @@ fn compile_typescript(out_dir: &Path) -> Result<(), Error> {
         Attr::Bold.paint("Compiling TypeScript"),
     );
 
-    let src_modified = Path::new("src").join("main.ts").metadata()?.modified();
-    let decl_modified = Path::new("src").join("mahboi.d.ts").metadata()?.modified();
-    let out_modified = out_dir.join("main.js").metadata()?.modified();
-
     // The TS compiler can be super slow, so we check if compilation is
     // necessary.
-    if src_modified < out_modified && decl_modified < out_modified {
-        println!("           ... files up to date.");
-    } else {
+    let src_modified = Path::new("src").join("main.ts").metadata()?.modified()?;
+    let decl_modified = Path::new("src").join("mahboi.d.ts").metadata()?.modified()?;
+    let out_file = out_dir.join("main.js");
+
+    let needs_rebuild = !out_file.exists()
+        || src_modified >= out_file.metadata()?.modified()?
+        || decl_modified >= out_file.metadata()?.modified()?;
+
+    if needs_rebuild {
         let status = Command::new("tsc")
             .spawn()
             .context("failed to spawn `tsc`")?
@@ -189,6 +204,8 @@ fn compile_typescript(out_dir: &Path) -> Result<(), Error> {
         if !status.success() {
             bail!("Failed to run `tsc` (exit code {:?})", status.code());
         }
+    } else {
+        println!("           ... files up to date.");
     }
 
     Ok(())
