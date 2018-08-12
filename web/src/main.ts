@@ -1,22 +1,8 @@
-// import * as mahboi from './mahboi_web';
-
-// declare namespace mahboi_web;
-// const mahboi = mahboi_web;
-// declare namespace mahboi {
-//     function makeGreeting(s: string): string;
-// };
-
-// declare mahboi_web;
-
 import mahboi = wasm_bindgen;
 
 
-
 const load_wasm = () => {
-    wasm_bindgen("/mahboi_web_bg.wasm").then(() => {
-        console.log(mahboi.get_color(0, 100));
-        init()
-    });
+    wasm_bindgen("/mahboi_web_bg.wasm").then(init);
 }
 
 const init = () => {
