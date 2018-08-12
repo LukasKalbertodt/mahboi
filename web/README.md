@@ -21,7 +21,7 @@ To work on this, you should have a few things:
 
 This builds everything and the resulting files in the `dist/` folder. Start a webserver in that folder to try the program.
 
-####
+#### Watch
 ```
 ./watch.sh
 ```
