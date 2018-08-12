@@ -1,3 +1,24 @@
+// import * as mahboi from './mahboi_web';
+
+// declare namespace mahboi_web;
+// const mahboi = mahboi_web;
+// declare namespace mahboi {
+//     function makeGreeting(s: string): string;
+// };
+
+// declare mahboi_web;
+
+import mahboi = wasm_bindgen;
+
+
+
+const load_wasm = () => {
+    wasm_bindgen("/mahboi_web_bg.wasm").then(() => {
+        console.log(mahboi.get_color(0, 100));
+        init()
+    });
+}
+
 const init = () => {
     let x = 0;
     let y = 0;
@@ -15,25 +36,26 @@ const init = () => {
     }
 
     // Update pixels to rainbow colors (dummy code, can be removed later)
-    let color = 0;
     window.setInterval(() => {
-        let pixelOffset = y * (width * 4) + x * 4;
-        imageData.data[pixelOffset] = color % 256;
-        imageData.data[pixelOffset + 1] = (color / 256) % 256;
-        imageData.data[pixelOffset + 2] = 100;
+        for (let i = 0; i < 10; i++) {
+            let color = mahboi.get_color(x, y);
 
-        color += 16;
+            let offset = y * (width * 4) + x * 4;
+            imageData.data[offset + 0] = color.r;
+            imageData.data[offset + 1] = color.g;
+            imageData.data[offset + 2] = color.b;
 
-        // Advance to next position
-        x++;
-        if (x == width) {
-            x = 0;
-            y++;
-            if (y == height) {
-                y = 0;
+            // Advance to next position
+            x++;
+            if (x == width) {
+                x = 0;
+                y++;
+                if (y == height) {
+                    y = 0;
+                }
             }
         }
-    }, 2);
+    }, 10);
 
     // Update the canvas with our image data once a frame
     repeatEveryFrame(() => {
@@ -57,4 +79,4 @@ const getCanvas = (): HTMLCanvasElement => {
 
 
 // Once the DOM is ready, initialize everything
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", load_wasm);

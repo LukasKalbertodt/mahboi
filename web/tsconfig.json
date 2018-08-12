@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES6",
-    "outDir": "./public/generated/",
-    "strict": true
+    "outDir": "./dist",
+    "strict": true,
+    "baseUrl": "./dist"
   },
-  "include": ["src"],
-  "exclude": ["node_modules"]
+  "files": ["src/main.ts", "src/mahboi.d.ts"]
 }
