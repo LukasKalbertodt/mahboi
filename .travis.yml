@@ -4,11 +4,15 @@ rust: nightly
 
 before_script:
   - sudo apt-get install xorg-dev
+  - cargo install cargo-script
+  - cargo install wasm-bindgen-cli
+  - rustup target add wasm32-unknown-unknown
 
 script:
   - ci/check-basic-style.sh
   - cargo build --verbose
   - cargo test --verbose
+  - cd web && ./build-all.rs
 
 env:
   - RUSTFLAGS="--deny warnings"
