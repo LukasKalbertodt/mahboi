@@ -1,7 +1,10 @@
+cargo-features = ["edition"]
+
 [package]
 name = "mahboi-web"
 version = "0.1.0"
 authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
+edition = "2018"
 
 [lib]
 crate-type = ["cdylib"]
