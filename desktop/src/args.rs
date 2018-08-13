@@ -15,7 +15,7 @@ crate struct Args {
     crate scale: Scale,
 }
 
-fn parse_scale(src: &str) -> Result<Scale, String> {
+fn parse_scale(src: &str) -> Result<Scale, &'static str> {
     match src {
         "1" => Ok(Scale::X1),
         "2" => Ok(Scale::X2),
@@ -24,6 +24,6 @@ fn parse_scale(src: &str) -> Result<Scale, String> {
         "16" => Ok(Scale::X16),
         "32" => Ok(Scale::X32),
         "fit" => Ok(Scale::FitScreen),
-        _ => Err("only '1', '2', '4', '8', '16', '32' or 'fit' are allowed".into()),
+        _ => Err("only '1', '2', '4', '8', '16', '32' or 'fit' are allowed"),
     }
 }

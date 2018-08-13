@@ -7,6 +7,7 @@ authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+failure = "0.1.2"
 mahboi = { path = "../core" }
 minifb = "0.10"
 structopt = "0.2"

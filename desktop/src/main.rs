@@ -4,20 +4,29 @@
 mod args;
 
 
+use failure::{Error, ResultExt};
 use minifb::{Key, WindowOptions, Window};
 use mahboi::{SCREEN_WIDTH, SCREEN_HEIGHT};
 use structopt::StructOpt;
 
-use std::error::Error;
-
 use crate::args::Args;
 
 
-fn main() -> Result<(), Box<Error>> {
+fn main() {
+    if let Err(e) = run() {
+        println!("ERROR: {}", e);
+
+        for cause in e.iter_causes() {
+            println!("  ... caused by: {}", cause);
+        }
+    }
+}
+
+fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
 
-    let mut window = open_window(&args)?;
+    let mut window = open_window(&args).context("failed to open window")?;
 
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
     let mut color = 0;
@@ -34,7 +43,7 @@ fn main() -> Result<(), Box<Error>> {
 }
 
 /// Opens a `minifb` window configured by `args`.
-fn open_window(args: &Args) -> Result<Window, Box<Error>> {
+fn open_window(args: &Args) -> Result<Window, Error> {
     const TITLE: &str = "Mahboi";
 
     let options = WindowOptions {
