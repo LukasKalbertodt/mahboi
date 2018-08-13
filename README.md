@@ -18,19 +18,7 @@ To compile the WASM part of this project, additional software is required. See t
 
 ## Documentation and Information
 
-#### Random facts:
-- The classic *Game Boy* is also called *DMG* or *DMG-01* (dot matrix game, development name).
-- The *Game Boy Color* is also called *CGB*.
-
-#### Links:
-
-- [Complete reference explanation of everything GB (inclusive GBC)](http://bgb.bircd.org/pandocs.htm) (also as [wiki version](http://gbdev.gg8.se/wiki/articles/Pan_Docs))
-- [OP code cheat sheet](http://pastraiser.com/cpu/gameboy/gameboy_opcodes.html)
-- [Information about the BIOS](http://gbdev.gg8.se/wiki/articles/Gameboy_Bootstrap_ROM)
-    - [Link the the GB bios](http://www.neviksti.com/DMG/)
-    - [Post describing the CGB boot extraction (incl. download)](https://web.archive.org/web/20091001114207/http://www.fpgb.org:80/?page_id=17)
-- [A super extensive list of everything useful for GB development](https://github.com/avivace/awesome-gbdev)
-
+[In the wiki](https://github.com/LukasKalbertodt/mahboi/wiki).
 
 ---
 
