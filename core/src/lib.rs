@@ -62,8 +62,8 @@ struct Machine {
 
 struct Cpu {
     // general purpose registers
-    a: Byte,
-    f: Byte,
+    a: Byte, // accumulator
+    f: Byte, // flags: 7 = zero, 6 = substract, 5 = half carry, 4 = carry
     b: Byte,
     c: Byte,
     d: Byte,
@@ -74,12 +74,6 @@ struct Cpu {
     // addressing registers
     sp: Addr,
     pc: Addr,
-
-    // flags
-    zero: bool,
-    subtract: bool,
-    half_carry: bool,
-    carry: bool,
 }
 
 struct Cartridge {}
