@@ -4,10 +4,10 @@
 
 
 use crate::primitives::{Byte, Addr, Memory};
-use crate::env::{Peripherals, Debugger};
+use crate::env::{Peripherals, Debugger, EventLevel};
 
 mod primitives;
-mod env;
+pub mod env;
 
 
 /// Width of the Game Boy screen in pixels.
@@ -104,12 +104,17 @@ pub struct Emulator<'a, P: 'a + Peripherals, D: 'a + Debugger> {
 }
 
 impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
-    pub fn new(cartridge: Cartridge, debug: &'a mut D, peripherals: &'a mut P) -> Self {
-        Self {
+    pub fn new(cartridge: Cartridge, peripherals: &'a mut P, debug: &'a mut D) -> Self {
+        debug.post_event(EventLevel::Trace, "Creating emulator.".into());
+
+        let mut out = Self {
             machine: Machine::new(cartridge),
             debug,
             peripherals,
-        }
+        };
+
+        out.debug().post_event(EventLevel::Trace, "Emulator created.".into());
+        out
     }
 
     fn display(&mut self) -> &mut P::Display {
@@ -122,5 +127,9 @@ impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
 
     fn input(&mut self) -> &mut P::Input {
         self.peripherals.input()
+    }
+
+    fn debug(&mut self) -> &mut D {
+        self.debug
     }
 }

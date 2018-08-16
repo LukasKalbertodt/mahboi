@@ -1,13 +1,19 @@
 #![feature(rust_2018_preview)]
 
 
+extern crate mahboi;
+
 mod args;
+mod debug;
+mod env;
 
 
 use failure::{Error, ResultExt};
 use minifb::{Key, WindowOptions, Window};
-use mahboi::{SCREEN_WIDTH, SCREEN_HEIGHT};
+use mahboi::{SCREEN_WIDTH, SCREEN_HEIGHT, Emulator, Cartridge};
 use structopt::StructOpt;
+use crate::debug::CliDebugger;
+use crate::env::Peripherals;
 
 use crate::args::Args;
 
@@ -25,6 +31,14 @@ fn main() {
 fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
+
+    // Create emulator
+    let mut debugger = CliDebugger {};
+    let cartridge = Cartridge {};
+    let mut peripherals = Peripherals {};
+    let emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
+        cartridge, &mut peripherals, &mut debugger
+    );
 
     let mut window = open_window(&args).context("failed to open window")?;
 
