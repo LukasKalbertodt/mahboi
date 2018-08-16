@@ -5,7 +5,7 @@ use std::{
 
 /// This represents a byte
 #[derive(Clone, Copy)]
-pub(crate) struct Byte(u8);
+pub struct Byte(u8);
 
 impl Add for Byte {
     type Output = Self;
@@ -35,9 +35,19 @@ impl Display for Byte {
     }
 }
 
+impl Byte {
+    pub fn new(val: u8) -> Self {
+        Byte(val)
+    }
+
+    pub fn zero() -> Self {
+        Self::new(0)
+    }
+}
+
 /// This represents an adress
 #[derive(Clone, Copy)]
-pub(crate) struct Addr(u16);
+pub struct Addr(u16);
 
 impl Add for Addr {
     type Output = Self;
@@ -56,12 +66,16 @@ impl Sub for Addr {
 }
 
 impl Addr {
-    pub(crate) fn get(&self) -> u16 {
-        self.0
+    pub fn new(val: u16) -> Self {
+        Addr(val)
     }
 
-    pub(crate) fn new(val: u16) -> Self {
-        Addr(val)
+    pub fn zero() -> Self {
+        Self::new(0)
+    }
+
+    pub fn get(&self) -> u16 {
+        self.0
     }
 }
 
@@ -84,5 +98,15 @@ impl Index<Addr> for Memory {
     type Output = Byte;
     fn index(&self, index: Addr) -> &Self::Output {
         &(*self.0)[index.0 as usize]
+    }
+}
+
+impl Memory {
+    pub(crate) fn zeroed(len: Addr) -> Self {
+        Memory(vec![Byte::zero(); len.get() as usize].into_boxed_slice())
+    }
+
+    pub(crate) fn len(&self) -> Addr {
+        Addr::new(self.0.len() as u16)
     }
 }
