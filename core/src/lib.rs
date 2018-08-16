@@ -6,6 +6,7 @@
 use crate::primitives::{Byte, Addr, Memory};
 
 mod primitives;
+mod env;
 
 
 /// Width of the Game Boy screen in pixels.
