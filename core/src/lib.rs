@@ -2,18 +2,21 @@
 
 #![feature(rust_2018_preview)]
 #![feature(exclusive_range_pattern)]
+#![feature(const_fn)]
 
 
 use crate::{
     primitives::{Byte, Addr, Memory, CycleCounter},
     env::{Peripherals, Debugger, EventLevel},
     cartridge::{Cartridge},
+    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
 };
 
 
 mod primitives;
 pub mod env;
 pub mod cartridge;
+pub mod instr;
 
 
 /// Width of the Game Boy screen in pixels.
@@ -85,8 +88,11 @@ impl Machine {
     /// Executes one (the next) operation.
     fn step(&mut self) {
         let op_code = self.load_byte(self.cpu.pc);
+        let instr = INSTRUCTIONS[op_code.get() as usize]
+            .expect(&format!("Unknown instruction {} in position: {}", op_code, self.cpu.pc));
+
         match op_code {
-            _ => panic!("Unknown instruction {} in position: {}", op_code, self.cpu.pc),
+            _ => panic!("Unimplemented instruction {:?} in position: {}", instr, self.cpu.pc),
         }
 
         self.cycle_counter.inc();

@@ -43,6 +43,10 @@ impl Byte {
     pub fn zero() -> Self {
         Self::new(0)
     }
+
+    pub fn get(&self) -> u8 {
+        self.0
+    }
 }
 
 /// This represents an adress
@@ -122,6 +126,7 @@ impl IndexMut<Addr> for Memory {
     }
 }
 
+// TODO cpu cycles or machine cycles???
 /// Numbers of cycles per frame (including v-blank)
 pub const CYCLES_PER_FRAME: u16 = 17556;
 
