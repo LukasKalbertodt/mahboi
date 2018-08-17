@@ -142,6 +142,8 @@ impl Cartridge {
         let rom_size = RomSize::from_byte(bytes[0x0148]);
         let ram_size = RamSize::from_byte(bytes[0x0149]);
 
+        // TODO checksum and nintendo logo check
+
         // Copy ROM data
         let copy: Vec<_> = bytes.iter().cloned().map(Byte::new).collect();
         Self {

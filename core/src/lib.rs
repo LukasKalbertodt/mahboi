@@ -22,18 +22,18 @@ pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
 
-struct Machine {
-    cpu: Cpu,
+pub struct Machine {
+    pub cpu: Cpu,
 
-    cartridge: Cartridge,
+    pub cartridge: Cartridge,
 
     // TODO These should be arrays!
-    vram: Memory,
-    wram: Memory,
-    oam: Memory,
+    pub vram: Memory,
+    pub wram: Memory,
+    pub oam: Memory,
     // TODO IO register??? 0x80 bytes
-    hram: Memory,
-    ie: Byte,
+    pub hram: Memory,
+    pub ie: Byte,
 }
 
 impl Machine {
@@ -67,20 +67,20 @@ impl Machine {
     }
 }
 
-struct Cpu {
+pub struct Cpu {
     // general purpose registers
-    a: Byte, // accumulator
-    f: Byte, // flags: 7 = zero, 6 = substract, 5 = half carry, 4 = carry
-    b: Byte,
-    c: Byte,
-    d: Byte,
-    e: Byte,
-    h: Byte,
-    l: Byte,
+    pub a: Byte, // accumulator
+    pub f: Byte, // flags: 7 = zero, 6 = substract, 5 = half carry, 4 = carry
+    pub b: Byte,
+    pub c: Byte,
+    pub d: Byte,
+    pub e: Byte,
+    pub h: Byte,
+    pub l: Byte,
 
     // addressing registers
-    sp: Addr,
-    pc: Addr,
+    pub sp: Addr,
+    pub pc: Addr,
 }
 
 impl Cpu {
@@ -134,5 +134,9 @@ impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
 
     fn debug(&mut self) -> &mut D {
         self.debug
+    }
+
+    pub fn machine(&self) -> &Machine {
+        &self.machine
     }
 }

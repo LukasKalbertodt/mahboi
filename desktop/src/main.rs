@@ -48,7 +48,7 @@ fn run() -> Result<(), Error> {
     debugger.post_event(EventLevel::Debug, format!("Loaded: {:#?}", cartridge));
 
     let mut peripherals = Peripherals {};
-    let emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
+    let _emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
         cartridge, &mut peripherals, &mut debugger
     );
 

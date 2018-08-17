@@ -92,7 +92,17 @@ impl Display for Addr {
 }
 
 /// This represents memory
-pub(crate) struct Memory(Box<[Byte]>);
+pub struct Memory(Box<[Byte]>);
+
+impl Memory {
+    pub fn zeroed(len: Addr) -> Self {
+        Memory(vec![Byte::zero(); len.get() as usize].into_boxed_slice())
+    }
+
+    pub fn len(&self) -> Addr {
+        Addr::new(self.0.len() as u16)
+    }
+}
 
 impl Index<Addr> for Memory {
     type Output = Byte;
@@ -101,12 +111,8 @@ impl Index<Addr> for Memory {
     }
 }
 
-impl Memory {
-    pub(crate) fn zeroed(len: Addr) -> Self {
-        Memory(vec![Byte::zero(); len.get() as usize].into_boxed_slice())
-    }
-
-    pub(crate) fn len(&self) -> Addr {
-        Addr::new(self.0.len() as u16)
+impl IndexMut<Addr> for Memory {
+    fn index_mut(&mut self, index: Addr) -> &mut Self::Output {
+        &mut (*self.0)[index.0 as usize]
     }
 }
