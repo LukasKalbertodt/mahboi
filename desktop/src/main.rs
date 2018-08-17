@@ -48,7 +48,7 @@ fn run() -> Result<(), Error> {
     debugger.post_event(EventLevel::Debug, format!("Loaded: {:#?}", cartridge));
 
     let mut peripherals = Peripherals {};
-    let _emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
+    let mut emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
         cartridge, &mut peripherals, &mut debugger
     );
 
@@ -63,6 +63,9 @@ fn run() -> Result<(), Error> {
         color += 1;
 
         window.update_with_buffer(&buffer).unwrap();
+
+        // Run the emulator.
+        emulator.execute_frame();
     }
 
     Ok(())

@@ -7,3 +7,7 @@ authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+
+[build-dependencies]
+failure = "0.1.2"
+reqwest = "0.8"

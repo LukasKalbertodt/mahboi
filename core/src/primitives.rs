@@ -25,7 +25,7 @@ impl Sub for Byte {
 
 impl Debug for Byte {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:02x}", self.0)
+        write!(f, "0x{:02x}", self.0)
     }
 }
 
@@ -81,7 +81,7 @@ impl Addr {
 
 impl Debug for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:04x}", self.0)
+        write!(f, "0x{:04x}", self.0)
     }
 }
 
@@ -99,6 +99,11 @@ impl Memory {
         Memory(vec![Byte::zero(); len.get() as usize].into_boxed_slice())
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let copy: Vec<_> = bytes.iter().cloned().map(Byte::new).collect();
+        Memory(copy.into_boxed_slice())
+    }
+
     pub fn len(&self) -> Addr {
         Addr::new(self.0.len() as u16)
     }
@@ -114,5 +119,32 @@ impl Index<Addr> for Memory {
 impl IndexMut<Addr> for Memory {
     fn index_mut(&mut self, index: Addr) -> &mut Self::Output {
         &mut (*self.0)[index.0 as usize]
+    }
+}
+
+/// Numbers of cycles per frame (including v-blank)
+pub const CYCLES_PER_FRAME: u16 = 17556;
+
+/// This represents the cycle counter which can have values between 0 and 17,556.
+#[derive(Debug, Clone, Copy)]
+pub struct CycleCounter(u16);
+
+impl CycleCounter {
+    pub fn zero() -> Self {
+        CycleCounter(0)
+    }
+
+    /// Increases the counter by one. Automatically wraps around 17,556 to 1.
+    pub fn inc(&mut self) {
+        self.0 = if self.0 == CYCLES_PER_FRAME {
+            1
+        } else {
+            self.0 + 1
+        }
+    }
+
+    /// Returns true, if the cycle counter has reached the end of its range, false otherwise.
+    pub fn at_end_of_frame(&self) -> bool {
+        self.0 == CYCLES_PER_FRAME
     }
 }
