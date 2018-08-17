@@ -21,8 +21,9 @@ pub trait Input {
 }
 
 pub trait Debugger {
-    // This will be used by various parts of the emulator to basically "log" events.
-    fn post_event(&mut self, level: EventLevel, msg: String);
+    // This will be used by various parts of the emulator to basically "log"
+    // events.
+    fn post_event(&self, level: EventLevel, msg: String);
 
 //    fn should_pause();
 }

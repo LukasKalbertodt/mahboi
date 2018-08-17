@@ -134,12 +134,12 @@ impl Cpu {
 
 pub struct Emulator<'a, P: 'a + Peripherals, D: 'a + Debugger> {
     machine: Machine,
-    debug: &'a mut D,
+    debug: &'a D,
     peripherals: &'a mut P,
 }
 
 impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
-    pub fn new(cartridge: Cartridge, peripherals: &'a mut P, debug: &'a mut D) -> Self {
+    pub fn new(cartridge: Cartridge, peripherals: &'a mut P, debug: &'a D) -> Self {
         debug.post_event(EventLevel::Trace, "Creating emulator.".into());
 
         let mut out = Self {
@@ -148,7 +148,7 @@ impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
             peripherals,
         };
 
-        out.debug().post_event(EventLevel::Trace, "Emulator created.".into());
+        out.debug.post_event(EventLevel::Trace, "Emulator created.".into());
         out
     }
 
@@ -162,10 +162,6 @@ impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
 
     fn input(&mut self) -> &mut P::Input {
         self.peripherals.input()
-    }
-
-    fn debug(&mut self) -> &mut D {
-        self.debug
     }
 
     pub fn machine(&self) -> &Machine {
