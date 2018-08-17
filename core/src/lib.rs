@@ -3,11 +3,16 @@
 #![feature(rust_2018_preview)]
 
 
-use crate::primitives::{Byte, Addr, Memory};
-use crate::env::{Peripherals, Debugger, EventLevel};
+use crate::{
+    primitives::{Byte, Addr, Memory},
+    env::{Peripherals, Debugger, EventLevel},
+    cartridge::{Cartridge},
+};
+
 
 mod primitives;
 pub mod env;
+pub mod cartridge;
 
 
 /// Width of the Game Boy screen in pixels.
@@ -94,8 +99,6 @@ impl Cpu {
         }
     }
 }
-
-pub struct Cartridge {}
 
 pub struct Emulator<'a, P: 'a + Peripherals, D: 'a + Debugger> {
     machine: Machine,

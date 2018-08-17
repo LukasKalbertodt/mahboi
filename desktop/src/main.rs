@@ -1,21 +1,28 @@
 #![feature(rust_2018_preview)]
 
+use std::fs;
 
-extern crate mahboi;
+use failure::{Error, ResultExt};
+use minifb::{Key, WindowOptions, Window};
+use structopt::StructOpt;
+
+use mahboi::{
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    Emulator,
+    cartridge::Cartridge,
+    env::{EventLevel, Debugger},
+};
+use crate::{
+    debug::CliDebugger,
+    env::Peripherals,
+    args::Args,
+};
+
 
 mod args;
 mod debug;
 mod env;
-
-
-use failure::{Error, ResultExt};
-use minifb::{Key, WindowOptions, Window};
-use mahboi::{SCREEN_WIDTH, SCREEN_HEIGHT, Emulator, Cartridge};
-use structopt::StructOpt;
-use crate::debug::CliDebugger;
-use crate::env::Peripherals;
-
-use crate::args::Args;
 
 
 fn main() {
@@ -32,9 +39,14 @@ fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
 
+    // load ROM
+    let rom = fs::read(&args.path_to_rom)?;
+
     // Create emulator
     let mut debugger = CliDebugger {};
-    let cartridge = Cartridge {};
+    let cartridge = Cartridge::from_bytes(&rom);
+    debugger.post_event(EventLevel::Debug, format!("Loaded: {:#?}", cartridge));
+
     let mut peripherals = Peripherals {};
     let emulator: Emulator<Peripherals, CliDebugger> = Emulator::new(
         cartridge, &mut peripherals, &mut debugger

@@ -1,6 +1,6 @@
 use minifb::Scale;
 use structopt::StructOpt;
-
+use std::path::PathBuf;
 
 
 #[derive(Debug, StructOpt)]
@@ -13,6 +13,12 @@ crate struct Args {
                 chooses the largest scale factor that still fits on the screen)."
     )]
     crate scale: Scale,
+
+    #[structopt(
+        parse(from_os_str),
+        help = "Path to the ROM that should be loaded into the emulator.",
+    )]
+    crate path_to_rom: PathBuf,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
