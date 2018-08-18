@@ -175,38 +175,8 @@ impl TuiDebugger {
             let previous_hook = panic::take_hook();
             let inner = inner.clone();
             panic::set_hook(Box::new(move |info| {
-                println!("IN HOOOK");
-                // We have to be careful here. We don't want to have a dead
-                // lock in the panic hook. That would be bad, presumably.
-                match inner.try_lock() {
-                    // No one holds the lock right now, so we can access the
-                    // value.
-                    Ok(mut inner) => {
-                        // We explicitly drop the value to reset the terminal.
-                        drop(inner.take());
-                    }
-
-                    // The thread holding the lock panicked. This means that
-                    // our `inner` can be in a semantically invalid state. We
-                    // don't care about that though, so we can access the
-                    // value.
-                    Err(TryLockError::Poisoned(e)) => {
-                        // We explicitly drop the value to reset the terminal.
-                        drop(e.into_inner());
-                    }
-
-                    // In this case, another thread (than the currently
-                    // panicking one) holds the lock. In that case we cannot
-                    // access the terminal. So we have to switch to the main
-                    // screen manually. This only switches the screen but
-                    // doesn't reset certain terminal states. So this is
-                    // suboptimal.
-                    Err(TryLockError::WouldBlock) => {
-                        print!("{}", termion::screen::ToMainScreen);
-                    }
-                }
-                // We ignore the error here to avoid panicking in a panic hook.
-                let _ = io::stdout().flush();
+                // Drop the terminal to reset the state
+                drop_inner(&inner);
 
                 // Execute previous hook.
                 previous_hook(info)
@@ -364,13 +334,39 @@ impl Drop for TuiDebugger {
         print!("{}", termion::cursor::Show);
         let _ = io::stdout().flush();
 
-        // We don't use `with_inner` here, because we want to avoid a dead
-        // lock, thus we use `try_lock()`.
-        if let Ok(mut guard) = self.inner.try_lock() {
-            // Explicitly drop the terminal to reset state.
+        drop_inner(&self.inner);
+    }
+}
+
+fn drop_inner(inner: &Mutex<Option<TuiDebuggerInner>>) {
+    // We have to be careful here. We don't want to have a dead lock in the
+    // panic hook or in `drop()`. That would be bad, presumably.
+    match inner.try_lock() {
+        // No one holds the lock right now.
+        Ok(mut guard) => {
+            // We explicitly drop the value to reset the terminal.
             drop(guard.take());
         }
+
+        // The thread holding the lock panicked. This means that
+        // our `inner` can be in a semantically invalid state. We
+        // don't care about that though, so we can access the
+        // value.
+        Err(TryLockError::Poisoned(e)) => {
+            // We explicitly drop the value to reset the terminal.
+            drop(e.into_inner().take());
+        }
+
+        // In this case, another thread holds the lock and we cannot access the
+        // terminal. So we have to switch to the main screen manually. This
+        // only switches the screen but doesn't reset certain terminal states.
+        // So this is suboptimal.
+        Err(TryLockError::WouldBlock) => {
+            print!("{}", termion::screen::ToMainScreen);
+        }
     }
+    // We ignore the error here to avoid panicking in a panic hook.
+    let _ = io::stdout().flush();
 }
 
 impl Debugger for TuiDebugger {
