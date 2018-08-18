@@ -20,7 +20,7 @@ use tui::{
     backend::TermionBackend,
     layout::{Group, Size, Direction, Rect},
     style::{Alignment, Color, Style, Modifier},
-    widgets::{Item, List, Widget, Paragraph, Tabs},
+    widgets::{Item, List, Widget, Paragraph, Tabs, Block, Borders},
 };
 
 use mahboi::env::{Debugger, EventLevel};
@@ -78,11 +78,16 @@ pub(crate) enum Action {
     /// Pause execution
     Pause,
 
+    /// Continue execeution
+    Continue,
+
     /// Don't do anything special and keep running.
     Nothing,
 }
 
 const NUM_TABS: u8 = 2;
+const EVENT_TAB: u8 = 0;
+const DEBUG_TAB: u8 = 1;
 
 type Backend = TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<io::Stdout>>>>;
 
@@ -113,6 +118,9 @@ struct TuiDebuggerInner {
 
     /// List of all events received via `post_event`.
     event_log: Vec<(String, Style)>,
+
+    /// Paused state of the last `update()` call.
+    is_paused: bool,
 
     /// View: the index of the selected tab.
     selected_tab: u8,
@@ -156,8 +164,9 @@ impl TuiDebugger {
             term,
             size,
             input_events,
-            selected_tab: 0,
             event_log: vec![],
+            is_paused: false,
+            selected_tab: EVENT_TAB,
         };
         let inner = Arc::new(Mutex::new(Some(inner)));
 
@@ -195,8 +204,8 @@ impl TuiDebugger {
     /// regularly.
     ///
     /// Returns a requested action.
-    pub(crate) fn update(&self) -> Result<Action, Error> {
-        self.with_inner(|inner| inner.update())
+    pub(crate) fn update(&self, is_paused: bool) -> Result<Action, Error> {
+        self.with_inner(|inner| inner.update(is_paused))
     }
 
     /// Helper method to do something with the locked `inner` value.
@@ -216,13 +225,15 @@ impl TuiDebugger {
 
 impl TuiDebuggerInner {
     /// See `TuiDebugger::update`.
-    fn update(&mut self) -> Result<Action, Error> {
+    fn update(&mut self, is_paused: bool) -> Result<Action, Error> {
         // Handle any terminal events that might have occured.
         while let Ok(event) = self.input_events.try_recv() {
+            let event = event?;
             self.post_event(EventLevel::Trace, format!("{:?}", event));
-            match event? {
+
+            // Global key bindings
+            match event {
                 Event::Key(Key::Char('q')) => return Ok(Action::Quit),
-                Event::Key(Key::Char('p')) => return Ok(Action::Pause),
                 Event::Key(Key::PageUp) => {
                     if self.selected_tab > 0 {
                         self.selected_tab -= 1;
@@ -235,6 +246,15 @@ impl TuiDebuggerInner {
                 }
                 _ => {},
             }
+
+            // Key bindings for debug tab
+            if self.selected_tab == DEBUG_TAB {
+                match event {
+                    Event::Key(Key::Char('p')) => return Ok(Action::Pause),
+                    Event::Key(Key::Char('r')) => return Ok(Action::Continue),
+                    _ => {}
+                }
+            }
         }
 
         // Resize terminal if necessary
@@ -243,6 +263,12 @@ impl TuiDebuggerInner {
             self.term.resize(new_size)?;
             self.size = new_size;
         }
+
+        // If the emulator was just paused, we switch the the debugger tab
+        if self.is_paused != is_paused {
+            self.selected_tab = 1;
+        }
+        self.is_paused = is_paused;
 
         // Draw the UI.
         self.draw()?;
@@ -254,15 +280,24 @@ impl TuiDebuggerInner {
     fn draw(&mut self) -> Result<(), Error> {
         let main_title = "Mahboi Debugger (running)";
 
-        let event_log = &self.event_log;
-        let events = event_log.iter().map(|(msg, style)| {
+        let selected_tab = self.selected_tab;
+        let events = self.event_log.iter().map(|(msg, style)| {
             Item::StyledData(msg, style)
         });
-        let selected_tab = self.selected_tab;
 
+        let keymap_string = self.keymap_string();
+
+        let body_height = self.size.height - 2 - 1 - 1 - 1 - 2;
         Group::default()
             .direction(Direction::Vertical)
-            .sizes(&[Size::Fixed(2), Size::Fixed(1), Size::Fixed(1), Size::Percent(100)])
+            .sizes(&[
+                Size::Fixed(2),     // Title
+                Size::Fixed(1),     // Tab bar
+                Size::Fixed(1),     // Empty space
+                Size::Fixed(body_height), // Body
+                Size::Fixed(1),     // Empty space
+                Size::Fixed(2),     // Keymap
+            ])
             .render(&mut self.term, &self.size, |t, chunks| {
                 let top_style = Style::default().bg(Color::Rgb(20, 20, 20));
 
@@ -295,6 +330,12 @@ impl TuiDebuggerInner {
                     }
                     _ => panic!("internal error: invalid tab selected"),
                 }
+
+                // Render keymap
+                Paragraph::default()
+                    .text(&keymap_string)
+                    .block(Block::default().title("Controls").borders(Borders::TOP))
+                    .render(t, &chunks[5]);
             });
 
         self.term.draw().context("failed to draw terminal")?;
@@ -325,6 +366,31 @@ impl TuiDebuggerInner {
                 Style::default().fg(color),
             ));
         }
+    }
+
+    fn keymap_string(&self) -> String {
+        // Global key map
+        let mut keys = vec![
+            ('q', "Quit"),
+        ];
+
+        if self.selected_tab == DEBUG_TAB {
+            keys.extend_from_slice(&[
+                ('p', "Pause execution"),
+                ('r', "Continue execution"),
+            ]);
+        }
+
+        let mut out = String::new();
+        for (key, description) in keys {
+            out.push_str("{bg=red  ");
+            out.push(key);
+            out.push_str(" } ");
+            out.push_str(description);
+            out.push_str("    ");
+        }
+
+        out
     }
 }
 

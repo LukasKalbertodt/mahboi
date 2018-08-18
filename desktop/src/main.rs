@@ -58,6 +58,7 @@ fn run() -> Result<(), Error> {
 
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
     let mut color = 0;
+    let mut is_paused = args.debug;
     while window.is_open() && !window.is_key_down(Key::Escape) {
         for i in buffer.iter_mut() {
             *i = color;
@@ -67,14 +68,17 @@ fn run() -> Result<(), Error> {
         window.update_with_buffer(&buffer).unwrap();
 
         // Run the emulator.
-        emulator.execute_frame();
+        if !is_paused {
+            emulator.execute_frame();
+        }
 
         // Update the TUI debugger, if it is active.
         if let SomeDebugger::Tui(tui) = &debugger {
-            let action = tui.update()?;
+            let action = tui.update(is_paused)?;
             match action {
                 Action::Quit => break,
-                Action::Pause => {} // TODO
+                Action::Pause => is_paused = true,
+                Action::Continue => is_paused = false,
                 Action::Nothing => {}
             }
         }
