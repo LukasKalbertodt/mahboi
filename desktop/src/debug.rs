@@ -26,6 +26,49 @@ use tui::{
 use mahboi::env::{Debugger, EventLevel};
 
 
+pub(crate) enum SomeDebugger {
+    Simple(SimpleDebugger),
+    Tui(TuiDebugger),
+}
+
+impl SomeDebugger {
+    pub(crate) fn from_flag(debug_mode: bool) -> Result<Self, Error> {
+        if debug_mode {
+            Ok(SomeDebugger::Tui(TuiDebugger::new()?))
+        } else {
+            Ok(SomeDebugger::Simple(SimpleDebugger))
+        }
+    }
+}
+
+impl Debugger for SomeDebugger {
+    fn post_event(&self, level: EventLevel, msg: String) {
+        match self {
+            SomeDebugger::Simple(d) => d.post_event(level, msg),
+            SomeDebugger::Tui(d) => d.post_event(level, msg),
+        }
+    }
+}
+
+/// A simple debugger that simply prints all events to the terminal and cannot
+/// do anything else. Used in non `--debug` mode.
+pub(crate) struct SimpleDebugger;
+
+impl Debugger for SimpleDebugger {
+    fn post_event(&self, level: EventLevel, msg: String) {
+        // TODO: Maybe add colors
+        let level_name = match level {
+            EventLevel::Info => "INFO: ",
+            EventLevel::Debug => "DEBUG:",
+            EventLevel::Trace => "TRACE:",
+        };
+
+        println!("{} {}", level_name, msg);
+    }
+}
+
+
+
 /// Returned from `TuiDebugger::update` to tell the main loop what to do.
 #[must_use]
 pub(crate) enum Action {
@@ -43,7 +86,7 @@ const NUM_TABS: u8 = 2;
 
 type Backend = TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<io::Stdout>>>>;
 
-/// A debugger that uses a terminal user interface.
+/// A debugger that uses a terminal user interface. Used in `--debug` mode.
 pub(crate) struct TuiDebugger {
     inner: Arc<Mutex<Option<TuiDebuggerInner>>>,
 }

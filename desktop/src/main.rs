@@ -14,7 +14,7 @@ use mahboi::{
     env::{EventLevel, Debugger},
 };
 use crate::{
-    debug::{Action, TuiDebugger},
+    debug::{Action, SomeDebugger},
     env::Peripherals,
     args::Args,
 };
@@ -40,7 +40,7 @@ fn run() -> Result<(), Error> {
     let args = Args::from_args();
 
     // Create debugger
-    let debugger = TuiDebugger::new()?;
+    let debugger = SomeDebugger::from_flag(args.debug)?;
 
     // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
@@ -68,11 +68,15 @@ fn run() -> Result<(), Error> {
 
         // Run the emulator.
         emulator.execute_frame();
-        let action = debugger.update()?;
-        match action {
-            Action::Quit => break,
-            Action::Pause => {} // TODO
-            Action::Nothing => {}
+
+        // Update the TUI debugger, if it is active.
+        if let SomeDebugger::Tui(tui) = &debugger {
+            let action = tui.update()?;
+            match action {
+                Action::Quit => break,
+                Action::Pause => {} // TODO
+                Action::Nothing => {}
+            }
         }
     }
 

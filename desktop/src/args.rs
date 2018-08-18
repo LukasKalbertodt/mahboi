@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 
 #[derive(Debug, StructOpt)]
-crate struct Args {
+pub(crate) struct Args {
     #[structopt(
         long = "--scale",
         default_value = "4",
@@ -12,13 +12,19 @@ crate struct Args {
         help = "Set the scale factor for the window: 1, 2, 4, 8, 16, 32 or 'fit' (automatically \
                 chooses the largest scale factor that still fits on the screen)."
     )]
-    crate scale: Scale,
+    pub(crate) scale: Scale,
+
+    #[structopt(
+        long = "--debug",
+        help = "Start in debugging mode (a TUI debugger)",
+    )]
+    pub(crate) debug: bool,
 
     #[structopt(
         parse(from_os_str),
         help = "Path to the ROM that should be loaded into the emulator.",
     )]
-    crate path_to_rom: PathBuf,
+    pub(crate) path_to_rom: PathBuf,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
