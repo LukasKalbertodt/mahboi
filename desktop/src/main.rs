@@ -36,23 +36,22 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
-    use mahboi::env::{Debugger, EventLevel};
-
     // Parse CLI arguments
     let args = Args::from_args();
 
-    // load ROM
+    // Create debugger
+    let debugger = TuiDebugger::new()?;
+
+    // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
 
     // Create emulator
-    let mut debugger = TuiDebugger::new()?;
-    let shared_debugger = debugger.shared();
     debugger.post_event(EventLevel::Info, "hallooo".into());
     let cartridge = Cartridge::from_bytes(&rom);
     debugger.post_event(EventLevel::Debug, format!("Loaded: {:#?}", cartridge));
     let mut peripherals = Peripherals {};
 
-    let mut emulator = Emulator::new(cartridge, &mut peripherals, &shared_debugger);
+    let mut emulator = Emulator::new(cartridge, &mut peripherals, &debugger);
     debugger.post_event(EventLevel::Debug, "tarumtumtum".into());
 
     let mut window = open_window(&args).context("failed to open window")?;
@@ -75,8 +74,6 @@ fn run() -> Result<(), Error> {
             Action::Pause => {} // TODO
             Action::Nothing => {}
         }
-
-        debugger.update()?;
     }
 
     Ok(())
