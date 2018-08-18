@@ -297,10 +297,21 @@ impl TuiDebuggerInner {
             EventLevel::Trace => ("TRACE:", Color::Gray),
         };
 
+        let mut iter = msg.split('\n');
+
+        // Push first line (the iterator always contains one element)
         self.event_log.push((
-            format!("{} {}", level_name, msg),
+            format!("{} {}", level_name, iter.next().unwrap()),
             Style::default().fg(color),
         ));
+
+        // Push all remaining lines with `|` at the start
+        for line in iter {
+            self.event_log.push((
+                format!("     | {}", line),
+                Style::default().fg(color),
+            ));
+        }
     }
 }
 
