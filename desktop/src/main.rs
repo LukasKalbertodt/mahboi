@@ -1,4 +1,6 @@
 #![feature(rust_2018_preview)]
+#![feature(const_fn)]
+#![feature(const_vec_new)]
 
 use std::fs;
 
@@ -39,9 +41,19 @@ fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
 
+    // Initialize global logger
+    debug::init_logger(args.debug);
+    log::set_max_level(log::LevelFilter::Trace);
+
+    trace!("A super unimportant message");
+    debug!("An unimportant message");
+    info!("Here, have some information");
+    warn!("You should probably fix that");
+    error!("OMG EVERYTHING IS ON FIRE");
+
     // Create debugger
-    // let debugger = SomeDebugger::from_flag(args.debug)?;
     let mut debugger = TuiDebugger::new()?;
+
 
     // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
@@ -54,6 +66,7 @@ fn run() -> Result<(), Error> {
     let mut emulator = Emulator::new(cartridge, &mut peripherals);
 
     let mut window = open_window(&args).context("failed to open window")?;
+    info!("opened window");
 
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
     let mut color = 0;

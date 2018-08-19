@@ -10,12 +10,22 @@ use std::{
 
 use cursive::{
     Cursive,
-    views::TextView,
+    direction::Orientation,
+    theme::{Theme, BorderStyle, ColorStyle, Effect, Color, ColorType, BaseColor, Palette, PaletteColor},
+    view::{Boxable, Identifiable},
+    views::{TextView, LinearLayout, ListView, SelectView},
 };
 use failure::{Error, ResultExt};
+use lazy_static::lazy_static;
+use log::{Log, Record, Level, Metadata};
 
+use self::{
+    log_view::LogView,
+    tab_view::TabView,
+};
 
 mod tab_view;
+mod log_view;
 
 
 pub(crate) enum SomeDebugger {
@@ -31,6 +41,10 @@ impl SomeDebugger {
             Ok(SomeDebugger::Simple(SimpleDebugger))
         }
     }
+}
+
+pub(crate) fn init_logger(_debug_mode: bool) {
+    TuiLogger::init();
 }
 
 // impl Debugger for SomeDebugger {
@@ -75,6 +89,42 @@ pub(crate) enum Action {
 
     /// Don't do anything special and keep running.
     Nothing,
+}
+
+lazy_static! {
+    pub static ref LOG_MESSAGES: Mutex<Vec<LogMessage>> = Mutex::new(Vec::new());
+}
+
+#[derive(Debug)]
+pub struct LogMessage {
+    level: Level,
+    msg: String,
+}
+
+struct TuiLogger;
+
+impl TuiLogger {
+    pub(crate) fn init() {
+        log::set_logger(&TuiLogger)
+            .expect("called init(), but a logger is already set!");
+    }
+}
+
+impl Log for TuiLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false) {
+            LOG_MESSAGES.lock().unwrap().push(LogMessage {
+                level: record.level(),
+                msg: record.args().to_string(),
+            });
+        }
+    }
+
+    fn flush(&self) {}
 }
 
 /// A debugger that uses a terminal user interface. Used in `--debug` mode.
@@ -143,6 +193,12 @@ impl TuiDebugger {
             return Ok(Action::Quit);
         }
 
+        self.siv.call_on_id("log_list", |list: &mut LogView| {
+            for log in LOG_MESSAGES.lock().unwrap().drain(..) {
+                list.add_row(log.level, log.msg);
+            }
+        });
+
         self.siv.step();
 
         Ok(Action::Nothing)
@@ -150,19 +206,28 @@ impl TuiDebugger {
 }
 
 fn setup_tui(siv: &mut Cursive) {
-    use cursive::{
-        direction::Orientation,
-        theme::Effect,
-        view::Boxable,
-        views::{LinearLayout, ListView, SelectView},
-    };
-
     // We always want to be able to quit the application via `q`.
     siv.add_global_callback('q', |s| s.quit());
 
-    let list = ListView::new()
-        .child("foo", TextView::new("whatsaup"))
-        .child("bararoo", TextView::new("grüne tomaten"))
+    // Create and set our theme.
+    let mut palette = Palette::default();
+    palette[PaletteColor::View] = Color::TerminalDefault;
+    palette[PaletteColor::Primary] = Color::TerminalDefault;
+    palette[PaletteColor::Secondary] = Color::TerminalDefault;
+    palette[PaletteColor::Tertiary] = Color::TerminalDefault;
+    palette[PaletteColor::TitlePrimary] = Color::TerminalDefault;
+    palette[PaletteColor::TitleSecondary] = Color::TerminalDefault;
+    palette[PaletteColor::Highlight] = Color::Dark(BaseColor::Red);
+    palette[PaletteColor::HighlightInactive] = Color::TerminalDefault;
+    let theme = Theme {
+        shadow: false,
+        borders: BorderStyle::Simple,
+        palette,
+    };
+    siv.set_theme(theme);
+
+    let log_list = LogView::new()
+        .with_id("log_list")
         .full_screen();
 
     let main_title = TextView::new("Mahboi Debugger")
@@ -170,18 +235,15 @@ fn setup_tui(siv: &mut Cursive) {
         .center()
         .no_wrap();
 
-    let tabs = tab_view::TabView::new()
-        .tab("Event Log", list)
-        .tab("Debugger", TextView::new("Hello in the debugger tab!"))
-        .tab("Test", TextView::new("Käse"));
+    let tabs = TabView::new()
+        .tab("Event Log", log_list)
+        .tab("Debugger", TextView::new("Hello in the debugger tab!"));
 
     let main_layout = LinearLayout::vertical()
         .child(main_title)
         .child(tabs);
-        // .child(list);
 
     siv.add_fullscreen_layer(main_layout);
-    // siv.add_layer(TextView::new("Hello World!\nPress q to quit."));
 }
 
 // impl TuiDebuggerInner {
