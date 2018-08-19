@@ -67,7 +67,7 @@ fn run() -> Result<(), Error> {
         window.update_with_buffer(&buffer).unwrap();
 
         // Run the emulator.
-        if is_paused {
+        if !is_paused {
             emulator.execute_frame();
         }
 

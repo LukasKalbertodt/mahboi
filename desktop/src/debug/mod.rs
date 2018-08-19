@@ -15,6 +15,8 @@ use cursive::{
 use failure::{Error, ResultExt};
 
 
+mod tab_view;
+
 
 pub(crate) enum SomeDebugger {
     Simple(SimpleDebugger),
@@ -87,9 +89,7 @@ pub(crate) struct TuiDebugger {
 impl TuiDebugger {
     pub(crate) fn new() -> Result<Self, Error> {
         // Create a handle to the terminal (with the correct backend).
-        let mut siv = Cursive::new();
-        siv.add_global_callback('q', |s| s.quit());
-        siv.add_layer(TextView::new("Hello World!\nPress q to quit."));
+        let mut siv = Cursive::ncurses();
 
         // To handle events, we use `Cursive::step`. Sadly, this function
         // blocks to wait on an event before it returns. This isn't good. We
@@ -120,6 +120,9 @@ impl TuiDebugger {
             previous_hook(info)
         }));
 
+        // Build the TUI view
+        setup_tui(&mut siv);
+
         let out = Self {
             siv,
             is_paused: false,
@@ -144,6 +147,38 @@ impl TuiDebugger {
 
         Ok(Action::Nothing)
     }
+}
+
+fn setup_tui(siv: &mut Cursive) {
+    use cursive::{
+        direction::Orientation,
+        theme::Effect,
+        view::Boxable,
+        views::{LinearLayout, ListView, SelectView},
+    };
+
+    // We always want to be able to quit the application via `q`.
+    siv.add_global_callback('q', |s| s.quit());
+
+    let list = ListView::new()
+        .child("foo", TextView::new("whatsaup"))
+        .child("bararoo", TextView::new("grüne tomaten"))
+        .full_screen();
+
+    let main_title = TextView::new("Mahboi Debugger")
+        .effect(Effect::Bold)
+        .center()
+        .no_wrap();
+
+    let tabs = tab_view::TabView::new(vec!["Event Log", "Debugger", "Test", "Foobar"]);
+
+    let main_layout = LinearLayout::vertical()
+        .child(main_title)
+        .child(tabs)
+        .child(list);
+
+    siv.add_fullscreen_layer(main_layout);
+    // siv.add_layer(TextView::new("Hello World!\nPress q to quit."));
 }
 
 // impl TuiDebuggerInner {
