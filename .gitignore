@@ -1,3 +1,4 @@
 /target/
 /Cargo.lock
 /core/data/DMG_BIOS_ROM.bin
+/games/
