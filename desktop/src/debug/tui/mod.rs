@@ -25,24 +25,26 @@ mod log_view;
 
 
 
+
+pub(crate) fn init_logger() {
+    log::set_logger(&TuiLogger)
+        .expect("called init(), but a logger is already set!");
+}
+
+
 lazy_static! {
-    pub static ref LOG_MESSAGES: Mutex<Vec<LogMessage>> = Mutex::new(Vec::new());
+    static ref LOG_MESSAGES: Mutex<Vec<LogMessage>> = Mutex::new(Vec::new());
 }
 
 #[derive(Debug)]
-pub struct LogMessage {
+struct LogMessage {
     level: Level,
     msg: String,
 }
 
-pub(crate) struct TuiLogger;
 
-impl TuiLogger {
-    pub(crate) fn init() {
-        log::set_logger(&TuiLogger)
-            .expect("called init(), but a logger is already set!");
-    }
-}
+
+struct TuiLogger;
 
 impl Log for TuiLogger {
     fn enabled(&self, _: &Metadata) -> bool {

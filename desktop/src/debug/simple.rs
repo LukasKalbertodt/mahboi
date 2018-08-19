@@ -1,17 +1,28 @@
+use log::{Log, Record, Metadata};
 
-/// A simple debugger that simply prints all events to the terminal and cannot
-/// do anything else. Used in non `--debug` mode.
-pub(crate) struct SimpleDebugger;
 
-// impl Debugger for SimpleDebugger {
-//     fn post_event(&self, level: EventLevel, msg: String) {
-//         // TODO: Maybe add colors
-//         let level_name = match level {
-//             EventLevel::Info => "INFO: ",
-//             EventLevel::Debug => "DEBUG:",
-//             EventLevel::Trace => "TRACE:",
-//         };
+/// Initializes a simple logging implementation.
+pub(crate) fn init_logger() {
+    log::set_logger(&SimpleLogger)
+        .expect("called init(), but a logger is already set!");
+}
 
-//         println!("{} {}", level_name, msg);
-//     }
-// }
+/// A simple logger that simply prints all events to the terminal. Used in non
+/// `--debug` mode.
+struct SimpleLogger;
+
+impl Log for SimpleLogger {
+    fn enabled(&self, _: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false) {
+            if self.enabled(record.metadata()) {
+                println!("{:5}: {}", record.level(), record.args());
+            }
+        }
+    }
+
+    fn flush(&self) {}
+}

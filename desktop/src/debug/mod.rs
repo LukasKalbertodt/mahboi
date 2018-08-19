@@ -1,31 +1,20 @@
-use failure::Error;
+pub(crate) use self::tui::TuiDebugger;
 
-use self::{
-    simple::SimpleDebugger,
-    tui::{TuiDebugger},
-};
-
-pub mod tui;
+mod tui;
 mod simple;
 
 
-pub(crate) enum SomeDebugger {
-    Simple(SimpleDebugger),
-    Tui(TuiDebugger),
-}
 
-impl SomeDebugger {
-    pub(crate) fn from_flag(debug_mode: bool) -> Result<Self, Error> {
-        if debug_mode {
-            Ok(SomeDebugger::Tui(TuiDebugger::new()?))
-        } else {
-            Ok(SomeDebugger::Simple(SimpleDebugger))
-        }
+/// Initializes the logging implementation.
+///
+/// If `debug_mode` is true, a nice TUI logger is used. If it's `false`, a
+/// simple logger is used that just prints everything to stdout.
+pub(crate) fn init_logger(debug_mode: bool) {
+    if debug_mode {
+        tui::init_logger();
+    } else {
+        simple::init_logger();
     }
-}
-
-pub(crate) fn init_logger(_debug_mode: bool) {
-    tui::TuiLogger::init();
 }
 
 

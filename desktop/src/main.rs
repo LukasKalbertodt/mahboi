@@ -16,7 +16,7 @@ use mahboi::{
     log::*,
 };
 use crate::{
-    debug::{Action, tui::TuiDebugger},
+    debug::{Action, TuiDebugger},
     env::Peripherals,
     args::Args,
 };
@@ -45,28 +45,25 @@ fn run() -> Result<(), Error> {
     debug::init_logger(args.debug);
     log::set_max_level(log::LevelFilter::Trace);
 
-    trace!("A super unimportant message");
-    debug!("An unimportant message");
-    info!("Here, have some information");
-    warn!("You should probably fix that");
-    error!("OMG EVERYTHING IS ON FIRE");
-
-    // Create debugger
-    let mut debugger = TuiDebugger::new()?;
-
+    // Create the TUI debugger if we're in debug mode.
+    let mut tui_debugger = if args.debug {
+        Some(TuiDebugger::new()?)
+    } else {
+        None
+    };
 
     // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
 
     // Create emulator
     let cartridge = Cartridge::from_bytes(&rom);
-    debug!("Loaded: {:#?}", cartridge);
+    info!("Loaded: {:#?}", cartridge);
     let mut peripherals = Peripherals {};
 
     let mut emulator = Emulator::new(cartridge, &mut peripherals);
 
     let mut window = open_window(&args).context("failed to open window")?;
-    info!("opened window");
+    info!("Opened window");
 
     let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
     let mut color = 0;
@@ -84,12 +81,15 @@ fn run() -> Result<(), Error> {
             emulator.execute_frame();
         }
 
-        let action = debugger.update(is_paused)?;
-        match action {
-            Action::Quit => break,
-            Action::Pause => is_paused = true,
-            Action::Continue => is_paused = false,
-            Action::Nothing => {}
+        // If we're in debug mode (and have a TUI debugger), let's update it.
+        if let Some(debugger) = &mut tui_debugger {
+            let action = debugger.update(is_paused)?;
+            match action {
+                Action::Quit => break,
+                Action::Pause => is_paused = true,
+                Action::Continue => is_paused = false,
+                Action::Nothing => {}
+            }
         }
     }
 
