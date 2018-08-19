@@ -26,11 +26,20 @@ mod tab_view;
 mod log_view;
 
 
+// ============================================================================
+// ===== Logger
+// ============================================================================
+// So the logger should show the log messages in the TUI. Sadly, we can't
+// directly to the views since log messages could come from all threads. So
+// instead, we have a global buffer of log messages. New messages are inserted
+// there and the TUI interface regularly checks for new messages and shows them
+// in the TUI.
+
+/// Initializes the logger that works in tandem with the TUI debugger.
 pub(crate) fn init_logger() {
     log::set_logger(&TuiLogger)
         .expect("called init(), but a logger is already set!");
 }
-
 
 lazy_static! {
     static ref LOG_MESSAGES: Mutex<Vec<LogMessage>> = Mutex::new(Vec::new());
@@ -42,7 +51,6 @@ struct LogMessage {
     msg: String,
 }
 
-
 struct TuiLogger;
 
 impl Log for TuiLogger {
@@ -52,6 +60,7 @@ impl Log for TuiLogger {
 
     fn log(&self, record: &Record) {
         if record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false) {
+            // Just push them into the global list.
             LOG_MESSAGES.lock().unwrap().push(LogMessage {
                 level: record.level(),
                 msg: record.args().to_string(),
@@ -167,6 +176,8 @@ impl TuiDebugger {
     }
 }
 
+/// Prepares the `Cursive` instance by registering event handler and setting up
+/// the view.
 fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     // We always want to be able to quit the application via `q`.
     siv.add_global_callback('q', |s| s.quit());

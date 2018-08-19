@@ -25,6 +25,7 @@ mod env;
 
 
 fn main() {
+    // We just catch potential errors here and pretty print them.
     if let Err(e) = run() {
         println!("ERROR: {}", e);
 
@@ -34,11 +35,12 @@ fn main() {
     }
 }
 
+/// The actual main function.
 fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
 
-    // Initialize global logger
+    // Initialize global logger. The logger kind depends on the `--debug` flag.
     debug::init_logger(args.debug);
     log::set_max_level(log::LevelFilter::Trace);
 
