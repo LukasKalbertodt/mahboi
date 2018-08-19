@@ -11,10 +11,10 @@ use mahboi::{
     SCREEN_HEIGHT,
     Emulator,
     cartridge::Cartridge,
-    env::{EventLevel, Debugger},
+    log::*,
 };
 use crate::{
-    debug::{Action, SomeDebugger},
+    debug::{Action, TuiDebugger},
     env::Peripherals,
     args::Args,
 };
@@ -40,19 +40,18 @@ fn run() -> Result<(), Error> {
     let args = Args::from_args();
 
     // Create debugger
-    let debugger = SomeDebugger::from_flag(args.debug)?;
+    // let debugger = SomeDebugger::from_flag(args.debug)?;
+    let mut debugger = TuiDebugger::new()?;
 
     // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
 
     // Create emulator
-    debugger.post_event(EventLevel::Info, "hallooo".into());
     let cartridge = Cartridge::from_bytes(&rom);
-    debugger.post_event(EventLevel::Debug, format!("Loaded: {:#?}", cartridge));
+    debug!("Loaded: {:#?}", cartridge);
     let mut peripherals = Peripherals {};
 
-    let mut emulator = Emulator::new(cartridge, &mut peripherals, &debugger);
-    debugger.post_event(EventLevel::Debug, "tarumtumtum".into());
+    let mut emulator = Emulator::new(cartridge, &mut peripherals);
 
     let mut window = open_window(&args).context("failed to open window")?;
 
@@ -68,19 +67,16 @@ fn run() -> Result<(), Error> {
         window.update_with_buffer(&buffer).unwrap();
 
         // Run the emulator.
-        if !is_paused {
+        if is_paused {
             emulator.execute_frame();
         }
 
-        // Update the TUI debugger, if it is active.
-        if let SomeDebugger::Tui(tui) = &debugger {
-            let action = tui.update(is_paused)?;
-            match action {
-                Action::Quit => break,
-                Action::Pause => is_paused = true,
-                Action::Continue => is_paused = false,
-                Action::Nothing => {}
-            }
+        let action = debugger.update(is_paused)?;
+        match action {
+            Action::Quit => break,
+            Action::Pause => is_paused = true,
+            Action::Continue => is_paused = false,
+            Action::Nothing => {}
         }
     }
 

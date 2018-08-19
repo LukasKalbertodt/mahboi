@@ -7,12 +7,14 @@
 
 use crate::{
     primitives::{Byte, Addr, Memory, CycleCounter},
-    env::{Peripherals, Debugger, EventLevel},
+    env::Peripherals,
     cartridge::{Cartridge},
     instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
+    log::*,
 };
 
 
+pub mod log;
 mod primitives;
 pub mod env;
 pub mod cartridge;
@@ -132,24 +134,19 @@ impl Cpu {
     }
 }
 
-pub struct Emulator<'a, P: 'a + Peripherals, D: 'a + Debugger> {
+pub struct Emulator<'a, P: 'a + Peripherals> {
     machine: Machine,
-    debug: &'a D,
     peripherals: &'a mut P,
 }
 
-impl<'a, P: 'a + Peripherals, D: 'a + Debugger> Emulator<'a, P, D> {
-    pub fn new(cartridge: Cartridge, peripherals: &'a mut P, debug: &'a D) -> Self {
-        debug.post_event(EventLevel::Trace, "Creating emulator.".into());
+impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
+    pub fn new(cartridge: Cartridge, peripherals: &'a mut P) -> Self {
+        info!("Creating emulator");
 
-        let mut out = Self {
+        Self {
             machine: Machine::new(cartridge),
-            debug,
             peripherals,
-        };
-
-        out.debug.post_event(EventLevel::Trace, "Emulator created.".into());
-        out
+        }
     }
 
     fn display(&mut self) -> &mut P::Display {

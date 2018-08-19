@@ -8,8 +8,9 @@ edition = "2018"
 
 [dependencies]
 failure = "0.1.2"
+log = "0.4"
 mahboi = { path = "../core" }
 minifb = "0.10"
 structopt = "0.2"
-termion = "1.5"
-tui = "0.2.3"
+cursive = "0.8"
+ncurses = "5"
