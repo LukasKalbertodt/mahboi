@@ -6,7 +6,7 @@ use std::{
 use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor},
-    view::{Boxable, Identifiable},
+    view::{Identifiable},
     views::{TextView, LinearLayout},
 };
 use failure::Error;
@@ -109,15 +109,10 @@ impl TuiDebugger {
         // Build the TUI view
         setup_tui(&mut siv);
 
-        let out = Self {
+        Ok(Self {
             siv,
             is_paused: false,
-        };
-
-        // Already draw once
-        // out.draw()?;
-
-        Ok(out)
+        })
     }
 
     /// Updates the debugger view and handles events. Should be called
@@ -129,12 +124,15 @@ impl TuiDebugger {
             return Ok(Action::Quit);
         }
 
+        // Append all log messages that were pushed to the global buffer into
+        // the corresponding log view.
         self.siv.call_on_id("log_list", |list: &mut LogView| {
             for log in LOG_MESSAGES.lock().unwrap().drain(..) {
                 list.add_row(log.level, log.msg);
             }
         });
 
+        // Handle events and update view
         self.siv.step();
 
         Ok(Action::Nothing)
@@ -162,9 +160,8 @@ fn setup_tui(siv: &mut Cursive) {
     };
     siv.set_theme(theme);
 
-    let log_list = LogView::new()
-        .with_id("log_list")
-        .full_screen();
+    // Create view for log messages
+    let log_list = LogView::new().with_id("log_list");
 
     let main_title = TextView::new("Mahboi Debugger")
         .effect(Effect::Bold)

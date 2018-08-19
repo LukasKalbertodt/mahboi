@@ -11,7 +11,6 @@ use cursive::{
 };
 use log::Level;
 
-
 struct Entry {
     level: Level,
     text: TextView,
@@ -60,29 +59,33 @@ impl View for LogView {
 
             ColorStyle {
                 front: ColorType::Color(color),
-                // back: ColorType::Palette(PaletteColor::View),
                 back: ColorType::Color(Color::TerminalDefault),
             }
         }
 
-
-        let mut y_offset = 0;
+        // We do some cheap scrolling here: if the available size is less than
+        // we need, we simply don't draw the entries that don't start on the
+        // screen. This should be replaced with a `ScrollView`, but
+        // unfortunately it's at the moment...
+        let available_height = printer.size.y;
+        let mut y_offset = available_height as i32 - self.height as i32;
         for entry in &self.entries {
-            let color = level_to_color(entry.level);
-            printer.offset((0, y_offset)).with_color(color, |printer| {
-                let lvl = format!("{:6} ", entry.level);
-                printer.print((0, 0), &lvl);
+            if y_offset >= 0 {
+                let color = level_to_color(entry.level);
+                printer.offset((0, y_offset)).with_color(color, |printer| {
+                    let lvl = format!("{:6} ", entry.level);
+                    printer.print((0, 0), &lvl);
 
-                entry.text.draw(&printer.offset((7, 0)));
-            });
-            y_offset += entry.height;
+                    entry.text.draw(&printer.offset((7, 0)));
+                });
+            }
+            y_offset += entry.height as i32;
         }
     }
 
     fn required_size(&mut self, constraint: Vec2) -> Vec2 {
         let height = cmp::max(constraint.y, self.height);
-
-        Vec2::new(constraint.x, height)
+        Vec2::new(constraint.x, height * 3)
     }
 
     fn on_event(&mut self, _: Event) -> EventResult {
