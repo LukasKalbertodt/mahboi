@@ -1,21 +1,15 @@
 use std::{
-    io::{self, Write},
     panic,
-    sync::{
-        Mutex, Arc, TryLockError,
-        mpsc::{channel, Receiver},
-    },
-    thread,
+    sync::Mutex,
 };
 
 use cursive::{
     Cursive,
-    direction::Orientation,
-    theme::{Theme, BorderStyle, ColorStyle, Effect, Color, ColorType, BaseColor, Palette, PaletteColor},
+    theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor},
     view::{Boxable, Identifiable},
-    views::{TextView, LinearLayout, ListView, SelectView},
+    views::{TextView, LinearLayout},
 };
-use failure::{Error, ResultExt};
+use failure::Error;
 use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
@@ -51,7 +45,7 @@ impl TuiLogger {
 }
 
 impl Log for TuiLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
+    fn enabled(&self, _: &Metadata) -> bool {
         true
     }
 
@@ -130,7 +124,7 @@ impl TuiDebugger {
     /// regularly.
     ///
     /// Returns a requested action.
-    pub(crate) fn update(&mut self, is_paused: bool) -> Result<Action, Error> {
+    pub(crate) fn update(&mut self, _is_paused: bool) -> Result<Action, Error> {
         if !self.siv.is_running() {
             return Ok(Action::Quit);
         }

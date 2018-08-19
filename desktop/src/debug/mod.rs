@@ -1,14 +1,4 @@
-use std::{
-    io::{self, Write},
-    panic,
-    sync::{
-        Mutex, Arc, TryLockError,
-        mpsc::{channel, Receiver},
-    },
-    thread,
-};
-
-use failure::{Error, ResultExt};
+use failure::Error;
 
 use self::{
     simple::SimpleDebugger,

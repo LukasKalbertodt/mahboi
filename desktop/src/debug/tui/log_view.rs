@@ -1,19 +1,15 @@
 use std::cmp;
 
 use cursive::{
-    Printer, With, Cursive,
-    align::{Align, HAlign, VAlign},
+    Printer,
     direction::Direction,
-    event::{AnyCb, Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-    menu::MenuTree,
-    rect::Rect,
-    theme::{ColorStyle, Effect},
-    view::{Position, View, Selector},
-    views::{MenuPopup, TextView},
+    event::{AnyCb, Event, EventResult},
+    theme::{ColorStyle, Color, ColorType, BaseColor},
+    view::{View, Selector},
+    views::TextView,
     vec::Vec2,
 };
 use log::Level;
-use unicode_width::UnicodeWidthStr;
 
 
 struct Entry {
@@ -54,8 +50,6 @@ impl LogView {
 impl View for LogView {
     fn draw(&self, printer: &Printer) {
         fn level_to_color(level: Level) -> ColorStyle {
-            use cursive::theme::{Color, ColorType, BaseColor, ColorStyle, PaletteColor};
-
             let color = match level {
                 Level::Trace => Color::Dark(BaseColor::White),
                 Level::Debug => Color::Light(BaseColor::White),
@@ -91,8 +85,7 @@ impl View for LogView {
         Vec2::new(constraint.x, height)
     }
 
-    fn on_event(&mut self, event: Event) -> EventResult {
-        // TODO?
+    fn on_event(&mut self, _: Event) -> EventResult {
         EventResult::Ignored
     }
 
@@ -100,7 +93,7 @@ impl View for LogView {
         true
     }
 
-    fn call_on_any<'a>(&mut self, selector: &Selector, mut cb: AnyCb<'a>) {
+    fn call_on_any<'a>(&mut self, _selector: &Selector, _cb: AnyCb<'a>) {
         // TODO
     }
 }

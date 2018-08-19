@@ -1,15 +1,11 @@
 use std::cmp;
 
 use cursive::{
-    Printer, With, Cursive,
-    align::{Align, HAlign, VAlign},
+    Printer,
     direction::Direction,
-    event::{AnyCb, Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-    menu::MenuTree,
-    rect::Rect,
-    theme::{ColorStyle, Effect, Color, ColorType, BaseColor, PaletteColor, Style},
-    view::{Position, View, Selector},
-    views::MenuPopup,
+    event::{AnyCb, Event, EventResult, Key, MouseEvent},
+    theme::{ColorStyle, Effect, Color, BaseColor, Style},
+    view::{View, Selector},
     vec::Vec2,
 };
 use unicode_width::UnicodeWidthStr;
@@ -38,13 +34,6 @@ impl TabView {
             body: Box::new(body),
         });
         self
-    }
-
-    /// Returns the id of the item currently selected.
-    ///
-    /// Returns `None` if the list is empty.
-    pub fn selected_tab(&self) -> u8 {
-        self.selected_tab
     }
 
     pub fn len(&self) -> u8 {
