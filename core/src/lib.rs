@@ -1,6 +1,5 @@
 //! Mahboi!
 
-#![feature(rust_2018_preview)]
 #![feature(exclusive_range_pattern)]
 #![feature(const_fn)]
 

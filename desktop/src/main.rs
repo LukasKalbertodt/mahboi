@@ -1,4 +1,3 @@
-#![feature(rust_2018_preview)]
 #![feature(const_fn)]
 #![feature(const_vec_new)]
 
