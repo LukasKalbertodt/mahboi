@@ -8,9 +8,7 @@ use minifb::{Key, WindowOptions, Window};
 use structopt::StructOpt;
 
 use mahboi::{
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    Emulator,
+    SCREEN_WIDTH, SCREEN_HEIGHT, Emulator, Disruption,
     cartridge::Cartridge,
     log::*,
 };
@@ -77,7 +75,17 @@ fn run() -> Result<(), Error> {
 
         // Run the emulator.
         if !is_paused {
-            emulator.execute_frame();
+            let res = emulator.execute_frame();
+            match res {
+                Ok(_) => {},
+                Err(Disruption::Paused) => is_paused = true,
+                Err(Disruption::Terminated) => {
+                    // We might want to make unpausing impossible or
+                    // something...
+                    warn!("Emulator was terminated");
+                    is_paused = true;
+                }
+            }
         }
 
         // If we're in debug mode (and have a TUI debugger), let's update it.

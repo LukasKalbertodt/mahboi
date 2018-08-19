@@ -1,6 +1,9 @@
 use std::{
     panic,
-    sync::Mutex,
+    sync::{
+        Mutex,
+        mpsc::{channel, Receiver},
+    },
 };
 
 use cursive::{
@@ -23,9 +26,6 @@ mod tab_view;
 mod log_view;
 
 
-
-
-
 pub(crate) fn init_logger() {
     log::set_logger(&TuiLogger)
         .expect("called init(), but a logger is already set!");
@@ -41,7 +41,6 @@ struct LogMessage {
     level: Level,
     msg: String,
 }
-
 
 
 struct TuiLogger;
@@ -72,6 +71,10 @@ pub(crate) struct TuiDebugger {
 
     /// Paused state of the last `update()` call.
     is_paused: bool,
+
+    /// Events that cannot be handled immediately and are stored here to be
+    /// handled in `update`.
+    pending_events: Receiver<char>,
 }
 
 impl TuiDebugger {
@@ -109,21 +112,44 @@ impl TuiDebugger {
         }));
 
         // Build the TUI view
-        setup_tui(&mut siv);
+        let events = setup_tui(&mut siv);
 
-        Ok(Self {
+        let out = Self {
             siv,
             is_paused: false,
-        })
+            pending_events: events,
+        };
+
+        Ok(out)
     }
 
     /// Updates the debugger view and handles events. Should be called
     /// regularly.
     ///
     /// Returns a requested action.
-    pub(crate) fn update(&mut self, _is_paused: bool) -> Result<Action, Error> {
+    pub(crate) fn update(&mut self, is_paused: bool) -> Result<Action, Error> {
         if !self.siv.is_running() {
             return Ok(Action::Quit);
+        }
+
+        // React to any events that might have happend
+        while let Ok(c) = self.pending_events.try_recv() {
+            match c {
+                'p' => return Ok(Action::Pause),
+                'r' => return Ok(Action::Continue),
+                _ => panic!("internal error: unexpected event"),
+            }
+        }
+
+        // Check if the paused state has changed.
+        if is_paused != self.is_paused {
+            self.is_paused = is_paused;
+
+            // Update the title (which contains the paused state)
+            let state = if is_paused { "paused" } else { "running" };
+            self.siv.call_on_id("main_title", |text: &mut TextView| {
+                text.set_content(format!("Mahboi Debugger ({})", state));
+            });
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -141,9 +167,15 @@ impl TuiDebugger {
     }
 }
 
-fn setup_tui(siv: &mut Cursive) {
+fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     // We always want to be able to quit the application via `q`.
     siv.add_global_callback('q', |s| s.quit());
+    let (tx, receiver) = channel();
+
+    for &c in &['p', 'r'] {
+        let tx = tx.clone();
+        siv.add_global_callback(c, move |_| tx.send(c).unwrap());
+    }
 
     // Create and set our theme.
     let mut palette = Palette::default();
@@ -168,7 +200,8 @@ fn setup_tui(siv: &mut Cursive) {
     let main_title = TextView::new("Mahboi Debugger")
         .effect(Effect::Bold)
         .center()
-        .no_wrap();
+        .no_wrap()
+        .with_id("main_title");
 
     let tabs = TabView::new()
         .tab("Event Log", log_list)
@@ -179,4 +212,6 @@ fn setup_tui(siv: &mut Cursive) {
         .child(tabs);
 
     siv.add_fullscreen_layer(main_layout);
+
+    receiver
 }

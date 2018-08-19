@@ -87,13 +87,16 @@ impl Machine {
     }
 
     /// Executes one (the next) operation.
-    fn step(&mut self) {
+    fn step(&mut self) -> Result<(), Disruption> {
         let op_code = self.load_byte(self.cpu.pc);
         let instr = INSTRUCTIONS[op_code.get() as usize]
             .expect(&format!("Unknown instruction {} in position: {}", op_code, self.cpu.pc));
 
         match op_code {
-            _ => panic!("Unimplemented instruction {:?} in position: {}", instr, self.cpu.pc),
+            _ => {
+                error!("Unimplemented instruction {:?} in position: {}", instr, self.cpu.pc);
+                return Err(Disruption::Terminated);
+            }
         }
 
         self.cycle_counter.inc();
@@ -168,9 +171,23 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     ///
     /// After executing this once, the emulator has written a new frame via the display
     /// (defined as peripherals) and the display buffer can be written to the actual display.
-    pub fn execute_frame(&mut self) {
+    pub fn execute_frame(&mut self) -> Result<(), Disruption> {
         while !self.machine.cycle_counter.at_end_of_frame() {
-            self.machine.step();
+            self.machine.step()?;
         }
+
+        Ok(())
     }
+}
+
+
+/// Describes the special situation when the emulator stops unexpectedly.
+pub enum Disruption {
+    /// The emulator was paused, usually due to hitting a breakpoint. This
+    /// means the emulator can be resumed.
+    Paused,
+
+    /// The emulation was terminated, usually because of a critical error. This
+    /// means that the emulator probably can't be resumed in any useful way.
+    Terminated,
 }
