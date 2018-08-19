@@ -170,12 +170,15 @@ fn setup_tui(siv: &mut Cursive) {
         .center()
         .no_wrap();
 
-    let tabs = tab_view::TabView::new(vec!["Event Log", "Debugger", "Test", "Foobar"]);
+    let tabs = tab_view::TabView::new()
+        .tab("Event Log", list)
+        .tab("Debugger", TextView::new("Hello in the debugger tab!"))
+        .tab("Test", TextView::new("Käse"));
 
     let main_layout = LinearLayout::vertical()
         .child(main_title)
-        .child(tabs)
-        .child(list);
+        .child(tabs);
+        // .child(list);
 
     siv.add_fullscreen_layer(main_layout);
     // siv.add_layer(TextView::new("Hello World!\nPress q to quit."));
