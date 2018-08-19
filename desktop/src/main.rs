@@ -16,7 +16,7 @@ use mahboi::{
     log::*,
 };
 use crate::{
-    debug::{Action, TuiDebugger},
+    debug::{Action, tui::TuiDebugger},
     env::Peripherals,
     args::Args,
 };
