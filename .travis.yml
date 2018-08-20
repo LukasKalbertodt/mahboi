@@ -15,10 +15,12 @@ matrix:
       # speeds up travis build
       cache: cargo
       before_script:
-        - sudo apt-get install xorg-dev
+        - sudo apt-get install xorg-dev nodejs npm
         - hash cargo-script 2>/dev/null || cargo install -f cargo-script
-        - hash wasm-bindgen 2>/dev/null || cargo install -f wasm-bindgen-cli
+        - hash wasm-bindgen 2>/dev/null || cargo install -f wasm-bindgen-cli --version "=0.2.17"
         - rustup target add wasm32-unknown-unknown
+        - npm config set strict-ssl false # because some random NPM error... uhg
+        - sudo npm install -g typescript
       script:
         - cargo build --verbose
         - cargo test --verbose
