@@ -8,7 +8,7 @@ use crate::{
     primitives::{Byte, Addr, Memory, CycleCounter},
     env::Peripherals,
     cartridge::{Cartridge},
-    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
+    instr::INSTRUCTIONS,
     log::*,
 };
 
@@ -99,7 +99,8 @@ impl Machine {
             }
         }
 
-        self.cycle_counter.inc();
+        // TODO: increment cycle coounter
+        // self.cycle_counter.inc();
     }
 }
 
@@ -138,6 +139,9 @@ impl Cpu {
 
 pub struct Emulator<'a, P: 'a + Peripherals> {
     machine: Machine,
+
+    // TODO: Remove
+    #[allow(dead_code)]
     peripherals: &'a mut P,
 }
 
@@ -151,17 +155,18 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
         }
     }
 
-    fn display(&mut self) -> &mut P::Display {
-        self.peripherals.display()
-    }
+    // TODO: put back in or remove
+    // fn display(&mut self) -> &mut P::Display {
+    //     self.peripherals.display()
+    // }
 
-    fn sound(&mut self) -> &mut P::Sound {
-        self.peripherals.sound()
-    }
+    // fn sound(&mut self) -> &mut P::Sound {
+    //     self.peripherals.sound()
+    // }
 
-    fn input(&mut self) -> &mut P::Input {
-        self.peripherals.input()
-    }
+    // fn input(&mut self) -> &mut P::Input {
+    //     self.peripherals.input()
+    // }
 
     pub fn machine(&self) -> &Machine {
         &self.machine
