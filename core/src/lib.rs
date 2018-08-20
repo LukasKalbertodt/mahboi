@@ -5,7 +5,7 @@
 
 
 use crate::{
-    primitives::{Byte, Addr, Memory, CycleCounter},
+    primitives::{Byte, Word, Memory, CycleCounter},
     env::Peripherals,
     cartridge::{Cartridge},
     instr::INSTRUCTIONS,
@@ -55,28 +55,27 @@ impl Machine {
             cpu: Cpu::new(),
             cartridge,
             bios: Memory::from_bytes(include_bytes!("../data/DMG_BIOS_ROM.bin")),
-            vram: Memory::zeroed(Addr::new(0x2000)),
-            wram: Memory::zeroed(Addr::new(0x1000)),
-            oam: Memory::zeroed(Addr::new(0xA0)),
-            hram: Memory::zeroed(Addr::new(0x7F)),
+            vram: Memory::zeroed(Word::new(0x2000)),
+            wram: Memory::zeroed(Word::new(0x1000)),
+            oam: Memory::zeroed(Word::new(0xA0)),
+            hram: Memory::zeroed(Word::new(0x7F)),
             ie: Byte::zero(),
             cycle_counter: CycleCounter::zero(),
             bios_mounted: true,
         }
     }
 
-    fn load_byte(&self, addr: Addr) -> Byte {
+    fn load_byte(&self, addr: Word) -> Byte {
         // TODO :(
         match addr.get() {
-
             // ROM mounted switch
             0x0000..0x0100 if self.bios_mounted => self.bios[addr],
 
             0x0000..0x8000 => unimplemented!(), // Cartridge
             0x8000..0xA000 => unimplemented!(), // vram
             0xA000..0xC000 => unimplemented!(), // exram
-            0xC000..0xE000 => self.wram[addr - Addr::new(0xC000)], // wram
-            0xE000..0xFE00 => self.wram[addr - Addr::new(0xC000 - 0x2000)], // wram echo
+            0xC000..0xE000 => self.wram[addr - 0xC000], // wram
+            0xE000..0xFE00 => self.wram[addr - 0xC000 - 0x2000], // wram echo
             0xFE00..0xFEA0 => unimplemented!(), // oam
             0xFEA0..0xFF00 => unimplemented!(), // not usable (random ram, maybe use as rng???)
             0xFF00..0xFF80 => unimplemented!(), // IO registers
@@ -84,6 +83,48 @@ impl Machine {
             0xFFFF => self.ie, // ie
             _ => unreachable!(),
         }
+    }
+
+    fn store_byte(&mut self, addr: Word, byte: Byte) {
+        match addr.get() {
+            // ROM mounted switch
+            0x0000..0x0100 if self.bios_mounted => warn!("Wrote to BIOS ROM!"),
+
+            0x0000..0x8000 => unimplemented!(), // Cartridge
+            0x8000..0xA000 => unimplemented!(), // vram
+            0xA000..0xC000 => unimplemented!(), // exram
+            0xC000..0xE000 => self.wram[addr - 0xC000] = byte, // wram
+            0xE000..0xFE00 => self.wram[addr - 0xC000 - 0x2000] = byte, // wram echo
+            0xFE00..0xFEA0 => unimplemented!(), // oam
+            0xFEA0..0xFF00 => unimplemented!(), // not usable (random ram, maybe use as rng???)
+            0xFF00..0xFF80 => unimplemented!(), // IO registers
+            0xFF80..0xFFFF => unimplemented!(), // hram
+            0xFFFF => unimplemented!(), // ie
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn load_word(&self, addr: Word) -> Word {
+        // TODO: Check what happens on DMG hardware in this case
+        if addr.get() == 0xffff {
+            panic!("Index out of bounds!");
+        }
+
+        let lsb = self.load_byte(addr);
+        let msb = self.load_byte(addr + 1);
+
+        Word::from_bytes(lsb, msb)
+    }
+
+    pub fn store_word(&mut self, addr: Word, word: Word) {
+        // TODO: Check what happens on DMG hardware in this case
+        if addr.get() == 0xffff {
+            panic!("Index out of bounds!");
+        }
+
+        let (lsb, msb) = word.into_bytes();
+        self.store_byte(addr, lsb);
+        self.store_byte(addr + 1, msb);
     }
 
     /// Executes one (the next) operation.
@@ -116,8 +157,8 @@ pub struct Cpu {
     pub l: Byte,
 
     // addressing registers
-    pub sp: Addr,
-    pub pc: Addr,
+    pub sp: Word,
+    pub pc: Word,
 }
 
 impl Cpu {
@@ -131,8 +172,8 @@ impl Cpu {
             e: Byte::zero(),
             h: Byte::zero(),
             l: Byte::zero(),
-            sp: Addr::zero(),
-            pc: Addr::zero(),
+            sp: Word::zero(),
+            pc: Word::zero(),
         }
     }
 }

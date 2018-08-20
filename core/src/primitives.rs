@@ -4,7 +4,7 @@ use std::{
 };
 
 /// This represents a byte
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Byte(u8);
 
 impl Add for Byte {
@@ -15,11 +15,27 @@ impl Add for Byte {
     }
 }
 
+impl Add<u8> for Byte {
+    type Output = Self;
+
+    fn add(self, rhs: u8) -> Self {
+        Byte(self.0.wrapping_add(rhs))
+    }
+}
+
 impl Sub for Byte {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
         Byte(self.0.wrapping_sub(rhs.0))
+    }
+}
+
+impl Sub<u8> for Byte {
+    type Output = Self;
+
+    fn sub(self, rhs: u8) -> Self {
+        Byte(self.0.wrapping_sub(rhs))
     }
 }
 
@@ -49,47 +65,80 @@ impl Byte {
     }
 }
 
-/// This represents an adress
-#[derive(Clone, Copy)]
-pub struct Addr(u16);
+/// This represents a value consisting of two [`Byte`] (e.g. an address)
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Word(u16);
 
-impl Add for Addr {
+impl Add for Word {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        Addr(self.0.wrapping_add(rhs.0))
+        Word(self.0.wrapping_add(rhs.0))
     }
 }
 
-impl Sub for Addr {
+impl Add<u16> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: u16) -> Self {
+        Word(self.0.wrapping_add(rhs as u16))
+    }
+}
+
+impl Sub for Word {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        Addr(self.0.wrapping_sub(rhs.0))
+        Word(self.0.wrapping_sub(rhs.0))
     }
 }
 
-impl Addr {
+impl Sub<u16> for Word {
+    type Output = Self;
+
+    fn sub(self, rhs: u16) -> Self {
+        Word(self.0.wrapping_sub(rhs as u16))
+    }
+}
+
+impl Word {
     pub fn new(val: u16) -> Self {
-        Addr(val)
+        Word(val)
     }
 
     pub fn zero() -> Self {
         Self::new(0)
     }
 
+    pub fn from_bytes(lsb: Byte, msb: Byte) -> Self {
+        let val = ((msb.get() as u16) << 8) | lsb.get() as u16;
+
+        Self::new(val)
+    }
+
     pub fn get(&self) -> u16 {
         self.0
     }
+
+    /// Destructs the word into two [`Byte`]s
+    ///
+    /// The first [`Byte`] in the returned tuple is the lsb and the second [`Byte`] in the
+    /// returned tuple is the msb (e.g. returned tuple: (lsb, msb)).
+    pub fn into_bytes(self) -> (Byte, Byte) {
+        let lsb = (self.0 & 0xff) as u8;
+        let msb = ((self.0 >> 8) & 0xff) as u8;
+
+        (Byte::new(lsb), Byte::new(msb))
+    }
 }
 
-impl Debug for Addr {
+impl Debug for Word {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "0x{:04x}", self.0)
     }
 }
 
-impl Display for Addr {
+impl Display for Word {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(self, f)
     }
@@ -99,7 +148,7 @@ impl Display for Addr {
 pub struct Memory(Box<[Byte]>);
 
 impl Memory {
-    pub fn zeroed(len: Addr) -> Self {
+    pub fn zeroed(len: Word) -> Self {
         Memory(vec![Byte::zero(); len.get() as usize].into_boxed_slice())
     }
 
@@ -108,20 +157,20 @@ impl Memory {
         Memory(copy.into_boxed_slice())
     }
 
-    pub fn len(&self) -> Addr {
-        Addr::new(self.0.len() as u16)
+    pub fn len(&self) -> Word {
+        Word::new(self.0.len() as u16)
     }
 }
 
-impl Index<Addr> for Memory {
+impl Index<Word> for Memory {
     type Output = Byte;
-    fn index(&self, index: Addr) -> &Self::Output {
+    fn index(&self, index: Word) -> &Self::Output {
         &(*self.0)[index.0 as usize]
     }
 }
 
-impl IndexMut<Addr> for Memory {
-    fn index_mut(&mut self, index: Addr) -> &mut Self::Output {
+impl IndexMut<Word> for Memory {
+    fn index_mut(&mut self, index: Word) -> &mut Self::Output {
         &mut (*self.0)[index.0 as usize]
     }
 }
