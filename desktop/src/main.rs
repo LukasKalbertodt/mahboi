@@ -82,10 +82,15 @@ fn run() -> Result<(), Error> {
                 Ok(_) => {},
                 Err(Disruption::Paused) => is_paused = true,
                 Err(Disruption::Terminated) => {
-                    // We might want to make unpausing impossible or
-                    // something...
+                    // If we are not in debug mode, we stop the program, as it
+                    // doesn't make much sense to keep running. In debug mode,
+                    // we just pause execution.
                     warn!("Emulator was terminated");
-                    is_paused = true;
+                    if args.debug {
+                        is_paused = true;
+                    } else {
+                        break;
+                    }
                 }
             }
         }
