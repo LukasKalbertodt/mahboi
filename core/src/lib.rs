@@ -66,8 +66,11 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     /// After executing this once, the emulator has written a new frame via the display
     /// (defined as peripherals) and the display buffer can be written to the actual display.
     pub fn execute_frame(&mut self) -> Result<(), Disruption> {
-        while !self.machine.cycle_counter.at_end_of_frame() {
+        loop {
             self.machine.step()?;
+            if self.machine.cycle_counter.is_between_frames() {
+                break;
+            }
         }
 
         Ok(())

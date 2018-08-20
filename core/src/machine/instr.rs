@@ -2,19 +2,19 @@
 pub struct Instr {
 
     /// Full mnemonic
-    mnemonic: &'static str,
+    pub mnemonic: &'static str,
 
     /// Kind of instruction (e.g. ADD, LD, INC)
-    kind: &'static str,
+    pub kind: &'static str,
 
     /// List of params for instruction with placeholders for values
-    params: &'static str,
+    pub params: &'static str,
 
     /// Length in bytes
-    len: u8,
+    pub len: u8,
 
     /// CPU cylces
-    cycles: u8,
+    pub cycles: u8,
 
     // TODO add second cycle value for instructions with different cycle numbers
 }
