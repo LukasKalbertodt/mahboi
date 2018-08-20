@@ -13,7 +13,7 @@ use crate::{
 
 
 pub mod log;
-mod primitives;
+pub mod primitives;
 pub mod env;
 pub mod cartridge;
 pub mod machine;
@@ -65,9 +65,19 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     ///
     /// After executing this once, the emulator has written a new frame via the display
     /// (defined as peripherals) and the display buffer can be written to the actual display.
-    pub fn execute_frame(&mut self) -> Result<(), Disruption> {
-        while !self.machine.cycle_counter.at_end_of_frame() {
+    pub fn execute_frame(
+        &mut self,
+        mut should_pause: impl FnMut(&Machine) -> bool,
+    ) -> Result<(), Disruption> {
+        loop {
+            if should_pause(&self.machine) {
+                return Err(Disruption::Paused);
+            }
+
             self.machine.step()?;
+            if self.machine.cycle_counter.is_between_frames() {
+                break;
+            }
         }
 
         Ok(())

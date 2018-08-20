@@ -77,7 +77,13 @@ fn run() -> Result<(), Error> {
 
         // Run the emulator.
         if !is_paused {
-            let res = emulator.execute_frame();
+            let res = emulator.execute_frame(|machine| {
+                if let Some(debugger) = &tui_debugger {
+                    debugger.should_pause(machine)
+                } else {
+                    false
+                }
+            });
             match res {
                 Ok(_) => {},
                 Err(Disruption::Paused) => is_paused = true,
@@ -97,7 +103,7 @@ fn run() -> Result<(), Error> {
 
         // If we're in debug mode (and have a TUI debugger), let's update it.
         if let Some(debugger) = &mut tui_debugger {
-            let action = debugger.update(is_paused)?;
+            let action = debugger.update(is_paused, emulator.machine())?;
             match action {
                 Action::Quit => break,
                 Action::Pause => is_paused = true,

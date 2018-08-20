@@ -16,12 +16,18 @@ use failure::Error;
 use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
+use mahboi::{
+    machine::Machine,
+    primitives::Word,
+};
 use super::{Action};
 use self::{
+    asm_view::AsmView,
     log_view::LogView,
     tab_view::TabView,
 };
 
+mod asm_view;
 mod tab_view;
 mod log_view;
 
@@ -84,6 +90,8 @@ pub(crate) struct TuiDebugger {
     /// Events that cannot be handled immediately and are stored here to be
     /// handled in `update`.
     pending_events: Receiver<char>,
+
+    step_over: Option<Word>,
 }
 
 impl TuiDebugger {
@@ -127,6 +135,7 @@ impl TuiDebugger {
             siv,
             is_paused: false,
             pending_events: events,
+            step_over: None,
         };
 
         Ok(out)
@@ -136,18 +145,13 @@ impl TuiDebugger {
     /// regularly.
     ///
     /// Returns a requested action.
-    pub(crate) fn update(&mut self, is_paused: bool) -> Result<Action, Error> {
+    pub(crate) fn update(
+        &mut self,
+        is_paused: bool,
+        machine: &Machine,
+    ) -> Result<Action, Error> {
         if !self.siv.is_running() {
             return Ok(Action::Quit);
-        }
-
-        // React to any events that might have happend
-        while let Ok(c) = self.pending_events.try_recv() {
-            match c {
-                'p' => return Ok(Action::Pause),
-                'r' => return Ok(Action::Continue),
-                _ => panic!("internal error: unexpected event"),
-            }
         }
 
         // Check if the paused state has changed.
@@ -158,6 +162,12 @@ impl TuiDebugger {
             let state = if is_paused { "paused" } else { "running" };
             self.siv.call_on_id("main_title", |text: &mut TextView| {
                 text.set_content(format!("Mahboi Debugger ({})", state));
+            });
+        }
+
+        if is_paused {
+            self.siv.call_on_id("asm_view", |asm: &mut AsmView| {
+                asm.update(machine);
             });
         }
 
@@ -172,7 +182,30 @@ impl TuiDebugger {
         // Handle events and update view
         self.siv.step();
 
+        // React to any events that might have happend
+        while let Ok(c) = self.pending_events.try_recv() {
+            match c {
+                'p' => return Ok(Action::Pause),
+                'r' => return Ok(Action::Continue),
+                's' => {
+                    if self.is_paused {
+                        self.step_over = Some(machine.cpu.pc);
+                        return Ok(Action::Continue);
+                    }
+                }
+                _ => panic!("internal error: unexpected event"),
+            }
+        }
+
         Ok(Action::Nothing)
+    }
+
+    pub(crate) fn should_pause(&self, machine: &Machine) -> bool {
+        if let Some(addr) = self.step_over {
+            return addr != machine.cpu.pc;
+        }
+
+        false
     }
 }
 
@@ -183,7 +216,7 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     siv.add_global_callback('q', |s| s.quit());
     let (tx, receiver) = channel();
 
-    for &c in &['p', 'r'] {
+    for &c in &['p', 'r', 's'] {
         let tx = tx.clone();
         siv.add_global_callback(c, move |_| tx.send(c).unwrap());
     }
@@ -208,6 +241,8 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     // Create view for log messages
     let log_list = LogView::new().with_id("log_list");
 
+    let asm_view = AsmView::new().with_id("asm_view");
+
     let main_title = TextView::new("Mahboi Debugger")
         .effect(Effect::Bold)
         .center()
@@ -216,7 +251,7 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
 
     let tabs = TabView::new()
         .tab("Event Log", log_list)
-        .tab("Debugger", TextView::new("Hello in the debugger tab!"));
+        .tab("Debugger", asm_view);
 
     let main_layout = LinearLayout::vertical()
         .child(main_title)

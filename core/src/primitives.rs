@@ -1,10 +1,12 @@
 use std::{
-    ops::{Add, Sub, Index, IndexMut},
+    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign},
     fmt::{self, Debug, Display},
 };
 
+use derive_more::{BitXor, BitXorAssign, Display};
+
 /// This represents a byte
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitXor, BitXorAssign)]
 pub struct Byte(u8);
 
 impl Add for Byte {
@@ -23,6 +25,12 @@ impl Add<u8> for Byte {
     }
 }
 
+impl AddAssign<u8> for Byte {
+    fn add_assign(&mut self, rhs: u8) {
+        *self = *self + rhs;
+    }
+}
+
 impl Sub for Byte {
     type Output = Self;
 
@@ -36,6 +44,12 @@ impl Sub<u8> for Byte {
 
     fn sub(self, rhs: u8) -> Self {
         Byte(self.0.wrapping_sub(rhs))
+    }
+}
+
+impl SubAssign<u8> for Byte {
+    fn sub_assign(&mut self, rhs: u8) {
+        *self = *self - rhs;
     }
 }
 
@@ -77,11 +91,31 @@ impl Add for Word {
     }
 }
 
+impl Add<i8> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: i8) -> Self {
+        Word((self.0 as i16).wrapping_add(rhs as i16) as u16)
+    }
+}
+
 impl Add<u16> for Word {
     type Output = Self;
 
     fn add(self, rhs: u16) -> Self {
         Word(self.0.wrapping_add(rhs as u16))
+    }
+}
+
+impl AddAssign<i8> for Word {
+    fn add_assign(&mut self, rhs: i8) {
+        *self = *self + rhs;
+    }
+}
+
+impl AddAssign<u16> for Word {
+    fn add_assign(&mut self, rhs: u16) {
+        *self = *self + rhs;
     }
 }
 
@@ -98,6 +132,12 @@ impl Sub<u16> for Word {
 
     fn sub(self, rhs: u16) -> Self {
         Word(self.0.wrapping_sub(rhs as u16))
+    }
+}
+
+impl SubAssign<u16> for Word {
+    fn sub_assign(&mut self, rhs: u16) {
+        *self = *self - rhs;
     }
 }
 
@@ -177,28 +217,25 @@ impl IndexMut<Word> for Memory {
 
 // TODO cpu cycles or machine cycles???
 /// Numbers of cycles per frame (including v-blank)
-pub const CYCLES_PER_FRAME: u16 = 17556;
+pub const CYCLES_PER_FRAME: u64 = 17556;
 
-/// This represents the cycle counter which can have values between 0 and 17,556.
-#[derive(Debug, Clone, Copy)]
-pub struct CycleCounter(u16);
+/// This represents the cycle counter.
+#[derive(Debug, Display, Clone, Copy)]
+pub struct CycleCounter(u64);
 
 impl CycleCounter {
     pub fn zero() -> Self {
         CycleCounter(0)
     }
 
-    /// Increases the counter by one. Automatically wraps around 17,556 to 1.
-    pub fn inc(&mut self) {
-        self.0 = if self.0 == CYCLES_PER_FRAME {
-            1
-        } else {
-            self.0 + 1
-        }
+    /// Returns true, if the counter is exactly btweeen two frames, false otherwise.
+    pub fn is_between_frames(&self) -> bool {
+        self.0 % CYCLES_PER_FRAME == 0
     }
+}
 
-    /// Returns true, if the cycle counter has reached the end of its range, false otherwise.
-    pub fn at_end_of_frame(&self) -> bool {
-        self.0 == CYCLES_PER_FRAME
+impl AddAssign<u8> for CycleCounter {
+    fn add_assign(&mut self, rhs: u8) {
+        self.0 += rhs as u64;
     }
 }
