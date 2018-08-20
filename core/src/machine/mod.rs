@@ -4,6 +4,9 @@ use crate::{
 };
 
 
+#[macro_use]
+mod macros;
+
 pub mod instr;
 mod mm;
 mod step;
@@ -105,5 +108,61 @@ impl Cpu {
             sp: Word::zero(),
             pc: Word::zero(),
         }
+    }
+
+    pub fn hl(&self) -> Word {
+        Word::from_bytes(self.l, self.h)
+    }
+
+    pub fn de(&self) -> Word {
+        Word::from_bytes(self.e, self.d)
+    }
+
+    pub fn bc(&self) -> Word {
+        Word::from_bytes(self.c, self.b)
+    }
+
+    pub fn af(&self) -> Word {
+        Word::from_bytes(self.f, self.a)
+    }
+
+    pub fn set_hl(&mut self, word: Word) {
+        let (lsb, msb) = word.into_bytes();
+        self.l = lsb;
+        self.h = msb;
+    }
+
+    pub fn set_de(&mut self, word: Word) {
+        let (lsb, msb) = word.into_bytes();
+        self.e = lsb;
+        self.d = msb;
+    }
+
+    pub fn set_bc(&mut self, word: Word) {
+        let (lsb, msb) = word.into_bytes();
+        self.c = lsb;
+        self.b = msb;
+    }
+
+    pub fn set_af(&mut self, word: Word) {
+        let (lsb, msb) = word.into_bytes();
+        self.f = lsb;
+        self.a = msb;
+    }
+
+    pub fn zero(&self) -> bool {
+        (self.f.get() & 0b1000_0000) != 0
+    }
+
+    pub fn substract(&self) -> bool {
+        (self.f.get() & 0b0100_0000) != 0
+    }
+
+    pub fn half_carry(&self) -> bool {
+        (self.f.get() & 0b0010_0000) != 0
+    }
+
+    pub fn carry(&self) -> bool {
+        (self.f.get() & 0b0001_0000) != 0
     }
 }
