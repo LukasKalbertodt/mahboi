@@ -1,29 +1,28 @@
 use std::{
     cmp,
-    collections::HashMap,
 };
 
 use cursive::{
     Printer,
     direction::Direction,
     event::{AnyCb, Event, EventResult},
-    theme::{ColorStyle, Color, ColorType, BaseColor},
+    // theme::{ColorStyle, Color, ColorType, BaseColor},
     view::{View, Selector},
-    views::TextView,
+    // views::TextView,
     vec::Vec2,
 };
 
 use mahboi::{
     machine::{
         Machine,
-        instr::{Instr, INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
+        instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
     },
     primitives::{Byte, Word},
 };
 
 
 const CONTEXT_SIZE: u16 = 40;
-const LONGEST_STR_LEN: u16 = 4;
+// const LONGEST_STR_LEN: u16 = 4;
 
 #[derive(Clone)]
 enum LineKind {
