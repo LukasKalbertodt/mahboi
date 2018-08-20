@@ -8,6 +8,11 @@ edition = "2018"
 
 [dependencies]
 failure = "0.1.2"
+lazy_static = "1.1"
+log = "0.4"
 mahboi = { path = "../core" }
 minifb = "0.10"
 structopt = "0.2"
+cursive = "0.9"
+ncurses = "5"
+unicode-width = "0.1.5"
