@@ -13,7 +13,7 @@ use crate::{
 
 
 pub mod log;
-mod primitives;
+pub mod primitives;
 pub mod env;
 pub mod cartridge;
 pub mod machine;

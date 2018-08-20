@@ -16,12 +16,17 @@ use failure::Error;
 use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
+use mahboi::{
+    machine::Machine,
+};
 use super::{Action};
 use self::{
+    asm_view::AsmView,
     log_view::LogView,
     tab_view::TabView,
 };
 
+mod asm_view;
 mod tab_view;
 mod log_view;
 
@@ -136,7 +141,11 @@ impl TuiDebugger {
     /// regularly.
     ///
     /// Returns a requested action.
-    pub(crate) fn update(&mut self, is_paused: bool) -> Result<Action, Error> {
+    pub(crate) fn update(
+        &mut self,
+        is_paused: bool,
+        machine: &Machine,
+    ) -> Result<Action, Error> {
         if !self.siv.is_running() {
             return Ok(Action::Quit);
         }
@@ -158,6 +167,12 @@ impl TuiDebugger {
             let state = if is_paused { "paused" } else { "running" };
             self.siv.call_on_id("main_title", |text: &mut TextView| {
                 text.set_content(format!("Mahboi Debugger ({})", state));
+            });
+        }
+
+        if is_paused {
+            self.siv.call_on_id("asm_view", |asm: &mut AsmView| {
+                asm.update(machine);
             });
         }
 
@@ -208,6 +223,8 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     // Create view for log messages
     let log_list = LogView::new().with_id("log_list");
 
+    let asm_view = AsmView::new().with_id("asm_view");
+
     let main_title = TextView::new("Mahboi Debugger")
         .effect(Effect::Bold)
         .center()
@@ -216,7 +233,7 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
 
     let tabs = TabView::new()
         .tab("Event Log", log_list)
-        .tab("Debugger", TextView::new("Hello in the debugger tab!"));
+        .tab("Debugger", asm_view);
 
     let main_layout = LinearLayout::vertical()
         .child(main_title)
