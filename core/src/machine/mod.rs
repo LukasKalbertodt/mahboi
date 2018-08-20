@@ -79,9 +79,17 @@ impl Machine {
 }
 
 pub struct Cpu {
-    // general purpose registers
-    pub a: Byte, // accumulator
-    pub f: Byte, // flags: 7 = zero, 6 = substract, 5 = half carry, 4 = carry
+    /// Accumulator
+    pub a: Byte,
+
+    /// Flag register.
+    ///
+    /// Bit 7 = zero, bit 6 = substract, bit 5 = half carry, bit 4 = carry. To
+    /// access single flags, use the corresponding methods on `Cpu`. To set
+    /// flags, you probably want to use the `set_flags` macro.
+    pub f: Byte,
+
+    // General purpose register
     pub b: Byte,
     pub c: Byte,
     pub d: Byte,
@@ -89,12 +97,15 @@ pub struct Cpu {
     pub h: Byte,
     pub l: Byte,
 
-    // addressing registers
+    /// Stack pointer.
     pub sp: Word,
+
+    /// Programm counter.
     pub pc: Word,
 }
 
 impl Cpu {
+    /// Returns a new CPU with all registers set to 0.
     fn new() -> Self {
         Self {
             a: Byte::zero(),

@@ -1,3 +1,5 @@
+//! Contains code to actually execute instructions.
+
 use super::{
     Machine,
     instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
