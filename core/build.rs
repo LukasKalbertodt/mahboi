@@ -1,5 +1,3 @@
-#![feature(rust_2018_preview)]
-
 use std::{
     fs::File,
     path::Path,
