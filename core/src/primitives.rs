@@ -3,8 +3,10 @@ use std::{
     fmt::{self, Debug, Display},
 };
 
+use derive_more::{BitXor, BitXorAssign, Display};
+
 /// This represents a byte
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitXor, BitXorAssign)]
 pub struct Byte(u8);
 
 impl Add for Byte {
@@ -204,7 +206,7 @@ impl IndexMut<Word> for Memory {
 pub const CYCLES_PER_FRAME: u64 = 17556;
 
 /// This represents the cycle counter.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Display, Clone, Copy)]
 pub struct CycleCounter(u64);
 
 impl CycleCounter {
