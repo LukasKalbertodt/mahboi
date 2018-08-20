@@ -23,7 +23,7 @@ impl Machine {
         match op_code.get() {
             // 0x3_
             0x31 => {
-                let immediate = self.load_word(self.cpu.pc + 1);
+                let immediate = self.load_word(pc + 1u16);
                 self.cpu.sp = immediate;
 
                 self.cpu.pc += instr.len as u16;

@@ -91,11 +91,25 @@ impl Add for Word {
     }
 }
 
+impl Add<i8> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: i8) -> Self {
+        Word((self.0 as i16).wrapping_add(rhs as i16) as u16)
+    }
+}
+
 impl Add<u16> for Word {
     type Output = Self;
 
     fn add(self, rhs: u16) -> Self {
         Word(self.0.wrapping_add(rhs as u16))
+    }
+}
+
+impl AddAssign<i8> for Word {
+    fn add_assign(&mut self, rhs: i8) {
+        *self = *self + rhs;
     }
 }
 

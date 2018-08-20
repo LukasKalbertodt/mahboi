@@ -58,7 +58,7 @@ impl Machine {
         }
 
         let lsb = self.load_byte(addr);
-        let msb = self.load_byte(addr + 1);
+        let msb = self.load_byte(addr + 1u16);
 
         Word::from_bytes(lsb, msb)
     }
@@ -71,7 +71,7 @@ impl Machine {
 
         let (lsb, msb) = word.into_bytes();
         self.store_byte(addr, lsb);
-        self.store_byte(addr + 1, msb);
+        self.store_byte(addr + 1u16, msb);
     }
 }
 
