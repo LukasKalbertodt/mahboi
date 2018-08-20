@@ -1,7 +1,7 @@
 //! This is a helper module which reexports all logging macros from the `log`
 //! crate. This means that you can simply say:
 //!
-//! ```
+//! ```ignore
 //! use crate::log::*;
 //! ```
 //!
