@@ -16,7 +16,8 @@ pub struct Instr {
     /// CPU cylces
     pub cycles: u8,
 
-    // TODO add second cycle value for instructions with different cycle numbers
+    /// CPU cylces, if branch is taken
+    pub cycles_taken: Option<u8>,
 }
 
 impl Instr {
@@ -26,6 +27,7 @@ impl Instr {
         params: &'static str,
         len: u8,
         cycles: u8,
+        cycles_taken: Option<u8>,
     ) -> Option<Self> {
         Some(Instr {
             mnemonic,
@@ -33,6 +35,7 @@ impl Instr {
             params,
             len,
             cycles,
+            cycles_taken,
         })
     }
 }
@@ -45,15 +48,15 @@ const fn missing() -> Option<Instr> {
 /// Instruction sets
 pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     // 0x0_
-    Instr::new("NOP",           "NOP",  "",         1,  4),
-    Instr::new("LD BC, d16",    "LD",   "BC, {}",   1,  4),
-    Instr::new("LD (BC), A",    "LD",   "",         1,  4),
+    Instr::new("NOP",           "NOP",  "",         1,  4, None),
+    Instr::new("LD BC, d16",    "LD",   "BC, {}",   1,  4, None),
+    Instr::new("LD (BC), A",    "LD",   "",         1,  4, None),
     missing(),
     missing(),
     missing(),
     missing(),
     missing(),
-    Instr::new("LD (a16), SP",  "LD",   "",         3,  20),
+    Instr::new("LD (a16), SP",  "LD",   "",         3,  20, None),
     missing(),
     missing(),
     missing(),
@@ -81,8 +84,8 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     missing(),
 
     // 0x2_
-    missing(),
-    missing(),
+    Instr::new("JR NZ, r8",  "JR",   "NZ, {}",   2,  8, Some(12)),
+    Instr::new("LD HL, d16",  "LD",   "HL, {}",   3,  12, None),
     missing(),
     missing(),
     missing(),
@@ -100,8 +103,8 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
 
     // 0x3_
     missing(),
-    Instr::new("LD SP, d16",  "LD",   "SP, {}",   3,  12),
-    missing(),
+    Instr::new("LD SP, d16",  "LD",   "SP, {}",   3,  12, None),
+    Instr::new("LD (HL-), A",  "LD",   "(HL-), A",   1,  8, None),
     missing(),
     missing(),
     missing(),
@@ -240,7 +243,7 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     missing(),
     missing(),
     missing(),
-    missing(),
+    Instr::new("XOR A",  "XOR",   "A",   1,  4, None),
 
     // 0xB_
     missing(),
@@ -272,7 +275,9 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     missing(),
     missing(),
     missing(),
-    missing(),
+
+    // The opcode table is wrong! This instructions has a len and cycle number of 0
+    Instr::new("PREFIX CB",  "PREFIX",   "CB",   0,  0, None),
     missing(),
     missing(),
     missing(),
@@ -474,7 +479,7 @@ pub const PREFIXED_INSTRUCTIONS: [Option<Instr>; 256] = [
     missing(),
     missing(),
     missing(),
-    missing(),
+    Instr::new("BIT 7, H",  "BIT",   "7, H",   2,  8, None),
     missing(),
     missing(),
     missing(),
