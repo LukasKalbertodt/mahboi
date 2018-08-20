@@ -17,12 +17,6 @@ pub struct Instr {
     /// - `r8`: 8 bit signed value which is added to PC
     pub mnemonic: &'static str,
 
-    /// Kind of instruction (e.g. ADD, LD, INC)
-    pub kind: &'static str,
-
-    /// List of params for instruction with placeholders for values
-    pub params: &'static str,
-
     /// Length in bytes
     pub len: u8,
 
@@ -40,16 +34,12 @@ pub struct Instr {
 impl Instr {
     const fn new(
         mnemonic: &'static str,
-        kind: &'static str,
-        params: &'static str,
         len: u8,
         cycles: u8,
         cycles_taken: Option<u8>,
     ) -> Option<Self> {
         Some(Instr {
             mnemonic,
-            kind,
-            params,
             len,
             cycles,
             cycles_taken,
@@ -75,15 +65,15 @@ const fn missing() -> Option<Instr> {
 /// CB-instructions in `PREFIXED_INSTRUCTIONS` already contains the total
 /// value. The actual prefix doesn't add anything.
 pub const INSTRUCTIONS: [Option<Instr>; 256] = [
-    /* 00 */ Instr::new("NOP",          "NOP",  "",         1,  4,  None),
-    /* 01 */ Instr::new("LD BC, d16",   "LD",   "BC, {}",   1,  4,  None),
-    /* 02 */ Instr::new("LD (BC), A",   "LD",   "",         1,  4,  None),
+    /* 00 */ Instr::new("NOP",          1,  4,  None),
+    /* 01 */ Instr::new("LD BC, d16",   1,  4,  None),
+    /* 02 */ Instr::new("LD (BC), A",   1,  4,  None),
     /* 03 */ missing(),
     /* 04 */ missing(),
     /* 05 */ missing(),
     /* 06 */ missing(),
     /* 07 */ missing(),
-    /* 08 */ Instr::new("LD (a16), SP", "LD",   "",         3,  20, None),
+    /* 08 */ Instr::new("LD (a16), SP", 3,  20, None),
     /* 09 */ missing(),
     /* 0a */ missing(),
     /* 0b */ missing(),
@@ -109,8 +99,8 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     /* 1e */ missing(),
     /* 1f */ missing(),
 
-    /* 20 */ Instr::new("JR NZ, r8",    "JR",   "NZ, {}",   2,  8,  Some(12)),
-    /* 21 */ Instr::new("LD HL, d16",   "LD",   "HL, {}",   3,  12, None),
+    /* 20 */ Instr::new("JR NZ, r8",    2,  8,  Some(12)),
+    /* 21 */ Instr::new("LD HL, d16",   3,  12, None),
     /* 22 */ missing(),
     /* 23 */ missing(),
     /* 24 */ missing(),
@@ -127,8 +117,8 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     /* 2f */ missing(),
 
     /* 30 */ missing(),
-    /* 31 */ Instr::new("LD SP, d16",   "LD",   "SP, {}",   3,  12, None),
-    /* 32 */ Instr::new("LD (HL-), A",  "LD",   "(HL-), A", 1,  8,  None),
+    /* 31 */ Instr::new("LD SP, d16",   3,  12, None),
+    /* 32 */ Instr::new("LD (HL-), A",  1,  8,  None),
     /* 33 */ missing(),
     /* 34 */ missing(),
     /* 35 */ missing(),
@@ -260,7 +250,7 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     /* ac */ missing(),
     /* ad */ missing(),
     /* ae */ missing(),
-    /* af */ Instr::new("XOR A",  "XOR",   "A",   1,  4, None),
+    /* af */ Instr::new("XOR A",        1,  4, None),
 
     /* b0 */ missing(),
     /* b1 */ missing(),
@@ -290,7 +280,7 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     /* 08 */ missing(),
     /* 09 */ missing(),
     /* 0a */ missing(),
-    /* 0b */ Instr::new("PREFIX CB",  "PREFIX",   "CB",   0,  0, None),
+    /* 0b */ Instr::new("PREFIX CB", 0,  0, None),
     /* 0c */ missing(),
     /* 0d */ missing(),
     /* 0e */ missing(),
@@ -481,7 +471,7 @@ pub const PREFIXED_INSTRUCTIONS: [Option<Instr>; 256] = [
     /* 79 */ missing(),
     /* 7a */ missing(),
     /* 7b */ missing(),
-    /* 7c */ Instr::new("BIT 7, H",  "BIT",   "7, H",   2,  8, None),
+    /* 7c */ Instr::new("BIT 7, H",  2,  8, None),
     /* 7d */ missing(),
     /* 7e */ missing(),
     /* 7f */ missing(),
