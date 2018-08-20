@@ -34,3 +34,13 @@ macro_rules! set_flags {
         }
     };
 }
+
+
+/// Emit the given format string with `error!` and return
+/// `Err(Disruption::Terminated)`.
+macro_rules! terminate {
+    ($($x:tt)*) => {
+        error!($($x)*);
+        return Err(Disruption::Terminated)
+    }
+}
