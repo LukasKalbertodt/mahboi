@@ -17,9 +17,10 @@ matrix:
       before_script:
         - sudo apt-get install xorg-dev
         - hash cargo-script 2>/dev/null || cargo install -f cargo-script
-        - hash wasm-bindgen 2>/dev/null || cargo install -f wasm-bindgen-cli
+        - cargo install -f wasm-bindgen-cli
         - rustup target add wasm32-unknown-unknown
       script:
+        - cargo update -p wasm-bindgen # the version has to match the CLI version exactly
         - cargo build --verbose
         - cargo test --verbose
         - cd web && ./build-all.rs
