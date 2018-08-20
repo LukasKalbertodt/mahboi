@@ -24,7 +24,7 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
     path::Path,
-    process::Command,
+    process::{self, Command},
 };
 
 
@@ -39,6 +39,8 @@ fn main() {
         for cause in e.iter_causes() {
             println!("       ... caused by: {}", cause);
         }
+
+        process::exit(1);
     }
 }
 
