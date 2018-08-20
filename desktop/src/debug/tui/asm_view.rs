@@ -16,9 +16,9 @@ use cursive::{
 use mahboi::{
     machine::{
         Machine,
-        instr::{Instr, INSTRUCTIONS},
+        instr::{Instr, INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
     },
-    primitives::{Byte},
+    primitives::{Byte, Word},
 };
 
 
@@ -26,11 +26,17 @@ const CONTEXT_SIZE: u16 = 40;
 const LONGEST_STR_LEN: u16 = 4;
 
 #[derive(Clone)]
-enum Line {
+enum LineKind {
     Asm {
         s: &'static str,
     },
     Byte(Byte),
+}
+
+#[derive(Clone)]
+struct Line {
+    addr: Word,
+    kind: LineKind,
 }
 
 // struct InstrCache {
@@ -61,8 +67,12 @@ pub struct AsmView {
 impl AsmView {
     /// Creates an empty AsmView.
     pub fn new() -> Self {
+        let default_line = Line {
+            addr: Word::new(0),
+            kind: LineKind::Byte(Byte::new(0)),
+        };
         Self {
-            lines: vec![Line::Byte(Byte::new(0)); CONTEXT_SIZE as usize],
+            lines: vec![default_line; CONTEXT_SIZE as usize],
         }
     }
 
@@ -73,21 +83,33 @@ impl AsmView {
         let mut no_unknown_yet = true;
         for _ in 0..CONTEXT_SIZE {
             let opcode = machine.load_byte(pos);
-            let line = match INSTRUCTIONS[opcode.get() as usize] {
+            let addr = pos;
+
+            let instr = if opcode.get() == 0xCB {
+                let opcode = machine.load_byte(pos + 1u16);
+                PREFIXED_INSTRUCTIONS[opcode.get() as usize]
+            } else {
+                INSTRUCTIONS[opcode.get() as usize]
+            };
+
+            let kind = match instr {
                 Some(instr) if no_unknown_yet => {
                     pos = pos + instr.len as u16;
-                    Line::Asm {
+                    LineKind::Asm {
                         s: instr.mnemonic,
                     }
                 }
                 _ => {
                     no_unknown_yet = false;
-                    pos = pos + 1;
-                    Line::Byte(opcode)
+                    pos += 1u16;
+                    LineKind::Byte(opcode)
                 }
             };
 
-            self.lines.push(line);
+            self.lines.push(Line {
+                addr,
+                kind,
+            });
         }
     }
 }
@@ -95,13 +117,15 @@ impl AsmView {
 impl View for AsmView {
     fn draw(&self, printer: &Printer) {
         for (i, line) in self.lines.iter().enumerate() {
-            match line {
-                Line::Asm { s } => {
-                    printer.print((0, i), s);
+            printer.print((0, i), &format!("{}   ", line.addr));
+            let offset = 9;
+            match line.kind {
+                LineKind::Asm { s } => {
+                    printer.print((offset, i), s);
                 }
-                Line::Byte(b) => {
+                LineKind::Byte(b) => {
                     let s = format!("{}", b);
-                    printer.print((0, i), &s);
+                    printer.print((offset, i), &s);
                 }
             }
         }
