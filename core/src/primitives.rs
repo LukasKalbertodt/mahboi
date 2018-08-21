@@ -148,6 +148,14 @@ impl Add<u16> for Word {
     }
 }
 
+impl Add<Byte> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: Byte) -> Self {
+        Word(self.0.wrapping_add(rhs.get() as u16))
+    }
+}
+
 impl AddAssign<i8> for Word {
     fn add_assign(&mut self, rhs: i8) {
         *self = *self + rhs;
@@ -156,6 +164,12 @@ impl AddAssign<i8> for Word {
 
 impl AddAssign<u16> for Word {
     fn add_assign(&mut self, rhs: u16) {
+        *self = *self + rhs;
+    }
+}
+
+impl AddAssign<Byte> for Word {
+    fn add_assign(&mut self, rhs: Byte) {
         *self = *self + rhs;
     }
 }
