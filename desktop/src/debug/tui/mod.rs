@@ -444,9 +444,17 @@ impl TuiDebugger {
             })
         };
 
+        // Buttons for the 'r' and 's' actions
+        let tx = self.event_sink.clone();
+        let run_button = Button::new("Continue [r]", move |_| tx.send('r').unwrap());
+        let tx = self.event_sink.clone();
+        let step_button = Button::new("Single step [s]", move |_| tx.send('s').unwrap());
+
         // Wrap all buttons
         let debug_buttons = LinearLayout::vertical()
-            .child(button_breakpoints);
+            .child(button_breakpoints)
+            .child(run_button)
+            .child(step_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
