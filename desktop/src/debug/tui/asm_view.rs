@@ -227,7 +227,8 @@ impl View for AsmView {
 
     fn required_size(&mut self, constraint: Vec2) -> Vec2 {
         let height = cmp::max(constraint.y, self.lines.len());
-        Vec2::new(constraint.x, height)
+        let width = cmp::max(constraint.x, 40);
+        Vec2::new(width, height)
     }
 
     fn on_event(&mut self, _: Event) -> EventResult {

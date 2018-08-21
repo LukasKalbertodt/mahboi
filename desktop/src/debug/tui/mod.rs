@@ -9,8 +9,8 @@ use std::{
 use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor},
-    view::{Identifiable},
-    views::{TextView, LinearLayout},
+    view::{Boxable, Identifiable},
+    views::{DummyView, Button, TextView, LinearLayout, Dialog},
 };
 use failure::Error;
 use lazy_static::lazy_static;
@@ -250,7 +250,26 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
     // Create view for log messages
     let log_list = LogView::new().with_id("log_list");
 
-    let asm_view = AsmView::new().with_id("asm_view");
+    // Create debug tab body
+    let asm_view = AsmView::new()
+        .with_id("asm_view")
+        .full_screen();
+    let cpu_view = Dialog::around(TextView::new("CPU DATEN\nJAJA"))
+        .title("CPU registers");
+    let debug_buttons = LinearLayout::vertical()
+        .child(Dialog::around(Button::new("Manage Breakpoints", |_| ())));
+
+    let debug_buttons = Dialog::around(debug_buttons).title("Actions");
+    let right_panel = LinearLayout::vertical()
+        .child(cpu_view)
+        .child(DummyView)
+        .child(debug_buttons)
+        .fixed_width(30);
+
+    let debugging_body = LinearLayout::horizontal()
+        .child(asm_view).weight(5)
+        .child(right_panel).weight(1)
+        .full_screen();
 
     let main_title = TextView::new("Mahboi Debugger")
         .effect(Effect::Bold)
