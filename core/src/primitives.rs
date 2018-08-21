@@ -27,6 +27,16 @@ impl Byte {
     pub fn get(&self) -> u8 {
         self.0
     }
+
+    pub fn map(self, f: impl FnOnce(u8) -> u8) -> Self {
+        Self::new(f(self.0))
+    }
+
+    pub fn rotate_left_through_carry(&mut self, carry: bool) -> bool {
+        let out = (0b1000_0000 & self.0) != 0;
+        self.0 = (self.0 << 1) | (carry as u8);
+        out
+    }
 }
 
 impl Add for Byte {
@@ -266,5 +276,23 @@ impl CycleCounter {
 impl AddAssign<u8> for CycleCounter {
     fn add_assign(&mut self, rhs: u8) {
         self.0 += rhs as u64;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+
+    #[test]
+    fn test_rotate_left_through_carry() {
+        fn run(val: u8, carry: bool) -> (u8, bool) {
+            let mut b = Byte::new(val);
+            let carry = b.rotate_left_through_carry(carry);
+            (b.get(), carry)
+        }
+
+        assert_eq!(run(0b1001_0001, false), (0b0010_0010, true));
+        assert_eq!(run(0b1001_0001, true), (0b0010_0011, true));
     }
 }
