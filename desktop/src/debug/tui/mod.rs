@@ -158,6 +158,13 @@ impl TuiDebugger {
         if is_paused != self.is_paused {
             self.is_paused = is_paused;
 
+            if is_paused {
+                self.siv.call_on_id("tab_view", |tabs: &mut TabView| {
+                    // Select the debugging tab
+                    tabs.set_selected(1);
+                });
+            }
+
             // Update the title (which contains the paused state)
             let state = if is_paused { "paused" } else { "running" };
             self.siv.call_on_id("main_title", |text: &mut TextView| {
@@ -253,7 +260,8 @@ fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
 
     let tabs = TabView::new()
         .tab("Event Log", log_list)
-        .tab("Debugger", asm_view);
+        .tab("Debugger", debugging_body)
+        .with_id("tab_view");
 
     let main_layout = LinearLayout::vertical()
         .child(main_title)

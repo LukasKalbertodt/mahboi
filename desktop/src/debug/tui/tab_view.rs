@@ -56,6 +56,12 @@ impl TabView {
         }
     }
 
+    pub fn set_selected(&mut self, index: u8) {
+        assert!(index < self.len());
+
+        self.selected_tab = index;
+    }
+
     fn selected(&self) -> &Tab {
         &self.tabs[self.selected_tab as usize]
     }
