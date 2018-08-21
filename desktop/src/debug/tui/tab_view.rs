@@ -1,14 +1,16 @@
 use std::cmp;
 
 use cursive::{
-    Printer,
+    Printer, XY,
     direction::Direction,
-    event::{AnyCb, Event, EventResult, Key, MouseEvent},
+    event::{AnyCb, Event, MouseButton, EventResult, Key, MouseEvent},
     theme::{ColorStyle, Effect, Color, BaseColor, Style},
     view::{View, Selector},
     vec::Vec2,
 };
 use unicode_width::UnicodeWidthStr;
+
+use mahboi::log::*;
 
 
 
@@ -142,35 +144,43 @@ impl View for TabView {
     }
 
     fn on_event(&mut self, event: Event) -> EventResult {
-        // TODO: pass events to children
-
         match event {
+            // We eat PageUp and PageDown events to control the tabs.
             Event::Key(Key::PageUp) => self.select_left(),
             Event::Key(Key::PageDown) => self.select_right(),
 
-            Event::Mouse {
-                event: MouseEvent::Press(_),
-                position,
-                offset,
-            } => {
-                if let Some(rel_pos) = position.checked_sub(offset) {
-                    if rel_pos.y != 0 {
-                        return EventResult::Ignored;
-                    }
+            // For mouse events, we need to check where the event happened.
+            Event::Mouse { event: mouse_event, position, offset } => {
+                let is_left_click = mouse_event == MouseEvent::Press(MouseButton::Left);
+                match position.checked_sub(offset) {
+                    // If the tab bar was clicked, this can select a new tab
+                    Some(XY { x, y: 0 }) if is_left_click => {
+                        let mut offset = 0;
+                        for (i, tab) in self.tabs.iter().enumerate() {
+                            let end = offset + tab.title.width() + 2;
+                            if x >= offset && x < end {
+                                self.selected_tab = i as u8;
+                                break;
+                            }
 
-                    let mut offset = 0;
-                    for (i, tab) in self.tabs.iter().enumerate() {
-                        let end = offset + tab.title.width() + 2;
-                        if rel_pos.x >= offset && rel_pos.x < end {
-                            self.selected_tab = i as u8;
-                            break;
+                            offset = end + 1;
                         }
-
-                        offset = end + 1;
                     }
+
+                    // If some other mouse event happened that was not over the
+                    // child, we ignore it
+                    Some(XY { y, .. }) if y <= 1 => return EventResult::Ignored,
+
+                    // Other events are forwarded
+                    Some(_) => return self.selected_mut().body.on_event(event),
+
+                    // Except if the event is not over us at all
+                    None => return EventResult::Ignored,
                 }
             }
-            _ => return EventResult::Ignored,
+
+            // All other events are simply forwarded to the active tab
+            _ => return self.selected_mut().body.on_event(event),
         }
 
         EventResult::Consumed(None)
