@@ -1,3 +1,5 @@
+//! Contains code to actually execute instructions.
+
 use super::{
     Machine,
     instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
@@ -16,13 +18,12 @@ impl Machine {
         let instr = match INSTRUCTIONS[op_code.get() as usize] {
             Some(v) => v,
             None => {
-                error!(
+                terminate!(
                     "Unknown instruction {} in position: {} after: {} cycles",
                     op_code,
                     pc,
                     self.cycle_counter,
                 );
-                return Err(Disruption::Terminated);
             }
         };
 
@@ -89,13 +90,12 @@ impl Machine {
                 let instr = match PREFIXED_INSTRUCTIONS[op_code.get() as usize] {
                     Some(v) => v,
                     None => {
-                        error!(
+                        terminate!(
                             "Unknown prefix instruction {} in position: {} after: {} cycles",
                             op_code,
                             pc,
                             self.cycle_counter,
                         );
-                        return Err(Disruption::Terminated);
                     }
                 };
 
@@ -109,14 +109,13 @@ impl Machine {
                     }
 
                     _ => {
-                        error!(
+                        terminate!(
                             "Unimplemented prefix instruction {:?} in position: {} after: \
                                 {} cycles",
                             instr,
                             pc,
                             self.cycle_counter,
                         );
-                        return Err(Disruption::Terminated);
                     }
                 }
 
@@ -127,13 +126,12 @@ impl Machine {
             }
 
             _ => {
-                error!(
+                terminate!(
                     "Unimplemented instruction {:?} in position: {} after: {} cycles",
                     instr,
                     pc,
                     self.cycle_counter,
                 );
-                return Err(Disruption::Terminated);
             }
         };
 
@@ -142,14 +140,13 @@ impl Machine {
             match instr.cycles_taken {
                 Some(c) => c,
                 None => {
-                    error!(
+                    terminate!(
                         "Action taken for non-branch instruction {} in position: {} after: \
                             {} cycles",
                         op_code,
                         pc,
                         self.cycle_counter,
                     );
-                    return Err(Disruption::Terminated);
                 }
             }
         } else {

@@ -1,3 +1,5 @@
+//! Everything related to memory mapping.
+
 use super::Machine;
 use crate::{
     primitives::{Word, Byte},
@@ -6,6 +8,7 @@ use crate::{
 
 
 impl Machine {
+    /// Loads a byte from the given address.
     pub fn load_byte(&self, addr: Word) -> Byte {
         // TODO :(
         match addr.get() {
@@ -26,6 +29,7 @@ impl Machine {
         }
     }
 
+    /// Stores the given byte at the given address.
     pub(crate) fn store_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             // ROM mounted switch

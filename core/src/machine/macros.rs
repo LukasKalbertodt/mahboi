@@ -1,4 +1,15 @@
-// TODO: Docs from @LukasKalbertodt
+//! A couple of macros for internal use.
+
+/// A convenient macro to manipulate the flag register.
+///
+/// Usage: `set_flags!(flag_register => 0 1 - true)`. After the `=>`, different
+/// actions for each flag are listed in the order: zero, subtract, half-carry,
+/// carry. Possible actions:
+///
+/// - `0`: always set to 0
+/// - `1`: always set to 1
+/// - `-`: don't change value
+/// - *bool expression*: set to expression value
 macro_rules! set_flags {
     ($reg:expr => $z:tt $n:tt $h:tt $c:tt) => {
         let mut byte = $reg.get();
@@ -22,4 +33,14 @@ macro_rules! set_flags {
             set_flags!(@bit 0, $mask, $reg);
         }
     };
+}
+
+
+/// Emit the given format string with `error!` and return
+/// `Err(Disruption::Terminated)`.
+macro_rules! terminate {
+    ($($x:tt)*) => {
+        error!($($x)*);
+        return Err(Disruption::Terminated)
+    }
 }

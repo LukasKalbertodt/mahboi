@@ -1,19 +1,32 @@
+//! Everything related to the cartridge and its header.
+
 use std::fmt;
 
 use crate::primitives::Byte;
 
+
+/// Specifies how this ROM works with the CGB. Stored at `0x0143`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CgbMode {
-    CgbOnly, // 0xC0
-    BothSupported, // 0x80
-    NonCgbSpecial, // bit 7 && (bit 2 || bit 3)
-    NonCgb, // !bit 7
+    /// Only CGB is supported. Value `0xC0`.
+    CgbOnly,
+
+    /// DMG and CGB are supported. Value `0x80`.
+    BothSupported,
+
+    /// CGB features are not supported, but something special happens. We
+    /// think. More investigation needed. Value: bit 7 and at least one of bit
+    /// 2 or bit 3 is set.
+    NonCgbSpecial,
+
+    /// CGB features are not supported. Value: bit 7 is not set.
+    NonCgb,
 }
 
 impl CgbMode {
+    /// Parses the CGB mode from the given byte.
     pub fn from_byte(byte: u8) -> Self {
         match byte {
-
             // Bit 7 not set
             0x00..=0x7F => CgbMode::NonCgb,
             0xC0 => CgbMode::CgbOnly,
@@ -26,6 +39,8 @@ impl CgbMode {
     }
 }
 
+/// The type of a cartridge. This defines whether a cartridge has a memory bank
+/// controller, a battery, external ram or anything else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CartridgeType {
     RomOnly,
@@ -33,6 +48,7 @@ pub enum CartridgeType {
 }
 
 impl CartridgeType {
+    /// Parses the cartridge type from the given byte.
     pub fn from_byte(byte: u8) -> Self {
         match byte {
             0x00 => CartridgeType::RomOnly,
@@ -42,9 +58,10 @@ impl CartridgeType {
     }
 }
 
+/// Size of cartridge's ROM. Defined by the number of banks (each 16 KiB).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RomSize {
-    NoBanks,
+    NoBanking,
     Banks4,
     Banks8,
     Banks16,
@@ -58,9 +75,10 @@ pub enum RomSize {
 }
 
 impl RomSize {
+    /// Parses the ROM size from the given byte.
     pub fn from_byte(byte: u8) -> Self {
         match byte {
-            0x00 => RomSize::NoBanks,
+            0x00 => RomSize::NoBanking,
             0x01 => RomSize::Banks4,
             0x02 => RomSize::Banks8,
             0x03 => RomSize::Banks16,
@@ -76,6 +94,7 @@ impl RomSize {
     }
 }
 
+/// Size of a cartridge's RAM. Specified in KiB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RamSize {
     None,
@@ -85,6 +104,7 @@ pub enum RamSize {
 }
 
 impl RamSize {
+    /// Parses the RAM size from the given byte.
     pub fn from_byte(byte: u8) -> Self {
         match byte {
             0x00 => RamSize::None,
@@ -96,6 +116,10 @@ impl RamSize {
     }
 }
 
+/// A loaded cartridge.
+///
+/// This contains the full cartridge data and a number of fields for specific
+/// header values.
 pub struct Cartridge {
     rom: Box<[Byte]>,
     title: String,
@@ -103,19 +127,6 @@ pub struct Cartridge {
     cartridge_type: CartridgeType,
     rom_size: RomSize,
     ram_size: RamSize,
-}
-
-impl fmt::Debug for Cartridge {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Cartridge")
-            .field("length", &self.rom.len())
-            .field("title", &self.title)
-            .field("cgb_mode", &self.cgb_mode)
-            .field("cartridge_type", &self.cartridge_type)
-            .field("rom_size", &self.rom_size)
-            .field("ram_size", &self.ram_size)
-            .finish()
-    }
 }
 
 impl Cartridge {
@@ -137,6 +148,7 @@ impl Cartridge {
             .unwrap_or(max_title_len);
         let title = String::from_utf8_lossy(&bytes[0x0134..0x0134 + title_len]);
 
+        // Read a couple of one byte values
         let cgb_mode = CgbMode::from_byte(bytes[0x0143]);
         let cartridge_type = CartridgeType::from_byte(bytes[0x0147]);
         let rom_size = RomSize::from_byte(bytes[0x0148]);
@@ -154,5 +166,19 @@ impl Cartridge {
             rom_size,
             ram_size,
         }
+    }
+}
+
+// Manual implementation to omit printing the full memory.
+impl fmt::Debug for Cartridge {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Cartridge")
+            .field("length", &self.rom.len())
+            .field("title", &self.title)
+            .field("cgb_mode", &self.cgb_mode)
+            .field("cartridge_type", &self.cartridge_type)
+            .field("rom_size", &self.rom_size)
+            .field("ram_size", &self.ram_size)
+            .finish()
     }
 }
