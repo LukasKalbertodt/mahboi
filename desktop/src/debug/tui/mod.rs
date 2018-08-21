@@ -20,6 +20,7 @@ use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
 use mahboi::{
+    log::*,
     machine::Machine,
     primitives::Word,
 };
@@ -249,6 +250,8 @@ impl TuiDebugger {
 
     /// Switch to pause mode.
     fn pause(&mut self) {
+        trace!("[debugger] enter pause mode");
+
         self.pause_mode = true;
 
         // Execution just got paused => select the debugging tab
@@ -264,6 +267,8 @@ impl TuiDebugger {
 
     /// Exit pause mode (continue execution)
     fn resume(&mut self) {
+        trace!("[debugger] continue execution (exit pause mode)");
+
         self.pause_mode = false;
 
         // Update the title
@@ -288,6 +293,11 @@ impl TuiDebugger {
             return true;
         }
 
+        // We the current instruction is one of our breakpoints, we also pause.
+        if self.breakpoints.contains(machine.cpu.pc) {
+            trace!("[debugger] paused at breakpoint {}", machine.cpu.pc);
+            return true;
+        }
 
         false
     }
@@ -479,6 +489,10 @@ impl Breakpoints {
     /// happens.
     fn remove(&self, addr: Word) {
         self.0.borrow_mut().remove(&addr);
+    }
+
+    fn contains(&self, addr: Word) -> bool {
+        self.0.borrow().contains(&addr)
     }
 
     fn as_sorted_list(&self) -> Vec<Word> {
