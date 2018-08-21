@@ -1,8 +1,11 @@
 use std::{
+    cell::RefCell,
+    collections::BTreeSet,
     panic,
+    rc::Rc,
     sync::{
         Mutex,
-        mpsc::{channel, Receiver},
+        mpsc::{channel, Receiver, Sender},
     },
 };
 
@@ -10,7 +13,7 @@ use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor},
     view::{Boxable, Identifiable},
-    views::{DummyView, Button, TextView, LinearLayout, Dialog},
+    views::{ListView, BoxView, EditView, DummyView, Button, TextView, LinearLayout, Dialog},
 };
 use failure::Error;
 use lazy_static::lazy_static;
@@ -78,6 +81,9 @@ impl Log for TuiLogger {
 }
 
 
+// ============================================================================
+// ===== Debugger
+// ============================================================================
 
 /// A debugger that uses a terminal user interface. Used in `--debug` mode.
 pub(crate) struct TuiDebugger {
@@ -87,11 +93,23 @@ pub(crate) struct TuiDebugger {
     /// Paused state of the last `update()` call.
     is_paused: bool,
 
+    // ===== Asynchronous event handling ======================================
     /// Events that cannot be handled immediately and are stored here to be
     /// handled in `update`.
     pending_events: Receiver<char>,
 
+    /// A clonable sender for events to be handled in `update()`. This is just
+    /// passed to Cursive event handlers.
+    event_sink: Sender<char>,
+
+    // ===== Data to control when to stop execution ===========================
+    /// This is an exception to the normal pause-rules. If this is
+    /// `Some(addr)`, we will not pause execution for an instruction at `addr`.
+    /// It's reset to `None` after this exception "has been used".
     step_over: Option<Word>,
+
+    /// A set of addresses at which we will pause execution
+    breakpoints: Breakpoints,
 }
 
 impl TuiDebugger {
@@ -128,15 +146,19 @@ impl TuiDebugger {
             previous_hook(info)
         }));
 
-        // Build the TUI view
-        let events = setup_tui(&mut siv);
+        let (event_sink, pending_events) = channel();
 
-        let out = Self {
+        let mut out = Self {
             siv,
             is_paused: false,
-            pending_events: events,
+            pending_events,
+            event_sink,
             step_over: None,
+            breakpoints: Breakpoints::new(),
         };
+
+        // Build the TUI view
+        out.setup_tui();
 
         Ok(out)
     }
@@ -159,10 +181,10 @@ impl TuiDebugger {
             self.is_paused = is_paused;
 
             if is_paused {
-                self.siv.call_on_id("tab_view", |tabs: &mut TabView| {
-                    // Select the debugging tab
-                    tabs.set_selected(1);
-                });
+                // Select the debugging tab
+                self.siv.find_id::<TabView>("tab_view")
+                    .unwrap()
+                    .set_selected(1);
             }
 
             // Update the title (which contains the paused state)
@@ -216,77 +238,197 @@ impl TuiDebugger {
 
         false
     }
-}
 
-/// Prepares the `Cursive` instance by registering event handler and setting up
-/// the view.
-fn setup_tui(siv: &mut Cursive) -> Receiver<char> {
-    // We always want to be able to quit the application via `q`.
-    siv.add_global_callback('q', |s| s.quit());
-    let (tx, receiver) = channel();
+    /// Prepare s the `Cursive` instance by registering event handler and
+    /// setting up the view.
+    fn setup_tui(&mut self) {
+        // We always want to be able to quit the application via `q`.
+        self.siv.add_global_callback('q', |s| s.quit());
 
-    for &c in &['p', 'r', 's'] {
-        let tx = tx.clone();
-        siv.add_global_callback(c, move |_| tx.send(c).unwrap());
+        // Other global events are just forwarded to be handled in the next
+        // `update()` call.
+        for &c in &['p', 'r', 's'] {
+            let tx = self.event_sink.clone();
+            self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
+        }
+
+        // Create and set our theme.
+        let mut palette = Palette::default();
+        palette[PaletteColor::View] = Color::TerminalDefault;
+        palette[PaletteColor::Primary] = Color::TerminalDefault;
+        palette[PaletteColor::Secondary] = Color::TerminalDefault;
+        palette[PaletteColor::Tertiary] = Color::TerminalDefault;
+        palette[PaletteColor::TitlePrimary] = Color::TerminalDefault;
+        palette[PaletteColor::TitleSecondary] = Color::TerminalDefault;
+        palette[PaletteColor::Highlight] = Color::Dark(BaseColor::Red);
+        palette[PaletteColor::HighlightInactive] = Color::TerminalDefault;
+        let theme = Theme {
+            shadow: false,
+            borders: BorderStyle::Simple,
+            palette,
+        };
+        self.siv.set_theme(theme);
+
+        // Create view for log messages
+        let log_list = LogView::new().with_id("log_list");
+
+
+
+        let main_title = TextView::new("Mahboi Debugger")
+            .effect(Effect::Bold)
+            .center()
+            .no_wrap()
+            .with_id("main_title");
+
+        let tabs = TabView::new()
+            .tab("Event Log", log_list)
+            .tab("Debugger", self.debug_tab())
+            .with_id("tab_view");
+
+        let main_layout = LinearLayout::vertical()
+            .child(main_title)
+            .child(tabs);
+
+        self.siv.add_fullscreen_layer(main_layout);
     }
 
-    // Create and set our theme.
-    let mut palette = Palette::default();
-    palette[PaletteColor::View] = Color::TerminalDefault;
-    palette[PaletteColor::Primary] = Color::TerminalDefault;
-    palette[PaletteColor::Secondary] = Color::TerminalDefault;
-    palette[PaletteColor::Tertiary] = Color::TerminalDefault;
-    palette[PaletteColor::TitlePrimary] = Color::TerminalDefault;
-    palette[PaletteColor::TitleSecondary] = Color::TerminalDefault;
-    palette[PaletteColor::Highlight] = Color::Dark(BaseColor::Red);
-    palette[PaletteColor::HighlightInactive] = Color::TerminalDefault;
-    let theme = Theme {
-        shadow: false,
-        borders: BorderStyle::Simple,
-        palette,
-    };
-    siv.set_theme(theme);
+    /// Create the body of the debugging tab.
+    fn debug_tab(&self) -> BoxView<LinearLayout> {
+        // Main body (left)
+        let asm_view = AsmView::new()
+            .with_id("asm_view")
+            .full_screen();
 
-    // Create view for log messages
-    let log_list = LogView::new().with_id("log_list");
+        // Right panel
+        let cpu_view = Dialog::around(TextView::new("CPU DATEN\nJAJA"))
+            .title("CPU registers");
 
-    // Create debug tab body
-    let asm_view = AsmView::new()
-        .with_id("asm_view")
-        .full_screen();
-    let cpu_view = Dialog::around(TextView::new("CPU DATEN\nJAJA"))
-        .title("CPU registers");
-    let debug_buttons = LinearLayout::vertical()
-        .child(Dialog::around(Button::new("Manage Breakpoints", |_| ())));
 
-    let debug_buttons = Dialog::around(debug_buttons).title("Actions");
-    let right_panel = LinearLayout::vertical()
-        .child(cpu_view)
-        .child(DummyView)
-        .child(debug_buttons)
-        .fixed_width(30);
+        // Setup Buttons
+        let button_breakpoints = {
+            let breakpoints = self.breakpoints.clone(); // clone for closure
+            Button::new("Manage Breakpoints", move |s| {
+                Self::open_breakpoints_dialog(s, &breakpoints)
+            })
+        };
 
-    let debugging_body = LinearLayout::horizontal()
-        .child(asm_view).weight(5)
-        .child(right_panel).weight(1)
-        .full_screen();
+        // Wrap all buttons
+        let debug_buttons = LinearLayout::vertical()
+            .child(button_breakpoints);
+        let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
-    let main_title = TextView::new("Mahboi Debugger")
-        .effect(Effect::Bold)
-        .center()
-        .no_wrap()
-        .with_id("main_title");
+        // Build the complete right side
+        let right_panel = LinearLayout::vertical()
+            .child(cpu_view)
+            .child(DummyView)
+            .child(debug_buttons)
+            .fixed_width(30);
 
-    let tabs = TabView::new()
-        .tab("Event Log", log_list)
-        .tab("Debugger", debugging_body)
-        .with_id("tab_view");
+        // Combine
+        LinearLayout::horizontal()
+            .child(asm_view).weight(5)
+            .child(right_panel).weight(1)
+            .full_screen()
+    }
 
-    let main_layout = LinearLayout::vertical()
-        .child(main_title)
-        .child(tabs);
+    /// Gets executed when the "Manage breakpoints" action button is pressed.
+    fn open_breakpoints_dialog(siv: &mut Cursive, breakpoints: &Breakpoints) {
+        // Setup list showing all breakpoints
+        let bp_list = Self::create_breakpoint_list(breakpoints)
+            .with_id("breakpoint_list");
 
-    siv.add_fullscreen_layer(main_layout);
+        // Setup the field to add a breakpoint
+        let breakpoints = breakpoints.clone(); // clone for closure
+        let add_breakpoint_edit = EditView::new()
+            .max_content_width(4)
+            .on_submit(move |s, input| {
+                // Try to parse the input as hex value
+                match u16::from_str_radix(&input, 16) {
+                    Ok(addr) => {
+                        // Add it to the breakpoints collection and update the
+                        // list view.
+                        breakpoints.add(Word::new(addr));
+                        s.call_on_id("breakpoint_list", |list: &mut ListView| {
+                            *list = Self::create_breakpoint_list(&breakpoints);
+                        });
+                    },
+                    Err(e) => {
+                        let msg = format!("invalid addr: {}", e);
+                        s.add_layer(Dialog::info(msg));
+                    }
+                }
+            })
+            .fixed_width(7);
 
-    receiver
+        let add_breakpoint = LinearLayout::horizontal()
+            .child(TextView::new("Add breakpoint:  "))
+            .child(add_breakpoint_edit);
+
+
+        // Combine all elements
+        let body = LinearLayout::vertical()
+            .child(bp_list)
+            .child(DummyView)
+            .child(add_breakpoint);
+
+        // Put into `Dialog` and show dialog
+        let dialog = Dialog::around(body)
+            .title("Breakpoints")
+            .button("Ok", |s| { s.pop_layer(); });
+
+        siv.add_layer(dialog);
+    }
+
+    /// Creates a list of all breakpoints in the given collection. For each
+    /// breakpoint, there is a button to remove the breakpoint. This function
+    /// assumes that the returned view is added to the Cursive instance with
+    /// the id "breakpoint_list"!
+    fn create_breakpoint_list(breakpoints: &Breakpoints) -> ListView {
+        let mut out = ListView::new();
+
+        for bp in breakpoints.as_sorted_list() {
+            let breakpoints = breakpoints.clone();
+            let remove_button = Button::new("Remove", move |s| {
+                breakpoints.remove(bp);
+                s.call_on_id("breakpoint_list", |list: &mut ListView| {
+                    *list = Self::create_breakpoint_list(&breakpoints);
+                });
+            });
+
+            out.add_child(&bp.to_string(), remove_button);
+        }
+
+        out
+    }
+}
+
+
+/// A collection of breakpoints.
+///
+/// This type uses reference counted pointer and interior mutability to be
+/// easily usable from everywhere. Just `clone()` this to get another owned
+/// reference.
+#[derive(Clone)]
+struct Breakpoints(Rc<RefCell<BTreeSet<Word>>>);
+
+impl Breakpoints {
+    fn new() -> Self {
+        Breakpoints(Rc::new(RefCell::new(BTreeSet::new())))
+    }
+
+    /// Add a breakpoint to the collection. If it's already inside, nothing
+    /// happens.
+    fn add(&self, addr: Word) {
+        self.0.borrow_mut().insert(addr);
+    }
+
+    /// Remove a breakpoint. If it's not present in the collection, nothing
+    /// happens.
+    fn remove(&self, addr: Word) {
+        self.0.borrow_mut().remove(&addr);
+    }
+
+    fn as_sorted_list(&self) -> Vec<Word> {
+        self.0.borrow().iter().cloned().collect()
+    }
 }

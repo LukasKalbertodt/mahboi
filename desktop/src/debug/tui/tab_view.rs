@@ -10,8 +10,6 @@ use cursive::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use mahboi::log::*;
-
 
 
 pub struct TabView {
