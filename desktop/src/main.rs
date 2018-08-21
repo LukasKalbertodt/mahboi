@@ -78,7 +78,7 @@ fn run() -> Result<(), Error> {
         // Run the emulator.
         if !is_paused {
             let res = emulator.execute_frame(|machine| {
-                if let Some(debugger) = &tui_debugger {
+                if let Some(debugger) = &mut tui_debugger {
                     debugger.should_pause(machine)
                 } else {
                     false
