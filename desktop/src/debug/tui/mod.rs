@@ -11,9 +11,13 @@ use std::{
 
 use cursive::{
     Cursive,
-    theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor},
+    theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor, Style},
     view::{Boxable, Identifiable},
-    views::{ListView, BoxView, EditView, DummyView, Button, TextView, LinearLayout, Dialog},
+    views::{
+        OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
+        LinearLayout, Dialog
+    },
+    utils::markup::StyledString,
 };
 use failure::Error;
 use lazy_static::lazy_static;
@@ -262,7 +266,7 @@ impl TuiDebugger {
         // Update the title
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
-            .set_content("Mahboi Debugger (paused)");
+            .set_content(Self::make_main_title("Mahboi Debugger (paused)"));
     }
 
     /// Exit pause mode (continue execution)
@@ -274,7 +278,7 @@ impl TuiDebugger {
         // Update the title
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
-            .set_content("Mahboi Debugger (running)");
+            .set_content(Self::make_main_title("Mahboi Debugger (running)"));
     }
 
     pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
@@ -321,7 +325,7 @@ impl TuiDebugger {
         palette[PaletteColor::Primary] = Color::TerminalDefault;
         palette[PaletteColor::Secondary] = Color::TerminalDefault;
         palette[PaletteColor::Tertiary] = Color::TerminalDefault;
-        palette[PaletteColor::TitlePrimary] = Color::TerminalDefault;
+        palette[PaletteColor::TitlePrimary] = Color::Light(BaseColor::Green);
         palette[PaletteColor::TitleSecondary] = Color::TerminalDefault;
         palette[PaletteColor::Highlight] = Color::Dark(BaseColor::Red);
         palette[PaletteColor::HighlightInactive] = Color::TerminalDefault;
@@ -336,9 +340,8 @@ impl TuiDebugger {
         let log_list = LogView::new().with_id("log_list");
 
 
-
-        let main_title = TextView::new("Mahboi Debugger")
-            .effect(Effect::Bold)
+        let main_title = TextView::new(Self::make_main_title("Mahboi Debugger"))
+            // .effect(Effect::Bold)
             .center()
             .no_wrap()
             .with_id("main_title");
@@ -355,8 +358,15 @@ impl TuiDebugger {
         self.siv.add_fullscreen_layer(main_layout);
     }
 
+    fn make_main_title(title: &str) -> StyledString {
+        StyledString::styled(
+            title,
+            Style::from(Color::Dark(BaseColor::Green)).combine(Effect::Bold),
+        )
+    }
+
     /// Create the body of the debugging tab.
-    fn debug_tab(&self) -> BoxView<LinearLayout> {
+    fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
         let asm_view = AsmView::new()
             .with_id("asm_view")
@@ -370,7 +380,7 @@ impl TuiDebugger {
         // Setup Buttons
         let button_breakpoints = {
             let breakpoints = self.breakpoints.clone(); // clone for closure
-            Button::new("Manage Breakpoints", move |s| {
+            Button::new("Manage Breakpoints [b]", move |s| {
                 Self::open_breakpoints_dialog(s, &breakpoints)
             })
         };
@@ -388,10 +398,15 @@ impl TuiDebugger {
             .fixed_width(30);
 
         // Combine
-        LinearLayout::horizontal()
+        let view = LinearLayout::horizontal()
             .child(asm_view).weight(5)
             .child(right_panel).weight(1)
-            .full_screen()
+            .full_screen();
+
+        // Add shortcuts for debug tab
+        let breakpoints = self.breakpoints.clone();
+        OnEventView::new(view)
+            .on_event('b', move |s| Self::open_breakpoints_dialog(s, &breakpoints))
     }
 
     /// Gets executed when the "Manage breakpoints" action button is pressed.
