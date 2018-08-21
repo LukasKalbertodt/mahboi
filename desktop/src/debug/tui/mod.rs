@@ -166,6 +166,8 @@ impl TuiDebugger {
         }
 
         if is_paused {
+            self.step_over = None;
+
             self.siv.call_on_id("asm_view", |asm: &mut AsmView| {
                 asm.update(machine);
             });
