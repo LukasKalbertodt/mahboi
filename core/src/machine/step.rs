@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
     Disruption,
+    primitives::Word,
     log::*,
 };
 
@@ -28,6 +29,34 @@ impl Machine {
         };
 
         let action_taken = match op_code.get() {
+            // ======== 0x0_ ========
+
+            // LD C, d8
+            0x0E => {
+                let immediate = self.load_byte(pc + 1u16);
+                self.cpu.c = immediate;
+
+                false
+            }
+
+            // ======== 0x1_ ========
+
+            // LD DE, d16
+            0x11 => {
+                let immediate = self.load_word(pc + 1u16);
+                self.cpu.set_de(immediate);
+
+                false
+            }
+
+            // LD A, (DE)
+            0x1A => {
+                let val = self.load_byte(self.cpu.de());
+                self.cpu.a = val;
+
+                false
+            }
+
             // ======== 0x2_ ========
 
             // JR NZ, r8
@@ -71,6 +100,24 @@ impl Machine {
                 false
             }
 
+            // LD A, d8
+            0x3E => {
+                let immediate = self.load_byte(pc + 1u16);
+                self.cpu.a = immediate;
+
+                false
+            }
+
+            // ======== 0x7_ ========
+
+            // LD (HL), A
+            0x77 => {
+                let dst = self.cpu.hl();
+                self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+
             // ======== 0xA_ ========
 
             // XOR A
@@ -81,7 +128,15 @@ impl Machine {
                 false
             }
 
-            // ======== 0xA_ ========
+            // ======== 0xC_ ========
+
+            // PUSH BC
+            0xC5 => {
+                self.cpu.sp -= 2u16;
+                self.store_word(self.cpu.sp, self.cpu.bc());
+
+                false
+            }
 
             // PREFIX CB
             0xCB => {
@@ -121,6 +176,35 @@ impl Machine {
 
                 self.cpu.pc += instr.len as u16;
                 self.cycle_counter += instr.cycles;
+
+                false
+            }
+
+            // CALL a16
+            0xCD => {
+                let immediate = self.load_word(pc + 1u16);
+                self.cpu.sp -= 2u16;
+                self.store_word(self.cpu.sp, pc);
+                self.cpu.pc = immediate;
+
+                false
+            }
+
+            // ======== 0xE_ ========
+
+            // LDH (a8), A
+            0xE0 => {
+                let immediate = self.load_byte(pc + 1u16);
+                let dst = Word::new(0xFF00) + immediate;
+                self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+
+            // LD (C), A
+            0xE2 => {
+                let dst = Word::new(0xFF00) + self.cpu.c;
+                self.store_byte(dst, self.cpu.a);
 
                 false
             }
