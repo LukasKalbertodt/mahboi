@@ -90,8 +90,21 @@ pub(crate) struct TuiDebugger {
     /// Handle to the special TUI terminal
     siv: Cursive,
 
-    /// Paused state of the last `update()` call.
-    is_paused: bool,
+    /// Is the emulator in pause mode?
+    ///
+    /// In pause mode, we (pretty much) always return `true` from
+    /// `should_pause` to always also pause the emulator. There are many events
+    /// which set the debugger into pause mode, but it's not happening
+    /// directly. Instead, pausing happens by returning `true` from
+    /// `should_pause` or `Action::Pause` from `update()`. We don't immediately
+    /// switch into pause mode, but wait for the main loop/the emulator to
+    /// switch state. Once `update()` gets called with `is_paused = true`, we
+    /// switch into pause mode as well.
+    ///
+    /// The other way around works differently: the emulator can't tell us to
+    /// exit pause mode. Instead, we exit pause mode ourselves on certain
+    /// events.
+    pause_mode: bool,
 
     // ===== Asynchronous event handling ======================================
     /// Events that cannot be handled immediately and are stored here to be
@@ -150,7 +163,7 @@ impl TuiDebugger {
 
         let mut out = Self {
             siv,
-            is_paused: false,
+            pause_mode: false,
             pending_events,
             event_sink,
             step_over: None,
@@ -176,30 +189,15 @@ impl TuiDebugger {
             return Ok(Action::Quit);
         }
 
-        // Check if the paused state has changed.
-        if is_paused != self.is_paused {
-            self.is_paused = is_paused;
-
-            if is_paused {
-                // Select the debugging tab
-                self.siv.find_id::<TabView>("tab_view")
-                    .unwrap()
-                    .set_selected(1);
-            }
-
-            // Update the title (which contains the paused state)
-            let state = if is_paused { "paused" } else { "running" };
-            self.siv.call_on_id("main_title", |text: &mut TextView| {
-                text.set_content(format!("Mahboi Debugger ({})", state));
-            });
+        // Check if the emulator got paused.
+        if is_paused && !self.pause_mode {
+            // Switch the debugger into pause mode.
+            self.pause();
         }
 
+        // If we're in pause mode, update elements in the debugging tab
         if is_paused {
-            self.step_over = None;
-
-            self.siv.call_on_id("asm_view", |asm: &mut AsmView| {
-                asm.update(machine);
-            });
+            self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -210,16 +208,31 @@ impl TuiDebugger {
             }
         });
 
-        // Handle events and update view
-        self.siv.step();
-
         // React to any events that might have happend
         while let Ok(c) = self.pending_events.try_recv() {
             match c {
-                'p' => return Ok(Action::Pause),
-                'r' => return Ok(Action::Continue),
+                'p' => {
+                    if !self.pause_mode {
+                        return Ok(Action::Pause);
+                    }
+                }
+                'r' => {
+                    if self.pause_mode {
+                        // We will continue execution. To make sure we won't
+                        // immediately pause again because we paused on a
+                        // breakpoint, we set this exception.
+                        self.step_over = Some(machine.cpu.pc);
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
                 's' => {
-                    if self.is_paused {
+                    if self.pause_mode {
+                        // We tell the emulator to continue execution, while we
+                        // stay in pause mode. This would mean that we would
+                        // return `true` from `should_pause` right away. To
+                        // avoid that, we also set the `step_over` exception to
+                        // exectute one instruction.
                         self.step_over = Some(machine.cpu.pc);
                         return Ok(Action::Continue);
                     }
@@ -228,13 +241,53 @@ impl TuiDebugger {
             }
         }
 
+        // Receive events and update view.
+        self.siv.step();
+
         Ok(Action::Nothing)
     }
 
-    pub(crate) fn should_pause(&self, machine: &Machine) -> bool {
+    /// Switch to pause mode.
+    fn pause(&mut self) {
+        self.pause_mode = true;
+
+        // Execution just got paused => select the debugging tab
+        self.siv.find_id::<TabView>("tab_view")
+            .unwrap()
+            .set_selected(1);
+
+        // Update the title
+        self.siv.find_id::<TextView>("main_title")
+            .unwrap()
+            .set_content("Mahboi Debugger (paused)");
+    }
+
+    /// Exit pause mode (continue execution)
+    fn resume(&mut self) {
+        self.pause_mode = false;
+
+        // Update the title
+        self.siv.find_id::<TextView>("main_title")
+            .unwrap()
+            .set_content("Mahboi Debugger (running)");
+    }
+
+    pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
         if let Some(addr) = self.step_over {
-            return addr != machine.cpu.pc;
+            // If we are at the address we should step over, we will ignore the
+            // rest of this method and just *not* pause. But we will also reset
+            // the `step_over` value, to pause the next time.
+            if addr == machine.cpu.pc {
+                self.step_over = None;
+                return false;
+            }
         }
+
+        // If we're in paused mode, the emulator should always pause.
+        if self.pause_mode {
+            return true;
+        }
+
 
         false
     }
