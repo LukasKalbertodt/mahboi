@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::primitives::Byte;
+use crate::primitives::{Byte, Word};
 
 
 /// Specifies how this ROM works with the CGB. Stored at `0x0143`.
@@ -165,6 +165,14 @@ impl Cartridge {
             cartridge_type,
             rom_size,
             ram_size,
+        }
+    }
+
+    /// Load a [`Byte`] from the cartridge.
+    pub fn load_byte(&self, addr: Word) -> Byte {
+        match self.cartridge_type {
+            CartridgeType::RomOnly => self.rom[addr.get() as usize],
+            _ => unimplemented!(),
         }
     }
 }
