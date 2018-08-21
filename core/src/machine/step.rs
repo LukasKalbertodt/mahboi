@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     Disruption,
-    primitives::Word,
+    primitives::{Byte, Word},
     log::*,
 };
 
@@ -155,6 +155,15 @@ impl Machine {
                 };
 
                 match op_code.get() {
+                    // ======== 0x1_ ========
+
+                    // RL C
+                    0x11 => {
+                        let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
+                        let zero = self.cpu.c == Byte::zero();
+                        set_flags!(self.cpu.f => zero 0 0 carry);
+                    }
+
                     // ======== 0xA_ ========
 
                     // BIT 7, H
