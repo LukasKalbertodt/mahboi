@@ -25,7 +25,7 @@ use log::{Log, Record, Level, Metadata};
 
 use mahboi::{
     log::*,
-    machine::Machine,
+    machine::{Cpu, Machine},
     primitives::Word,
 };
 use super::{Action};
@@ -203,6 +203,7 @@ impl TuiDebugger {
         // If we're in pause mode, update elements in the debugging tab
         if is_paused {
             self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
+            self.update_cpu_data(&machine.cpu);
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -365,6 +366,64 @@ impl TuiDebugger {
         )
     }
 
+    fn update_cpu_data(&mut self, cpu: &Cpu) {
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        let mut body = StyledString::new();
+
+        // A F
+        body.append_plain("A: ");
+        body.append_styled(cpu.a.to_string(), reg_style);
+        body.append_plain("    ");
+        body.append_plain("F: ");
+        body.append_styled(cpu.f.to_string(), reg_style);
+
+        // B C
+        body.append_plain("\n");
+        body.append_plain("B: ");
+        body.append_styled(cpu.b.to_string(), reg_style);
+        body.append_plain("    ");
+        body.append_plain("C: ");
+        body.append_styled(cpu.c.to_string(), reg_style);
+
+        // D E
+        body.append_plain("\n");
+        body.append_plain("D: ");
+        body.append_styled(cpu.d.to_string(), reg_style);
+        body.append_plain("    ");
+        body.append_plain("E: ");
+        body.append_styled(cpu.e.to_string(), reg_style);
+
+        // H L
+        body.append_plain("\n");
+        body.append_plain("H: ");
+        body.append_styled(cpu.h.to_string(), reg_style);
+        body.append_plain("    ");
+        body.append_plain("L: ");
+        body.append_styled(cpu.l.to_string(), reg_style);
+
+        // SP and PC
+        body.append_plain("\n\n");
+        body.append_plain("SP: ");
+        body.append_styled(cpu.sp.to_string(), reg_style);
+        body.append_plain("\n");
+        body.append_plain("PC: ");
+        body.append_styled(cpu.pc.to_string(), reg_style);
+
+        // The four flags from the F registers in nicer
+        body.append_plain("\n\n");
+        body.append_plain("Z: ");
+        body.append_styled((cpu.zero() as u8).to_string(), reg_style);
+        body.append_plain("  N: ");
+        body.append_styled((cpu.substract() as u8).to_string(), reg_style);
+        body.append_plain("  H: ");
+        body.append_styled((cpu.half_carry() as u8).to_string(), reg_style);
+        body.append_plain("  C: ");
+        body.append_styled((cpu.carry() as u8).to_string(), reg_style);
+
+        self.siv.find_id::<TextView>("cpu_data").unwrap().set_content(body);
+    }
+
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
@@ -373,8 +432,8 @@ impl TuiDebugger {
             .full_screen();
 
         // Right panel
-        let cpu_view = Dialog::around(TextView::new("CPU DATEN\nJAJA"))
-            .title("CPU registers");
+        let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
+        let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
 
         // Setup Buttons
