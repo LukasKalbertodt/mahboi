@@ -166,10 +166,11 @@ impl Machine {
                     _ => {
                         terminate!(
                             "Unimplemented prefix instruction {:?} in position: {} after: \
-                                {} cycles",
+                                {} cycles with opcode: {}",
                             instr,
                             pc,
                             self.cycle_counter,
+                            op_code,
                         );
                     }
                 }
@@ -211,10 +212,12 @@ impl Machine {
 
             _ => {
                 terminate!(
-                    "Unimplemented instruction {:?} in position: {} after: {} cycles",
+                    "Unimplemented instruction {:?} in position: {} after: \
+                        {} cycles with opcode: {}",
                     instr,
                     pc,
                     self.cycle_counter,
+                    op_code,
                 );
             }
         };
@@ -225,11 +228,12 @@ impl Machine {
                 Some(c) => c,
                 None => {
                     terminate!(
-                        "Action taken for non-branch instruction {} in position: {} after: \
-                            {} cycles",
-                        op_code,
+                        "Action taken for non-branch instruction {:?} in position: {} after: \
+                            {} cycles with opcode: {}",
+                        instr,
                         pc,
                         self.cycle_counter,
+                        op_code,
                     );
                 }
             }
