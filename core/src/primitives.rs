@@ -1,7 +1,7 @@
 //! Types to represent Gameboy data.
 
 use std::{
-    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign},
+    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign, Range},
     fmt::{self, Debug, Display},
 };
 
@@ -16,7 +16,7 @@ use derive_more::{BitXor, BitXorAssign, Display};
 pub struct Byte(u8);
 
 impl Byte {
-    pub fn new(val: u8) -> Self {
+    pub const fn new(val: u8) -> Self {
         Byte(val)
     }
 
@@ -80,6 +80,12 @@ impl Sub<u8> for Byte {
 impl SubAssign<u8> for Byte {
     fn sub_assign(&mut self, rhs: u8) {
         *self = *self - rhs;
+    }
+}
+
+impl PartialEq<u8> for Byte {
+    fn eq(&self, other: &u8) -> bool {
+        self.0 == *other
     }
 }
 
@@ -150,6 +156,15 @@ impl Add<i8> for Word {
     }
 }
 
+impl Add<u8> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: u8) -> Self {
+        self + rhs as u16
+    }
+}
+
+
 impl Add<u16> for Word {
     type Output = Self;
 
@@ -169,6 +184,12 @@ impl Add<Byte> for Word {
 impl AddAssign<i8> for Word {
     fn add_assign(&mut self, rhs: i8) {
         *self = *self + rhs;
+    }
+}
+
+impl AddAssign<u8> for Word {
+    fn add_assign(&mut self, rhs: u8) {
+        *self += rhs as u16;
     }
 }
 
@@ -203,6 +224,12 @@ impl Sub<u16> for Word {
 impl SubAssign<u16> for Word {
     fn sub_assign(&mut self, rhs: u16) {
         *self = *self - rhs;
+    }
+}
+
+impl PartialEq<u16> for Word {
+    fn eq(&self, other: &u16) -> bool {
+        self.0 == *other
     }
 }
 
@@ -243,6 +270,13 @@ impl Index<Word> for Memory {
     type Output = Byte;
     fn index(&self, index: Word) -> &Self::Output {
         &(*self.0)[index.0 as usize]
+    }
+}
+
+impl Index<Range<Word>> for Memory {
+    type Output = [Byte];
+    fn index(&self, index: Range<Word>) -> &Self::Output {
+        &(*self.0)[index.start.0 as usize..index.end.0 as usize]
     }
 }
 
