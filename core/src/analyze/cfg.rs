@@ -12,6 +12,7 @@ use super::{
 pub struct Function {
     pub span: Span,
     pub blocks: Vec<Block>,
+    pub foreign_calls: Vec<Word>,
 }
 
 /// Consecutive instructions in the control flow graph which are always
