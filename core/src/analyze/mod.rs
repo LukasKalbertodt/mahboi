@@ -6,6 +6,7 @@ use std::{
 // use slotmap::{Key, SlotMap};
 
 use crate::{
+    log::*,
     machine::{
         Machine,
         instr::{Instr, INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
@@ -50,9 +51,13 @@ impl CodeMap {
         let mut counter = 3;
 
         while let Some(start) = block_start_points.pop() {
+            trace!("Block start: {}", start);
+
             // Check if the start point is within an already existing block
-            if let Some(_idx) = blocks.iter().position(|b| b.span.contains(start)) {
-                // TODO
+            if let Some(idx) = blocks.iter_mut().position(|b| b.span.contains(start)) {
+                let new_block = blocks[idx].split_off(start);
+                blocks.push(new_block);
+                continue;
             }
 
             // Start a new block
@@ -66,16 +71,29 @@ impl CodeMap {
                 let raw_instr = RawInstr::from_bytes(&self.mem[offset..offset + instr.len]);
                 new_block.add_instr(raw_instr);
 
-                offset += instr.len;
 
                 if instr.jumps() {
+                    // Add jump targets to the stack. If the jump is
+                    // conditional, we add the the next instruction as start
+                    // point.
+                    if !instr.always_jumps() {
+                        block_start_points.push(offset + instr.len);
+                    }
+
+                    // TODO: calculate jump destination
+                    if let Some(target) = raw_instr.jump_target(offset) {
+                        block_start_points.push(target);
+                    }
+
                     break;
                 }
+
+                offset += instr.len;
             }
 
             blocks.push(new_block);
 
-            counter += 1;
+            counter -= 1;
             if counter == 0 {
                 break;
             }
@@ -114,6 +132,30 @@ impl Block {
     fn add_instr(&mut self, instr: RawInstr) {
         self.span.hi += instr.len();
         self.raw_instrs.push(instr);
+    }
+
+    fn split_off(&mut self, at: Word) -> Block {
+        assert!(self.span.contains(at));
+
+        // Find the instruction index to split the vector
+        let idx = self.raw_instrs.iter()
+            .scan(self.span.lo, |offset, raw_instr| {
+                let out = *offset;
+                *offset += raw_instr.instr().len;
+                Some(out)
+            })
+            .position(|offset| offset == at)
+            .unwrap_or(self.raw_instrs.len());
+
+        let second = self.raw_instrs.split_off(idx);
+
+        let end_second = self.span.hi;
+        self.span.hi = at;
+
+        Block {
+            span: Span::new(at, end_second),
+            raw_instrs: second,
+        }
     }
 }
 
@@ -194,6 +236,25 @@ impl RawInstr {
             RawInstr::Long(s) => s,
         }
     }
+
+    /// Returns the jump target for JR, JP, CALL and RST instructions. Will
+    /// return `None` for other instructions, notably `RET` and `RETI`.
+    fn jump_target(&self, from: Word) -> Option<Word> {
+        let slice = self.as_slice();
+        let instr = self.instr();
+
+        match slice[0].get() {
+            opcode!("JR NZ, r8")
+            | opcode!("JR NC, r8")
+            | opcode!("JR r8")
+            | opcode!("JR Z, r8")
+            | opcode!("JR C, r8") => {
+                Some(from + (slice[1].get() as i8) + instr.len)
+            }
+            // TODO: more
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Debug for RawInstr {
@@ -227,6 +288,25 @@ trait InstrExt {
             || self.is_call()
             || self.is_int_call()
             || self.is_ret()
+    }
+
+    fn always_jumps(&self) -> bool {
+        self.jumps() && self.is_one_of(&[
+            0x18, // JR r8
+            0xc3, // JP a16
+            0xc9, // RET
+            0xd9, // RETI
+            0xe9, // JP (HL)
+            0xcd, // CALL a16
+            0xc7, // RST 00
+            0xcf, // RST 08
+            0xd7, // RST 10
+            0xdf, // RST 18
+            0xe7, // RST 20
+            0xef, // RST 28
+            0xf7, // RST 30
+            0xff, // RST 38
+        ])
     }
 }
 
