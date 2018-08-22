@@ -5,13 +5,16 @@
 
 
 use crate::{
+    analyze::CodeMap,
     env::Peripherals,
     cartridge::{Cartridge},
     machine::Machine,
+    primitives::Word,
     log::*,
 };
 
 
+pub mod analyze;
 pub mod log;
 pub mod primitives;
 pub mod env;
@@ -32,15 +35,22 @@ pub struct Emulator<'a, P: 'a + Peripherals> {
     // TODO: Remove
     #[allow(dead_code)]
     peripherals: &'a mut P,
+
+    code_map: CodeMap,
 }
 
 impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     pub fn new(cartridge: Cartridge, peripherals: &'a mut P) -> Self {
         info!("Creating emulator");
 
+        let machine = Machine::new(cartridge);
+        let mut code_map = CodeMap::new(&machine);
+        code_map.add_entry_point(Word::new(0));
+
         Self {
-            machine: Machine::new(cartridge),
+            machine,
             peripherals,
+            code_map,
         }
     }
 
@@ -74,7 +84,7 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
                 return Err(Disruption::Paused);
             }
 
-            self.machine.step()?;
+            self.machine.step(&mut self.code_map)?;
             if self.machine.cycle_counter.is_between_frames() {
                 break;
             }

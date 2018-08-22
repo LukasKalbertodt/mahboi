@@ -5,6 +5,7 @@ use super::{
     instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
 };
 use crate::{
+    analyze::CodeMap,
     Disruption,
     primitives::{Byte, Word},
     log::*,
@@ -13,7 +14,7 @@ use crate::{
 
 impl Machine {
     /// Executes one (the next) operation.
-    pub(crate) fn step(&mut self) -> Result<(), Disruption> {
+    pub(crate) fn step(&mut self, _code_map: &mut CodeMap) -> Result<(), Disruption> {
         let pc = self.cpu.pc;
         let op_code = self.load_byte(pc);
         let instr = match INSTRUCTIONS[op_code] {
