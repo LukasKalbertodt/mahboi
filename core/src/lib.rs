@@ -14,12 +14,14 @@ use crate::{
 };
 
 
+#[macro_use]
+pub mod machine;
+
 pub mod analyze;
 pub mod log;
 pub mod primitives;
 pub mod env;
 pub mod cartridge;
-pub mod machine;
 
 
 /// Width of the Game Boy screen in pixels.

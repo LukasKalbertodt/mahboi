@@ -6,8 +6,9 @@ use crate::{
 
 #[macro_use]
 mod macros;
-
+#[macro_use]
 pub mod instr;
+
 mod mm;
 mod step;
 
