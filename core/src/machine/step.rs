@@ -16,7 +16,7 @@ impl Machine {
     pub(crate) fn step(&mut self) -> Result<(), Disruption> {
         let pc = self.cpu.pc;
         let op_code = self.load_byte(pc);
-        let instr = match INSTRUCTIONS[op_code.get() as usize] {
+        let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
                 terminate!(
@@ -142,7 +142,7 @@ impl Machine {
             0xCB => {
                 let pc = pc + 1u16;
                 let op_code = self.load_byte(pc);
-                let instr = match PREFIXED_INSTRUCTIONS[op_code.get() as usize] {
+                let instr = match PREFIXED_INSTRUCTIONS[op_code] {
                     Some(v) => v,
                     None => {
                         terminate!(

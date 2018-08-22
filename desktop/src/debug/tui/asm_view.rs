@@ -115,9 +115,9 @@ impl AsmView {
             // Fetch the correct instruction data
             let (instr, arg_start) = if opcode.get() == 0xCB {
                 let opcode = machine.load_byte(pos + 1u16);
-                (PREFIXED_INSTRUCTIONS[opcode.get() as usize], pos + 2u16)
+                (PREFIXED_INSTRUCTIONS[opcode], pos + 2u16)
             } else {
-                (INSTRUCTIONS[opcode.get() as usize], pos + 1u16)
+                (INSTRUCTIONS[opcode], pos + 1u16)
             };
 
             let (kind, len) = match instr {

@@ -4,6 +4,8 @@
 //! all instructions. It is stored in two 256-element long arrays -- one for
 //! the main instructions and one for all PREFIX CB instructions.
 
+use std::ops::Index;
+
 use crate::primitives::Byte;
 
 /// The information we store per instruction.
@@ -57,6 +59,17 @@ impl Instr {
     }
 }
 
+/// Simple wrapper to make the static array indexable with `Byte` instead of
+/// `usize`.
+pub struct InstrDb([Option<Instr>; 256]);
+
+impl Index<Byte> for InstrDb {
+    type Output = Option<Instr>;
+    fn index(&self, idx: Byte) -> &Self::Output {
+        &self.0[idx.get() as usize]
+    }
+}
+
 /// Main instruction data.
 ///
 /// Entries with the value `None` are invalid opcodes.
@@ -66,7 +79,7 @@ impl Instr {
 /// 4 respectively. This is wrong in a sense: the length/cycle values for all
 /// CB-instructions in `PREFIXED_INSTRUCTIONS` already contains the total
 /// value. The actual prefix doesn't add anything.
-pub const INSTRUCTIONS: [Option<Instr>; 256] = [
+pub const INSTRUCTIONS: InstrDb = InstrDb([
     /* 00 */ Instr::new(0x00, "NOP",          1,  4,  None),
     /* 01 */ Instr::new(0x01, "LD BC, d16",   3, 12,  None),
     /* 02 */ Instr::new(0x02, "LD (BC), A",   1,  8,  None),
@@ -338,10 +351,10 @@ pub const INSTRUCTIONS: [Option<Instr>; 256] = [
     /* fd */ None,
     /* fe */ Instr::new(0xfe, "CP d8",        2,  8,  None),
     /* ff */ Instr::new(0xff, "RST 38H",      1,  16, None),
-];
+]);
 
 /// Instructions prefixed by CB opcode. (These opcodes are 2 bytes long.)
-pub const PREFIXED_INSTRUCTIONS: [Option<Instr>; 256] = [
+pub const PREFIXED_INSTRUCTIONS: InstrDb = InstrDb([
     /* 00 */ Instr::new(0x00, "RLC B",        2,  8,  None),
     /* 01 */ Instr::new(0x01, "RLC C",        2,  8,  None),
     /* 02 */ Instr::new(0x02, "RLC D",        2,  8,  None),
@@ -613,4 +626,4 @@ pub const PREFIXED_INSTRUCTIONS: [Option<Instr>; 256] = [
     /* fd */ Instr::new(0xfd, "SET 7, L",     2,  8,  None),
     /* fe */ Instr::new(0xfe, "SET 7, (HL)",  2,  16, None),
     /* ff */ Instr::new(0xff, "SET 7, A",     2,  8,  None),
-];
+]);
