@@ -3,7 +3,7 @@ use crate::{
 };
 
 use super::{
-    instr::RawInstr,
+    instr::InstrWithArg,
     util::Span,
 };
 
@@ -15,49 +15,61 @@ pub struct Function {
     pub foreign_calls: Vec<Word>,
 }
 
-/// Consecutive instructions in the control flow graph which are always
-/// executed from the beginning (i.e. the program never jumps somewhere in the
-/// middle of this block). A block has single exit (the last instruction).
+/// A basic block in the CFG.
+///
+/// A basic block consists of consecutive instructions and has a single entry
+/// (i.e. the program never jumps in the middle of a basic block).
 #[derive(Clone, Debug)]
 pub struct Block {
     pub span: Span,
-    pub raw_instrs: Vec<RawInstr>,
+    pub instrs: Vec<InstrWithArg>,
+    // exits
 }
 
 impl Block {
     pub fn new(start: Word) -> Self {
         Self {
             span: Span::empty_at(start),
-            raw_instrs: vec![]
+            instrs: vec![],
         }
     }
 
-    pub(crate) fn add_instr(&mut self, instr: RawInstr) {
-        self.span.hi += instr.len();
-        self.raw_instrs.push(instr);
+    pub(crate) fn add_instr(&mut self, instr: InstrWithArg) {
+        self.span.hi += instr.kind().len;
+        self.instrs.push(instr);
     }
 
     pub(crate) fn split_off(&mut self, at: Word) -> Block {
         assert!(self.span.contains(at));
 
         // Find the instruction index to split the vector
-        let idx = self.raw_instrs.iter()
-            .scan(self.span.lo, |offset, raw_instr| {
+        let idx = self.instrs.iter()
+            .scan(self.span.lo, |offset, instr| {
                 let out = *offset;
-                *offset += raw_instr.instr().len;
+                *offset += instr.kind().len;
                 Some(out)
             })
             .position(|offset| offset == at)
-            .unwrap_or(self.raw_instrs.len());
+            .unwrap_or(self.instrs.len());
 
-        let second = self.raw_instrs.split_off(idx);
+        let second = self.instrs.split_off(idx);
 
         let end_second = self.span.hi;
         self.span.hi = at;
 
         Block {
             span: Span::new(at, end_second),
-            raw_instrs: second,
+            instrs: second,
         }
     }
+}
+
+/// An address to some byte in a ROM region.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RomAddr {
+    /// Address to a byte in the BIOS.
+    Bios(u8),
+
+    /// Address to a byte in the cartridge ROM.
+    Cartridge(u32),
 }

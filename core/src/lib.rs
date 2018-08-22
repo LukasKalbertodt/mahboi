@@ -46,8 +46,8 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
         info!("Creating emulator");
 
         let machine = Machine::new(cartridge);
-        let mut code_map = CodeMap::new(&machine);
-        code_map.add_entry_point(Word::new(0));
+        let mut code_map = CodeMap::new();
+        code_map.add_entry_point(Word::new(0), &machine);
 
         Self {
             machine,

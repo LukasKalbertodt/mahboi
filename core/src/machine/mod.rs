@@ -13,6 +13,10 @@ mod mm;
 mod step;
 
 
+pub const BIOS: &[u8]= include_bytes!(
+    concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
+);
+
 pub struct Machine {
     pub cpu: Cpu,
 
@@ -36,11 +40,7 @@ impl Machine {
         Self {
             cpu: Cpu::new(),
             cartridge,
-            bios: Memory::from_bytes(
-                include_bytes!(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
-                )
-            ),
+            bios: Memory::from_bytes(BIOS),
             vram: Memory::zeroed(Word::new(0x2000)),
             wram: Memory::zeroed(Word::new(0x1000)),
             oam: Memory::zeroed(Word::new(0xA0)),

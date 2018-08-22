@@ -13,7 +13,7 @@ use crate::{
 };
 use self::{
     cfg::{Function, Block},
-    instr::{InstrExt, RawInstr, decode_instr},
+    instr::{InstrExt, InstrWithArg},
     util::Span,
 };
 
@@ -24,34 +24,23 @@ mod instr;
 
 pub struct CodeMap {
     fns: BTreeMap<Word, Function>,
-
-    /// For now, we only inspect the memory from 0 to 0x4000. This is read-only
-    /// and basically guaranteed to not change. We capture this memory while
-    /// the boot rom is still mounted. All of this will probably change later.
-    mem: Memory,
 }
 
 impl CodeMap {
-    pub fn new(machine: &Machine) -> Self {
-        // Create the memory and fill it from the machine (only boot rom for now)
-        let mut mem = Memory::zeroed(Word::new(0x100));
-        for i in 0..0x100 {
-            let addr = Word::new(i);
-            mem[addr] = machine.load_byte(addr);
-        }
-
+    pub fn new() -> Self {
         Self {
             fns: BTreeMap::new(),
-            mem,
         }
     }
 
-    pub fn add_entry_point(&mut self, entry_point: Word) {
+    pub fn add_entry_point(&mut self, entry_point: Word, machine: &Machine) {
         // Analyze this function and any other function called by this
         // function.
         let mut fn_entry_points = vec![entry_point];
         while let Some(entry_point) = fn_entry_points.pop() {
-            let new_fns = self.add_function_at(entry_point);
+            // TODO: Check if we can already analyze this function.
+
+            let new_fns = self.add_function_at(entry_point, machine);
             fn_entry_points.extend(new_fns);
         }
 
@@ -60,15 +49,16 @@ impl CodeMap {
 
     /// Analyzes the function that starts at `start` and adds stores the
     /// result. Returns all references to other functions.
-    fn add_function_at(&mut self, start: Word) -> &[Word] {
-        trace!("[codemap] Adding function at {}", start);
-
+    fn add_function_at(&mut self, start: Word, machine: &Machine) -> &[Word] {
         // We we already know about this entry point, so we do nothing and
         // return early. We return an empty list, because those methods were
         // already analyzed before.
         if self.fns.contains_key(&start) {
             return &self.fns[&start].foreign_calls;
         }
+
+
+
 
         // TODO: check if any other function we know contains the entry point.
 
@@ -102,32 +92,30 @@ impl CodeMap {
             let mut offset = start;
             loop {
                 // We load the instruction and add it to our block.
-                let instr = decode_instr([self.mem[offset], self.mem[offset + 1u8]])
+                let instr = InstrWithArg::decode(offset, &machine)
                     .expect("tried to decode invalid opcode");
-
-                let raw_instr = RawInstr::from_bytes(&self.mem[offset..offset + instr.len]);
-                new_block.add_instr(raw_instr);
+                new_block.add_instr(instr);
 
 
                 // If this is an instruction that jumps, our block will end.
                 // But we also have to inspect the kind of jump and potentially
                 // add new jump targets to the `block_start_points` stack.
-                if instr.jumps() {
+                if instr.kind().jumps() {
                     // If the jump is conditional, we add the address of the
                     // next instruction as start point.
-                    if !instr.always_jumps() {
-                        block_start_points.push(offset + instr.len);
+                    if !instr.kind().always_jumps() {
+                        block_start_points.push(offset + instr.kind().len);
                     }
 
                     // TODO: calculate jump destination
-                    if let Some(target) = raw_instr.jump_target(offset) {
+                    if let Some(target) = instr.jump_target(offset) {
                         block_start_points.push(target);
                     }
 
                     break;
                 }
 
-                offset += instr.len;
+                offset += instr.kind().len;
             }
 
             blocks.push(new_block);
@@ -145,6 +133,7 @@ impl CodeMap {
             foreign_calls,
         };
         self.fns.insert(start, new_fn);
+        debug!("[codemap] Added function at {}", start);
 
         &self.fns[&start].foreign_calls
     }
