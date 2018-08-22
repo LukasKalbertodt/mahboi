@@ -22,11 +22,7 @@ pub struct Machine {
     pub vram: Memory,
     pub wram: Memory,
     pub oam: Memory,
-
-    // TODO IO register??? 0x80 bytes
-    // Register with flag for mounting/unmounting the BIOS (this is an IO register).
-    // Currently this is implemented as a single bool representing the flag.
-    pub bios_mounted: bool,
+    pub io: Memory,
 
     pub hram: Memory,
     pub ie: Byte,
@@ -47,10 +43,10 @@ impl Machine {
             vram: Memory::zeroed(Word::new(0x2000)),
             wram: Memory::zeroed(Word::new(0x1000)),
             oam: Memory::zeroed(Word::new(0xA0)),
+            io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
             ie: Byte::zero(),
             cycle_counter: CycleCounter::zero(),
-            bios_mounted: true,
         }
     }
 
@@ -75,6 +71,10 @@ impl Machine {
         let (lsb, msb) = word.into_bytes();
         self.store_byte(addr, lsb);
         self.store_byte(addr + 1u16, msb);
+    }
+
+    pub fn bios_mounted(&self) -> bool {
+        (self.load_byte(Word::new(0xFF50)).get() & 0b0000_0001) == 0
     }
 }
 

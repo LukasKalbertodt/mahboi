@@ -1,7 +1,7 @@
 //! Types to represent Gameboy data.
 
 use std::{
-    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign},
+    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign, Range},
     fmt::{self, Debug, Display},
 };
 
@@ -16,7 +16,7 @@ use derive_more::{BitXor, BitXorAssign, Display};
 pub struct Byte(u8);
 
 impl Byte {
-    pub fn new(val: u8) -> Self {
+    pub const fn new(val: u8) -> Self {
         Byte(val)
     }
 
@@ -26,6 +26,16 @@ impl Byte {
 
     pub fn get(&self) -> u8 {
         self.0
+    }
+
+    pub fn map(self, f: impl FnOnce(u8) -> u8) -> Self {
+        Self::new(f(self.0))
+    }
+
+    pub fn rotate_left_through_carry(&mut self, carry: bool) -> bool {
+        let out = (0b1000_0000 & self.0) != 0;
+        self.0 = (self.0 << 1) | (carry as u8);
+        out
     }
 }
 
@@ -70,6 +80,12 @@ impl Sub<u8> for Byte {
 impl SubAssign<u8> for Byte {
     fn sub_assign(&mut self, rhs: u8) {
         *self = *self - rhs;
+    }
+}
+
+impl PartialEq<u8> for Byte {
+    fn eq(&self, other: &u8) -> bool {
+        self.0 == *other
     }
 }
 
@@ -140,11 +156,28 @@ impl Add<i8> for Word {
     }
 }
 
+impl Add<u8> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: u8) -> Self {
+        self + rhs as u16
+    }
+}
+
+
 impl Add<u16> for Word {
     type Output = Self;
 
     fn add(self, rhs: u16) -> Self {
         Word(self.0.wrapping_add(rhs as u16))
+    }
+}
+
+impl Add<Byte> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: Byte) -> Self {
+        Word(self.0.wrapping_add(rhs.get() as u16))
     }
 }
 
@@ -154,8 +187,20 @@ impl AddAssign<i8> for Word {
     }
 }
 
+impl AddAssign<u8> for Word {
+    fn add_assign(&mut self, rhs: u8) {
+        *self += rhs as u16;
+    }
+}
+
 impl AddAssign<u16> for Word {
     fn add_assign(&mut self, rhs: u16) {
+        *self = *self + rhs;
+    }
+}
+
+impl AddAssign<Byte> for Word {
+    fn add_assign(&mut self, rhs: Byte) {
         *self = *self + rhs;
     }
 }
@@ -179,6 +224,12 @@ impl Sub<u16> for Word {
 impl SubAssign<u16> for Word {
     fn sub_assign(&mut self, rhs: u16) {
         *self = *self - rhs;
+    }
+}
+
+impl PartialEq<u16> for Word {
+    fn eq(&self, other: &u16) -> bool {
+        self.0 == *other
     }
 }
 
@@ -222,6 +273,13 @@ impl Index<Word> for Memory {
     }
 }
 
+impl Index<Range<Word>> for Memory {
+    type Output = [Byte];
+    fn index(&self, index: Range<Word>) -> &Self::Output {
+        &(*self.0)[index.start.0 as usize..index.end.0 as usize]
+    }
+}
+
 impl IndexMut<Word> for Memory {
     fn index_mut(&mut self, index: Word) -> &mut Self::Output {
         &mut (*self.0)[index.0 as usize]
@@ -252,5 +310,23 @@ impl CycleCounter {
 impl AddAssign<u8> for CycleCounter {
     fn add_assign(&mut self, rhs: u8) {
         self.0 += rhs as u64;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+
+    #[test]
+    fn test_rotate_left_through_carry() {
+        fn run(val: u8, carry: bool) -> (u8, bool) {
+            let mut b = Byte::new(val);
+            let carry = b.rotate_left_through_carry(carry);
+            (b.get(), carry)
+        }
+
+        assert_eq!(run(0b1001_0001, false), (0b0010_0010, true));
+        assert_eq!(run(0b1001_0001, true), (0b0010_0011, true));
     }
 }
