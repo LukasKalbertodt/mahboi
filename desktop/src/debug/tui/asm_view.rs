@@ -38,7 +38,14 @@ impl Arg {
             "d16" => format!("{}", Word::from_bytes(data[0], data[1])),
             "a8" => format!("(0xFF00+{})", data[0]),
             "a16" => format!("({})", Word::from_bytes(data[0], data[1])),
-            "r8" => format!("PC+0x{:02x}", data[0].get() as i8),
+            "r8" => {
+                let i = data[0].get() as i8;
+                if i < 0 {
+                    format!("PC-0x{:02x}", -(i as i16))
+                } else {
+                    format!("PC+0x{:02x}", i)
+                }
+            }
             _ => return Arg::Static(name),
         };
 
@@ -124,8 +131,8 @@ impl AsmView {
                 Some(instr) if no_unknown_yet => {
                     // Prepare array of argument data
                     let data = [
+                        machine.load_byte(arg_start),
                         machine.load_byte(arg_start + 1u16),
-                        machine.load_byte(arg_start + 2u16),
                     ];
                     let data = &data[..instr.len as usize - 1];
 
