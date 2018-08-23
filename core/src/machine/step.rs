@@ -68,6 +68,18 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all SUB instructions. Which can be used by passing
+        /// the register in which should be subtracted from A.
+        macro_rules! sub {
+            ($x:expr) => {{
+                let (carry, half_carry) = self.cpu.a.sub_with_carries($x);
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
+
+                false
+            }}
+        }
+
         /// This is a template macro for all LD r, d8 instructions (where `r` can be one of:
         /// B, C, A, E, L, D, H). Which can be used by passing the register
         /// to which `arg_byte` should be loaded (e.g.: `ld_d8!(self.cpu.a);`).
