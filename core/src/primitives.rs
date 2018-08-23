@@ -5,14 +5,27 @@ use std::{
     fmt::{self, Debug, Display},
 };
 
-use derive_more::{BitXor, BitXorAssign, Display};
+use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
 
 /// A single Gameboy byte.
 ///
 /// This wrapper type is used to assert correct overflow behavior in arithmetic
 /// operations.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitXor, BitXorAssign)]
+#[derive(
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BitXor,
+    BitXorAssign,
+    BitAnd,
+    BitAndAssign,
+    BitOr,
+    BitOrAssign,
+)]
 pub struct Byte(u8);
 
 impl Byte {
