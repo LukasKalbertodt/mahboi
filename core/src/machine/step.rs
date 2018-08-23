@@ -106,6 +106,52 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all AND b instructions (where `b` should be a [`Byte`]).
+        macro_rules! and {
+            ($x:expr) => {{
+                self.cpu.a &= $x;
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 1 0);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all XOR b instructions (where `b` should be a [`Byte`]).
+        macro_rules! xor {
+            ($x:expr) => {{
+                self.cpu.a ^= $x;
+                set_flags!(self.cpu.f => 1 0 0 0);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all OR b instructions (where `b` should be a [`Byte`]).
+        macro_rules! or {
+            ($x:expr) => {{
+                self.cpu.a |= $x;
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 0);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all CP b instructions (where `b` should be a [`Byte`]).
+        macro_rules! cp {
+            ($x:expr) => {{
+                // Subtract the value in $x from A and set flags accordingly, but don't store
+                // the result.
+                let mut copy = self.cpu.a;
+                let (carry, half_carry) = copy.sub_with_carries($x);
+                let zero = copy == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
+
+                false
+            }}
+        }
+
         /// This is a template macro for all LD r, d8 instructions (where `r` can be one of:
         /// B, C, A, E, L, D, H). Which can be used by passing the register
         /// to which `arg_byte` should be loaded (e.g.: `ld_d8!(self.cpu.a);`).
