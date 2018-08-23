@@ -45,7 +45,7 @@ impl Machine {
         self.cpu.pc += instr.len as u16;
 
         let action_taken = match op_code.get() {
-            opcode!("DEC B") => dec!(self.cpu.b),
+            // ========== LD ==========
             opcode!("LD B, d8") => {
                 self.cpu.b = arg_byte;
 
@@ -56,41 +56,66 @@ impl Machine {
 
                 false
             }
-            opcode!("LD DE, d16") => {
-                self.cpu.set_de(arg_word);
+            opcode!("LD A, d8") => {
+                self.cpu.a = arg_byte;
 
                 false
             }
-            opcode!("INC DE") => {
-                self.cpu.set_de(self.cpu.de() + 1u16);
+
+            opcode!("LD C, A") => {
+                self.cpu.c = self.cpu.a;
 
                 false
             }
-            opcode!("RLA") => {
-                let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
-                set_flags!(self.cpu.f => 0 0 0 carry);
+            opcode!("LD A, E") => {
+                self.cpu.a = self.cpu.e;
 
                 false
             }
+
             opcode!("LD A, (DE)") => {
                 let val = self.load_byte(self.cpu.de());
                 self.cpu.a = val;
 
                 false
             }
-            opcode!("JR NZ, r8") => {
-                if !self.cpu.zero() {
-                    self.cpu.pc += arg_byte.get() as i8;
 
-                    true
-                } else {
-                    false
-                }
-            }
             opcode!("LD HL, d16") => {
-                let (lsb, msb) = arg_word.into_bytes();
-                self.cpu.h = msb;
-                self.cpu.l = lsb;
+                self.cpu.set_hl(arg_word);
+
+                false
+            }
+            opcode!("LD DE, d16") => {
+                self.cpu.set_de(arg_word);
+
+                false
+            }
+            opcode!("LD SP, d16") => {
+                self.cpu.sp = arg_word;
+
+                false
+            }
+
+            opcode!("LD (C), A") => {
+                let dst = Word::new(0xFF00) + self.cpu.c;
+                self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+            opcode!("LD (a16), A") => {
+                self.store_byte(arg_word, self.cpu.a);
+
+                false
+            }
+            opcode!("LDH (a8), A") => {
+                let dst = Word::new(0xFF00) + arg_byte;
+                self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+            opcode!("LD (HL), A") => {
+                let dst = self.cpu.hl();
+                self.store_byte(dst, self.cpu.a);
 
                 false
             }
@@ -101,16 +126,6 @@ impl Machine {
 
                 false
             }
-            opcode!("INC HL") => {
-                self.cpu.set_hl(self.cpu.hl() + 1u16);
-
-                false
-            }
-            opcode!("LD SP, d16") => {
-                self.cpu.sp = arg_word;
-
-                false
-            }
             opcode!("LD (HL-), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
@@ -118,39 +133,62 @@ impl Machine {
 
                 false
             }
+
+            // ========== DEC ==========
+            opcode!("DEC B") => dec!(self.cpu.b),
             opcode!("DEC A") => dec!(self.cpu.a),
-            opcode!("LD A, d8") => {
-                self.cpu.a = arg_byte;
+
+            // ========== INC ==========
+            opcode!("INC DE") => {
+                self.cpu.set_de(self.cpu.de() + 1u16);
 
                 false
             }
-            opcode!("LD C, A") => {
-                self.cpu.c = self.cpu.a;
+            opcode!("INC HL") => {
+                self.cpu.set_hl(self.cpu.hl() + 1u16);
 
                 false
             }
-            opcode!("LD (HL), A") => {
-                let dst = self.cpu.hl();
-                self.store_byte(dst, self.cpu.a);
 
-                false
-            }
-            opcode!("LD A, E") => {
-                self.cpu.a = self.cpu.e;
-
-                false
-            }
+            // ========== SUB ==========
             opcode!("SUB L") => {
                 self.cpu.a -= self.cpu.l;
 
                 false
             }
+
+            // ========== XOR ==========
             opcode!("XOR A") => {
                 self.cpu.a ^= self.cpu.a;
                 set_flags!(self.cpu.f => 1 0 0 0);
 
                 false
             }
+
+            // ========== CP ==========
+            opcode!("CP d8") => {
+                // Subtract the value in d8 from A and set flags accordingly, but don't store
+                // the result.
+                let mut copy = self.cpu.a;
+                let (carry, half_carry) = copy.sub_with_carries(arg_byte);
+                let zero = copy == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
+
+                false
+            }
+
+            // ========== JR ==========
+            opcode!("JR NZ, r8") => {
+                if !self.cpu.zero() {
+                    self.cpu.pc += arg_byte.get() as i8;
+
+                    true
+                } else {
+                    false
+                }
+            }
+
+            // ========== POP/PUSH ==========
             opcode!("POP BC") => {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.sp += 2u16;
@@ -164,6 +202,15 @@ impl Machine {
 
                 false
             }
+
+            // ========== CALL/RET ==========
+            opcode!("CALL a16") => {
+                self.cpu.sp -= 2u16;
+                self.store_word(self.cpu.sp, self.cpu.pc);
+                self.cpu.pc = arg_word;
+
+                false
+            }
             opcode!("RET") => {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.pc = val;
@@ -171,6 +218,15 @@ impl Machine {
 
                 false
             }
+
+            // ========== miscellaneous ==========
+            opcode!("RLA") => {
+                let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
+                set_flags!(self.cpu.f => 0 0 0 carry);
+
+                false
+            }
+
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
                 let op_code = self.load_byte(instr_start);
@@ -178,11 +234,14 @@ impl Machine {
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
+                    // ========== RL ==========
                     prefixed_opcode!("RL C") => {
                         let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
                         let zero = self.cpu.c == Byte::zero();
                         set_flags!(self.cpu.f => zero 0 0 carry);
                     }
+
+                    // ========== BIT ==========
                     prefixed_opcode!("BIT 7, H") => {
                         let zero = (self.cpu.h.get() & 0b1000_0000) == 0;
                         set_flags!(self.cpu.f => zero 0 1 -);
@@ -210,40 +269,6 @@ impl Machine {
                 }
 
                 self.cycle_counter += instr.cycles;
-
-                false
-            }
-            opcode!("CALL a16") => {
-                self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, self.cpu.pc);
-                self.cpu.pc = arg_word;
-
-                false
-            }
-            opcode!("LDH (a8), A") => {
-                let dst = Word::new(0xFF00) + arg_byte;
-                self.store_byte(dst, self.cpu.a);
-
-                false
-            }
-            opcode!("LD (C), A") => {
-                let dst = Word::new(0xFF00) + self.cpu.c;
-                self.store_byte(dst, self.cpu.a);
-
-                false
-            }
-            opcode!("LD (a16), A") => {
-                self.store_byte(arg_word, self.cpu.a);
-
-                false
-            }
-            opcode!("CP d8") => {
-                // Subtract the value in d8 from A and set flags accordingly, but don't store
-                // the result.
-                let mut copy = self.cpu.a;
-                let (carry, half_carry) = copy.sub_with_carries(arg_byte);
-                let zero = copy == Byte::zero();
-                set_flags!(self.cpu.f => zero 1 half_carry carry);
 
                 false
             }
