@@ -199,17 +199,7 @@ impl Machine {
             0xCB => {
                 let instr_start = self.cpu.pc + 1u16;
                 let op_code = self.load_byte(instr_start);
-                let instr = match PREFIXED_INSTRUCTIONS[op_code] {
-                    Some(v) => v,
-                    None => {
-                        terminate!(
-                            "Unknown prefix instruction {} in position: {} after: {} cycles",
-                            op_code,
-                            instr_start,
-                            self.cycle_counter,
-                        );
-                    }
-                };
+                let instr = PREFIXED_INSTRUCTIONS[op_code];
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
