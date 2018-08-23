@@ -121,7 +121,8 @@ impl Machine {
         macro_rules! xor {
             ($x:expr) => {{
                 self.cpu.a ^= $x;
-                set_flags!(self.cpu.f => 1 0 0 0);
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 0);
 
                 false
             }}
