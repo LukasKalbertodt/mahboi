@@ -248,7 +248,9 @@ impl Machine {
 
             // ========== SUB ==========
             opcode!("SUB L") => {
-                self.cpu.a -= self.cpu.l;
+                let (carry, half_carry) = self.cpu.a.sub_with_carries(self.cpu.l);
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
 
                 false
             }
