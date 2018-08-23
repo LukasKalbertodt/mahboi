@@ -209,6 +209,12 @@ impl Machine {
 
                 false
             }
+            opcode!("LDH A, (a8)") => {
+                let src = Word::new(0xFF00) + arg_byte;
+                self.cpu.a = self.load_byte(src);
+
+                false
+            }
             opcode!("LD (HL), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
@@ -259,13 +265,13 @@ impl Machine {
             opcode!("INC SP") => no_branch!(self.cpu.sp += 1u16),
 
             // ========== SUB ==========
-            opcode!("SUB L") => {
-                let (carry, half_carry) = self.cpu.a.sub_with_carries(self.cpu.l);
-                let zero = self.cpu.a == Byte::zero();
-                set_flags!(self.cpu.f => zero 1 half_carry carry);
-
-                false
-            }
+            opcode!("SUB B") => sub!(self.cpu.b),
+            opcode!("SUB C") => sub!(self.cpu.c),
+            opcode!("SUB D") => sub!(self.cpu.d),
+            opcode!("SUB E") => sub!(self.cpu.e),
+            opcode!("SUB H") => sub!(self.cpu.h),
+            opcode!("SUB L") => sub!(self.cpu.l),
+            opcode!("SUB A") => sub!(self.cpu.a),
 
             // ========== XOR ==========
             opcode!("XOR A") => {
