@@ -14,10 +14,8 @@ use cursive::{
 use unicode_width::UnicodeWidthStr;
 
 use mahboi::{
-    machine::{
-        Machine,
-        instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
-    },
+    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
+    machine::Machine,
     primitives::{Byte, Word},
 };
 

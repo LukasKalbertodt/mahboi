@@ -7,7 +7,6 @@ use crate::{
 #[macro_use]
 mod macros;
 
-pub mod instr;
 mod mm;
 mod step;
 

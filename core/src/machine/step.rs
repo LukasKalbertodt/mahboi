@@ -1,13 +1,11 @@
 //! Contains code to actually execute instructions.
 
-use super::{
-    Machine,
-    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
-};
+use super::Machine;
 use crate::{
     Disruption,
     primitives::{Byte, Word},
     log::*,
+    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
 };
 
 
