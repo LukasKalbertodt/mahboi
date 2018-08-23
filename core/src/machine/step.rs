@@ -14,27 +14,38 @@ use crate::{
 impl Machine {
     /// Executes one (the next) operation.
     pub(crate) fn step(&mut self) -> Result<(), Disruption> {
-        let pc = self.cpu.pc;
-        let op_code = self.load_byte(pc);
+        let instr_start = self.cpu.pc;
+        let arg_byte = self.load_byte(instr_start + 1u16);
+        let arg_word = self.load_word(instr_start + 1u16);
+        let op_code = self.load_byte(instr_start);
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
                 terminate!(
                     "Unknown instruction {} in position: {} after: {} cycles",
                     op_code,
-                    pc,
+                    instr_start,
                     self.cycle_counter,
                 );
             }
         };
+        self.cpu.pc += instr.len as u16;
 
         let action_taken = match op_code.get() {
             // ======== 0x0_ ========
 
+            // DEC B
+            0x05 => {
+                let (_, half_carry) = self.cpu.b.sub_with_carries(Byte::new(1));
+                let zero = self.cpu.b == 0;
+                set_flags!(self.cpu.f => zero 1 half_carry -);
+
+                false
+            }
+
             // LD C, d8
             0x0E => {
-                let immediate = self.load_byte(pc + 1u16);
-                self.cpu.c = immediate;
+                self.cpu.c = arg_byte;
 
                 false
             }
@@ -43,8 +54,15 @@ impl Machine {
 
             // LD DE, d16
             0x11 => {
-                let immediate = self.load_word(pc + 1u16);
-                self.cpu.set_de(immediate);
+                self.cpu.set_de(arg_word);
+
+                false
+            }
+
+            // RLA
+            0x17 => {
+                let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
+                set_flags!(self.cpu.f => 0 0 0 carry);
 
                 false
             }
@@ -62,8 +80,7 @@ impl Machine {
             // JR NZ, r8
             0x20 => {
                 if !self.cpu.zero() {
-                    let immediate = self.load_byte(pc + 1u16);
-                    self.cpu.pc += immediate.get() as i8;
+                    self.cpu.pc += arg_byte.get() as i8;
 
                     true
                 } else {
@@ -73,10 +90,25 @@ impl Machine {
 
             // LD HL, d16
             0x21 => {
-                let immediate = self.load_word(pc + 1u16);
-                let (lsb, msb) = immediate.into_bytes();
+                let (lsb, msb) = arg_word.into_bytes();
                 self.cpu.h = msb;
                 self.cpu.l = lsb;
+
+                false
+            }
+
+            // LD (HL+), A
+            0x22 => {
+                let dst = self.cpu.hl();
+                self.store_byte(dst, self.cpu.a);
+                self.cpu.set_hl(dst + 1u16);
+
+                false
+            }
+
+            // INC HL
+            0x23 => {
+                self.cpu.set_hl(self.cpu.hl() + 1u16);
 
                 false
             }
@@ -85,8 +117,7 @@ impl Machine {
 
             // LD SP, d16
             0x31 => {
-                let immediate = self.load_word(pc + 1u16);
-                self.cpu.sp = immediate;
+                self.cpu.sp = arg_word;
 
                 false
             }
@@ -102,8 +133,7 @@ impl Machine {
 
             // LD A, d8
             0x3E => {
-                let immediate = self.load_byte(pc + 1u16);
-                self.cpu.a = immediate;
+                self.cpu.a = arg_byte;
 
                 false
             }
@@ -114,6 +144,15 @@ impl Machine {
             0x77 => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+
+            // ======== 0x9_ ========
+
+            // SUB L
+            0x95 => {
+                self.cpu.a -= self.cpu.l;
 
                 false
             }
@@ -130,6 +169,15 @@ impl Machine {
 
             // ======== 0xC_ ========
 
+            // POP BC
+            0xC1 => {
+                let val = self.load_word(self.cpu.sp);
+                self.cpu.sp += 2u16;
+                self.cpu.set_bc(val);
+
+                false
+            }
+
             // PUSH BC
             0xC5 => {
                 self.cpu.sp -= 2u16;
@@ -138,21 +186,21 @@ impl Machine {
                 false
             }
 
+            // RET
+            0xC9 => {
+                let val = self.load_word(self.cpu.sp);
+                self.cpu.pc = val;
+                self.cpu.sp += 2u16;
+
+                false
+            }
+
             // PREFIX CB
             0xCB => {
-                let pc = pc + 1u16;
-                let op_code = self.load_byte(pc);
-                let instr = match PREFIXED_INSTRUCTIONS[op_code] {
-                    Some(v) => v,
-                    None => {
-                        terminate!(
-                            "Unknown prefix instruction {} in position: {} after: {} cycles",
-                            op_code,
-                            pc,
-                            self.cycle_counter,
-                        );
-                    }
-                };
+                let instr_start = self.cpu.pc + 1u16;
+                let op_code = self.load_byte(instr_start);
+                let instr = PREFIXED_INSTRUCTIONS[op_code];
+                self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
                     // ======== 0x1_ ========
@@ -177,13 +225,12 @@ impl Machine {
                             "Unimplemented prefix instruction {:?} in position: {} after: \
                                 {} cycles!",
                             instr,
-                            pc,
+                            instr_start,
                             self.cycle_counter,
                         );
                     }
                 }
 
-                self.cpu.pc += instr.len as u16;
                 self.cycle_counter += instr.cycles;
 
                 false
@@ -191,10 +238,9 @@ impl Machine {
 
             // CALL a16
             0xCD => {
-                let immediate = self.load_word(pc + 1u16);
                 self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, pc);
-                self.cpu.pc = immediate;
+                self.store_word(self.cpu.sp, self.cpu.pc);
+                self.cpu.pc = arg_word;
 
                 false
             }
@@ -203,8 +249,7 @@ impl Machine {
 
             // LDH (a8), A
             0xE0 => {
-                let immediate = self.load_byte(pc + 1u16);
-                let dst = Word::new(0xFF00) + immediate;
+                let dst = Word::new(0xFF00) + arg_byte;
                 self.store_byte(dst, self.cpu.a);
 
                 false
@@ -223,13 +268,12 @@ impl Machine {
                     "Unimplemented instruction {:?} in position: {} after: \
                         {} cycles!",
                     instr,
-                    pc,
+                    instr_start,
                     self.cycle_counter,
                 );
             }
         };
 
-        self.cpu.pc += instr.len as u16;
         self.cycle_counter += if action_taken {
             match instr.cycles_taken {
                 Some(c) => c,
@@ -238,7 +282,7 @@ impl Machine {
                         "Action taken for non-branch instruction {:?} in position: {} after: \
                             {} cycles!",
                         instr,
-                        pc,
+                        instr_start,
                         self.cycle_counter,
                     );
                 }
