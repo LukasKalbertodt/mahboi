@@ -29,36 +29,18 @@ pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
 
-pub struct Emulator<'a, P: 'a + Peripherals> {
+pub struct Emulator {
     machine: Machine,
-
-    // TODO: Remove
-    #[allow(dead_code)]
-    peripherals: &'a mut P,
 }
 
-impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
-    pub fn new(cartridge: Cartridge, peripherals: &'a mut P) -> Self {
+impl Emulator {
+    pub fn new(cartridge: Cartridge) -> Self {
         info!("Creating emulator");
 
         Self {
             machine: Machine::new(cartridge),
-            peripherals,
         }
     }
-
-    // TODO: put back in or remove
-    // fn display(&mut self) -> &mut P::Display {
-    //     self.peripherals.display()
-    // }
-
-    // fn sound(&mut self) -> &mut P::Sound {
-    //     self.peripherals.sound()
-    // }
-
-    // fn input(&mut self) -> &mut P::Input {
-    //     self.peripherals.input()
-    // }
 
     pub fn machine(&self) -> &Machine {
         &self.machine
@@ -70,6 +52,7 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     /// (defined as peripherals) and the display buffer can be written to the actual display.
     pub fn execute_frame(
         &mut self,
+        _peripherals: &mut impl Peripherals,
         mut should_pause: impl FnMut(&Machine) -> bool,
     ) -> Result<(), Disruption> {
         loop {
