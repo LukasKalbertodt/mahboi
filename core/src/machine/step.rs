@@ -12,21 +12,7 @@ use crate::{
 impl Machine {
     /// Executes one (the next) operation.
     pub(crate) fn step(&mut self) -> Result<(), Disruption> {
-        // ========== MACROS ==========
-
-        /// This is a template macro for all DEC instructions. Which can be used by passing
-        /// the register in which should be decremented.
-        macro_rules! dec {
-            ($x:expr) => {{
-                let (_, half_carry) = $x.sub_with_carries(Byte::new(1));
-                let zero = $x == 0;
-                set_flags!(self.cpu.f => zero 1 half_carry -);
-
-                false
-            }}
-        }
-
-        // Normal method stuff starts here
+        // Variable initializsation (before macros, so they can be used there)
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
         let arg_word = self.load_word(instr_start + 1u16);
@@ -44,6 +30,67 @@ impl Machine {
         };
         self.cpu.pc += instr.len as u16;
 
+        // ============================
+        // ========== MACROS ==========
+        // ============================
+
+        /// This is a convenience macro for all single line instructions. This basically adds
+        /// the false return value.
+        macro_rules! no_branch {
+            ($x:expr) => {{
+                $x;
+
+                false
+            }};
+        }
+
+        /// This is a template macro for all DEC instructions. Which can be used by passing
+        /// the register in which should be decremented.
+        macro_rules! dec {
+            ($x:expr) => {{
+                let (_, half_carry) = $x.sub_with_carries(Byte::new(1));
+                let zero = $x == 0;
+                set_flags!(self.cpu.f => zero 1 half_carry -);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all INC instructions. Which can be used by passing
+        /// the register in which should be incremented.
+        macro_rules! inc {
+            ($x:expr) => {{
+                let (_, half_carry) = $x.add_with_carries(Byte::new(1));
+                let zero = $x == 0;
+                set_flags!(self.cpu.f => zero 0 half_carry -);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all LD r, d8 instructions (where `r` can be one of:
+        /// B, C, A, E, L, D, H). Which can be used by passing the register
+        /// to which `arg_byte` should be loaded (e.g.: `ld_d8!(self.cpu.a);`).
+        macro_rules! ld_d8 {
+            ($x:expr) => {{
+                $x = arg_byte;
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all LD r, s instructions (where `r` and `s` can be one of:
+        /// B, C, A, E, L, D, H). Which can be used by passing the registers in
+        /// (e.g.: `ld!(self.cpu.a, self.cpu.b);`).
+        macro_rules! ld {
+            ($lhs:expr, $rhs:expr) => {{
+                $lhs = $rhs;
+
+                false
+            }}
+        }
+
+        // Normal method stuff starts here
         let action_taken = match op_code.get() {
             // ========== LD ==========
             opcode!("LD B, d8") => {
