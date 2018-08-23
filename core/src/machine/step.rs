@@ -14,6 +14,21 @@ use crate::{
 impl Machine {
     /// Executes one (the next) operation.
     pub(crate) fn step(&mut self) -> Result<(), Disruption> {
+        // ========== MACROS ==========
+
+        /// This is a template macro for all DEC instructions. Which can be used by passing
+        /// the register in which should be decremented.
+        macro_rules! dec {
+            ($x:expr) => {{
+                let (_, half_carry) = $x.sub_with_carries(Byte::new(1));
+                let zero = $x == 0;
+                set_flags!(self.cpu.f => zero 1 half_carry -);
+
+                false
+            }}
+        }
+
+        // Normal method stuff starts here
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
         let arg_word = self.load_word(instr_start + 1u16);
