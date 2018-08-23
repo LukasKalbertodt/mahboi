@@ -55,6 +55,12 @@ impl Add<u8> for Byte {
     }
 }
 
+impl AddAssign for Byte {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
 impl AddAssign<u8> for Byte {
     fn add_assign(&mut self, rhs: u8) {
         *self = *self + rhs;
@@ -74,6 +80,12 @@ impl Sub<u8> for Byte {
 
     fn sub(self, rhs: u8) -> Self {
         Byte(self.0.wrapping_sub(rhs))
+    }
+}
+
+impl SubAssign for Byte {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
     }
 }
 
