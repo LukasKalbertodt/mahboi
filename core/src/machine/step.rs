@@ -391,25 +391,48 @@ impl Machine {
             opcode!("SBC A, d8")   => sbc!(arg_byte),
 
             // ========== AND ==========
+            opcode!("AND B")    => and!(self.cpu.b),
+            opcode!("AND C")    => and!(self.cpu.c),
+            opcode!("AND D")    => and!(self.cpu.d),
+            opcode!("AND E")    => and!(self.cpu.e),
+            opcode!("AND H")    => and!(self.cpu.h),
+            opcode!("AND L")    => and!(self.cpu.l),
+            opcode!("AND (HL)") => and!(self.load_hl()),
+            opcode!("AND A")    => and!(self.cpu.a),
+            opcode!("AND d8")   => and!(arg_byte),
+
             // ========== XOR ==========
-            opcode!("XOR A") => {
-                self.cpu.a ^= self.cpu.a;
-                set_flags!(self.cpu.f => 1 0 0 0);
+            opcode!("XOR B")    => xor!(self.cpu.b),
+            opcode!("XOR C")    => xor!(self.cpu.c),
+            opcode!("XOR D")    => xor!(self.cpu.d),
+            opcode!("XOR E")    => xor!(self.cpu.e),
+            opcode!("XOR H")    => xor!(self.cpu.h),
+            opcode!("XOR L")    => xor!(self.cpu.l),
+            opcode!("XOR (HL)") => xor!(self.load_hl()),
+            opcode!("XOR A")    => xor!(self.cpu.a),
+            opcode!("XOR d8")   => xor!(arg_byte),
 
-                false
-            }
             // ========== OR ==========
-            // ========== CP ==========
-            opcode!("CP d8") => {
-                // Subtract the value in d8 from A and set flags accordingly, but don't store
-                // the result.
-                let mut copy = self.cpu.a;
-                let (carry, half_carry) = copy.sub_with_carries(arg_byte);
-                let zero = copy == Byte::zero();
-                set_flags!(self.cpu.f => zero 1 half_carry carry);
+            opcode!("OR B")    => or!(self.cpu.b),
+            opcode!("OR C")    => or!(self.cpu.c),
+            opcode!("OR D")    => or!(self.cpu.d),
+            opcode!("OR E")    => or!(self.cpu.e),
+            opcode!("OR H")    => or!(self.cpu.h),
+            opcode!("OR L")    => or!(self.cpu.l),
+            opcode!("OR (HL)") => or!(self.load_hl()),
+            opcode!("OR A")    => or!(self.cpu.a),
+            opcode!("OR d8")   => or!(arg_byte),
 
-                false
-            }
+            // ========== CP ==========
+            opcode!("CP B")    => cp!(self.cpu.b),
+            opcode!("CP C")    => cp!(self.cpu.c),
+            opcode!("CP D")    => cp!(self.cpu.d),
+            opcode!("CP E")    => cp!(self.cpu.e),
+            opcode!("CP H")    => cp!(self.cpu.h),
+            opcode!("CP L")    => cp!(self.cpu.l),
+            opcode!("CP (HL)") => cp!(self.load_hl()),
+            opcode!("CP A")    => cp!(self.cpu.a),
+            opcode!("CP d8")   => cp!(arg_byte),
 
             // ========== JR ==========
             opcode!("JR r8") => {
