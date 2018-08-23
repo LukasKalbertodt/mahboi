@@ -37,6 +37,26 @@ impl Byte {
         self.0 = (self.0 << 1) | (carry as u8);
         out
     }
+
+    /// Adds the given [`Byte`] to this [`Byte`] and returns a tuple containing information
+    /// about carry and half carry bits: (carry, half_carry)
+    pub fn add_with_carries(&mut self, rhs: Byte) -> (bool, bool) {
+        let half_carry = (((self.get() & 0x0f) + (rhs.get() & 0x0f)) & 0x10) == 0x10;
+        let carry = self.get().checked_add(rhs.get()).is_none();
+        *self += rhs;
+
+        (carry, half_carry)
+    }
+
+    /// Substracts the given [`Byte`] from this [`Byte`] and returns a tuple containing information
+    /// about carry and half carry bits: (carry, half_carry)
+    pub fn sub_with_carries(&mut self, rhs: Byte) -> (bool, bool) {
+        let half_carry = (self.get() & 0x0f) < (rhs.get() & 0x0f);
+        let carry = *self < rhs;
+        *self -= rhs;
+
+        (carry, half_carry)
+    }
 }
 
 impl Add for Byte {
@@ -340,5 +360,37 @@ mod test {
 
         assert_eq!(run(0b1001_0001, false), (0b0010_0010, true));
         assert_eq!(run(0b1001_0001, true), (0b0010_0011, true));
+    }
+
+    #[test]
+    fn test_byte_add_with_carries() {
+        fn run(lhs: u8, rhs: u8) -> (bool, bool) {
+            Byte::new(lhs).add_with_carries(Byte::new(rhs))
+        }
+
+        assert_eq!(run(0,   0)  , (false,   false));
+        assert_eq!(run(0,   255), (false,   false));
+        assert_eq!(run(255, 255), (true,    true));
+        assert_eq!(run(255, 0)  , (false,   false));
+        assert_eq!(run(255, 1)  , (true,    true));
+        assert_eq!(run(127, 1)  , (false,   true));
+        assert_eq!(run(128, 128), (true,    false));
+    }
+
+    #[test]
+    fn test_byte_sub_with_carries() {
+        fn run(lhs: u8, rhs: u8) -> (bool, bool) {
+            Byte::new(lhs).sub_with_carries(Byte::new(rhs))
+        }
+
+        assert_eq!(run(0,   0)  , (false,   false));
+        assert_eq!(run(0,   255), (true,    true));
+        assert_eq!(run(255, 255), (false,   false));
+        assert_eq!(run(255, 0)  , (false,   false));
+        assert_eq!(run(255, 1)  , (false,   false));
+        assert_eq!(run(127, 1)  , (false,   false));
+        assert_eq!(run(128, 1)  , (false,   true));
+        assert_eq!(run(128, 128), (false,   false));
+        assert_eq!(run(127, 128), (true,    false));
     }
 }
