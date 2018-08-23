@@ -34,8 +34,9 @@ impl Arg {
         let s = match name {
             "d8" => format!("{}", data[0]),
             "d16" => format!("{}", Word::from_bytes(data[0], data[1])),
-            "a8" => format!("(0xFF00+{})", data[0]),
-            "a16" => format!("({})", Word::from_bytes(data[0], data[1])),
+            "(a8)" => format!("(0xFF00+{})", data[0]),
+            "a16" => format!("{}", Word::from_bytes(data[0], data[1])),
+            "(a16)" => format!("({})", Word::from_bytes(data[0], data[1])),
             "r8" => {
                 let i = data[0].get() as i8;
                 if i < 0 {
