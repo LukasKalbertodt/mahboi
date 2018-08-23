@@ -221,6 +221,18 @@ impl Machine {
                     }
 
                     _ => {
+                        debug!(
+                            "Template:\n\
+                            // {}\n\
+                            0x{:02X} => {{\
+                            \n\
+                            \n\
+                            \n\
+                            false\n\
+                            }}",
+                            instr.mnemonic,
+                            instr.opcode.get(),
+                        );
                         terminate!(
                             "Unimplemented prefix instruction {:?} in position: {} after: \
                                 {} cycles!",
@@ -264,6 +276,18 @@ impl Machine {
             }
 
             _ => {
+                debug!(
+                    "Template:\n\
+                    // {}\n\
+                    0x{:02X} => {{\
+                    \n\
+                    \n\
+                    \n\
+                    false\n\
+                    }}",
+                    instr.mnemonic,
+                    instr.opcode.get(),
+                );
                 terminate!(
                     "Unimplemented instruction {:?} in position: {} after: \
                         {} cycles!",
