@@ -68,8 +68,7 @@ impl Machine {
             }}
         }
 
-        /// This is a template macro for all SUB instructions. Which can be used by passing
-        /// the register in which should be subtracted from A.
+        /// This is a template macro for all SUB instructions. Input should be a [`Byte`].
         macro_rules! sub {
             ($x:expr) => {{
                 let (carry, half_carry) = self.cpu.a.sub_with_carries($x);
@@ -77,6 +76,33 @@ impl Machine {
                 set_flags!(self.cpu.f => zero 1 half_carry carry);
 
                 false
+            }}
+        }
+
+        /// This is a template macro for all SBC instructions. Input should be a [`Byte`].
+        macro_rules! sbc {
+            ($x:expr) => {{
+                let val = $x - (self.cpu.carry() as u8);
+                sub!(val)
+            }}
+        }
+
+        /// This is a template macro for all ADD A, b instructions (where `b` should be a [`Byte`]).
+        macro_rules! add {
+            ($x:expr) => {{
+                let (carry, half_carry) = self.cpu.a.add_with_carries($x);
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 half_carry carry);
+
+                false
+            }}
+        }
+
+        /// This is a template macro for all ADC A, b instructions (where `b` should be a [`Byte`]).
+        macro_rules! adc {
+            ($x:expr) => {{
+                let val = $x + (self.cpu.carry() as u8);
+                add!(val)
             }}
         }
 
