@@ -50,10 +50,11 @@ impl Machine {
             // ======== 0x0_ ========
 
             // DEC B
-            0x05 => {
-                let (_, half_carry) = self.cpu.b.sub_with_carries(Byte::new(1));
-                let zero = self.cpu.b == 0;
-                set_flags!(self.cpu.f => zero 1 half_carry -);
+            0x05 => dec!(self.cpu.b),
+
+            // LD B, d8
+            0x06 => {
+                self.cpu.b = arg_byte;
 
                 false
             }
@@ -70,6 +71,13 @@ impl Machine {
             // LD DE, d16
             0x11 => {
                 self.cpu.set_de(arg_word);
+
+                false
+            }
+
+            // INC DE
+            0x13 => {
+                self.cpu.set_de(self.cpu.de() + 1u16);
 
                 false
             }
@@ -146,9 +154,21 @@ impl Machine {
                 false
             }
 
+            // DEC A
+            0x3D => dec!(self.cpu.a),
+
             // LD A, d8
             0x3E => {
                 self.cpu.a = arg_byte;
+
+                false
+            }
+
+            // ======== 0x4_ ========
+
+            // LD C, A
+            0x4F => {
+                self.cpu.c = self.cpu.a;
 
                 false
             }
@@ -159,6 +179,13 @@ impl Machine {
             0x77 => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+
+            // LD A, E
+            0x7B => {
+                self.cpu.a = self.cpu.e;
 
                 false
             }
@@ -286,6 +313,27 @@ impl Machine {
             0xE2 => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
+
+                false
+            }
+
+            // LD (a16), A
+            0xEA => {
+                self.store_byte(arg_word, self.cpu.a);
+
+                false
+            }
+
+            // ======== 0xF_ ========
+
+            // CP d8
+            0xFE => {
+                // Subtract the value in d8 from A and set flags accordingly, but don't store
+                // the result.
+                let mut copy = self.cpu.a;
+                let (carry, half_carry) = copy.sub_with_carries(arg_byte);
+                let zero = copy == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
 
                 false
             }
