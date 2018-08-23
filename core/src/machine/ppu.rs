@@ -157,6 +157,19 @@ impl Ppu {
         self.stat = Byte::new((self.stat.get() & 0b1111_1000) | v);
     }
 
+    /// Checks if an interrupt should be triggered and if yes, returnes the
+    /// address of the interrupt vector.
+    pub(crate) fn should_interrupt(&self) -> Option<Byte> {
+        match (self.current_line.get(), self.cycle_in_line) {
+            // V-Blank interrupt
+            (144, 0) => Some(Byte::new(0x40)),
+
+            // TODO: other interrupts
+
+            _ => None,
+        }
+    }
+
     /// Executes one machine cycle (1 Mhz).
     pub(crate) fn step(&mut self, _display: &mut impl Display) {
         // Update state/phase

@@ -62,6 +62,9 @@ impl Emulator {
 
             // Let the PPU do one cycle
             self.machine.ppu.step(peripherals.display());
+            if let Some(vector) = self.machine.ppu.should_interrupt() {
+                debug!("Interrupt at {}", vector);
+            }
 
             // Let the CPU do one cycle
             self.machine.step()?;
