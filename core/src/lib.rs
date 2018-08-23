@@ -60,8 +60,11 @@ impl Emulator {
                 return Err(Disruption::Paused);
             }
 
-            self.machine.step()?;
+            // Let the PPU do one cycle
             self.machine.ppu.step(peripherals.display());
+
+            // Let the CPU do one cycle
+            self.machine.step()?;
 
             if self.machine.cycle_counter.is_between_frames() {
                 break;

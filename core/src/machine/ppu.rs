@@ -146,7 +146,46 @@ impl Ppu {
         }
     }
 
+    fn set_phase(&mut self, phase: Phase) {
+        let v = match phase {
+            Phase::HBlank => 0,
+            Phase::VBlank => 1,
+            Phase::OamSearch => 2,
+            Phase::PixelTransfer => 3,
+        };
+
+        self.stat = Byte::new((self.stat.get() & 0b1111_1000) | v);
+    }
+
+    /// Executes one machine cycle (1 Mhz).
     pub(crate) fn step(&mut self, _display: &mut impl Display) {
+        // Update state/phase
+        self.cycle_in_line += 1;
+        if self.cycle_in_line == 114 {
+            self.current_line += 1;
+            self.cycle_in_line = 0;
+
+            if self.current_line == 154 {
+                self.current_line = Byte::new(0);
+            }
+        }
+
+        match (self.current_line.get(), self.cycle_in_line) {
+            // New line
+            (line, 0) if line < 144 => self.set_phase(Phase::OamSearch),
+
+            // End of OAM search
+            (line, 20) if line < 144 => self.set_phase(Phase::PixelTransfer),
+
+            // End of pixel transfer. TODO: this is not fixed!
+            (line, 63) if line < 144 => self.set_phase(Phase::HBlank),
+
+            // Drawn all lines, starting vblank
+            (144, 0) => self.set_phase(Phase::VBlank),
+
+            _ => {}
+        }
+
         // TODO
     }
 }
