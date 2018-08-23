@@ -75,6 +75,16 @@ impl Machine {
     pub fn bios_mounted(&self) -> bool {
         (self.load_byte(Word::new(0xFF50)).get() & 0b0000_0001) == 0
     }
+
+    /// Convenience method to load the value, which is stored behind the adress in HL.
+    pub fn load_hl(&self) -> Byte {
+        self.load_byte(self.cpu.hl())
+    }
+
+    /// Convenience method to store a value, to the adress in HL.
+    pub fn store_hl(&mut self, byte: Byte) {
+        self.store_byte(self.cpu.hl(), byte);
+    }
 }
 
 pub struct Cpu {
