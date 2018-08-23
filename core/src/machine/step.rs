@@ -34,6 +34,15 @@ impl Machine {
         let action_taken = match op_code.get() {
             // ======== 0x0_ ========
 
+            // DEC B
+            0x05 => {
+                let (_, half_carry) = self.cpu.b.sub_with_carries(Byte::new(1));
+                let zero = self.cpu.b == 0;
+                set_flags!(self.cpu.f => zero 1 half_carry -);
+
+                false
+            }
+
             // LD C, d8
             0x0E => {
                 self.cpu.c = arg_byte;
@@ -46,6 +55,14 @@ impl Machine {
             // LD DE, d16
             0x11 => {
                 self.cpu.set_de(arg_word);
+
+                false
+            }
+
+            // RLA
+            0x17 => {
+                let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
+                set_flags!(self.cpu.f => 0 0 0 carry);
 
                 false
             }
@@ -76,6 +93,22 @@ impl Machine {
                 let (lsb, msb) = arg_word.into_bytes();
                 self.cpu.h = msb;
                 self.cpu.l = lsb;
+
+                false
+            }
+
+            // LD (HL+), A
+            0x22 => {
+                let dst = self.cpu.hl();
+                self.store_byte(dst, self.cpu.a);
+                self.cpu.set_hl(dst + 1u16);
+
+                false
+            }
+
+            // INC HL
+            0x23 => {
+                self.cpu.set_hl(self.cpu.hl() + 1u16);
 
                 false
             }
@@ -115,6 +148,15 @@ impl Machine {
                 false
             }
 
+            // ======== 0x9_ ========
+
+            // SUB L
+            0x95 => {
+                self.cpu.a -= self.cpu.l;
+
+                false
+            }
+
             // ======== 0xA_ ========
 
             // XOR A
@@ -127,10 +169,28 @@ impl Machine {
 
             // ======== 0xC_ ========
 
+            // POP BC
+            0xC1 => {
+                let val = self.load_word(self.cpu.sp);
+                self.cpu.sp += 2u16;
+                self.cpu.set_bc(val);
+
+                false
+            }
+
             // PUSH BC
             0xC5 => {
                 self.cpu.sp -= 2u16;
                 self.store_word(self.cpu.sp, self.cpu.bc());
+
+                false
+            }
+
+            // RET
+            0xC9 => {
+                let val = self.load_word(self.cpu.sp);
+                self.cpu.pc = val;
+                self.cpu.sp += 2u16;
 
                 false
             }
