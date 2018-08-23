@@ -45,61 +45,40 @@ impl Machine {
         self.cpu.pc += instr.len as u16;
 
         let action_taken = match op_code.get() {
-            // ======== 0x0_ ========
-
-            // DEC B
-            0x05 => dec!(self.cpu.b),
-
-            // LD B, d8
-            0x06 => {
+            opcode!("DEC B") => dec!(self.cpu.b),
+            opcode!("LD B, d8") => {
                 self.cpu.b = arg_byte;
 
                 false
             }
-
-            // LD C, d8
-            0x0E => {
+            opcode!("LD C, d8") => {
                 self.cpu.c = arg_byte;
 
                 false
             }
-
-            // ======== 0x1_ ========
-
-            // LD DE, d16
-            0x11 => {
+            opcode!("LD DE, d16") => {
                 self.cpu.set_de(arg_word);
 
                 false
             }
-
-            // INC DE
-            0x13 => {
+            opcode!("INC DE") => {
                 self.cpu.set_de(self.cpu.de() + 1u16);
 
                 false
             }
-
-            // RLA
-            0x17 => {
+            opcode!("RLA") => {
                 let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
                 set_flags!(self.cpu.f => 0 0 0 carry);
 
                 false
             }
-
-            // LD A, (DE)
-            0x1A => {
+            opcode!("LD A, (DE)") => {
                 let val = self.load_byte(self.cpu.de());
                 self.cpu.a = val;
 
                 false
             }
-
-            // ======== 0x2_ ========
-
-            // JR NZ, r8
-            0x20 => {
+            opcode!("JR NZ, r8") => {
                 if !self.cpu.zero() {
                     self.cpu.pc += arg_byte.get() as i8;
 
@@ -108,154 +87,103 @@ impl Machine {
                     false
                 }
             }
-
-            // LD HL, d16
-            0x21 => {
+            opcode!("LD HL, d16") => {
                 let (lsb, msb) = arg_word.into_bytes();
                 self.cpu.h = msb;
                 self.cpu.l = lsb;
 
                 false
             }
-
-            // LD (HL+), A
-            0x22 => {
+            opcode!("LD (HL+), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst + 1u16);
 
                 false
             }
-
-            // INC HL
-            0x23 => {
+            opcode!("INC HL") => {
                 self.cpu.set_hl(self.cpu.hl() + 1u16);
 
                 false
             }
-
-            // ======== 0x3_ ========
-
-            // LD SP, d16
-            0x31 => {
+            opcode!("LD SP, d16") => {
                 self.cpu.sp = arg_word;
 
                 false
             }
-
-            // LD (HL-), A
-            0x32 => {
+            opcode!("LD (HL-), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst - 1);
 
                 false
             }
-
-            // DEC A
-            0x3D => dec!(self.cpu.a),
-
-            // LD A, d8
-            0x3E => {
+            opcode!("DEC A") => dec!(self.cpu.a),
+            opcode!("LD A, d8") => {
                 self.cpu.a = arg_byte;
 
                 false
             }
-
-            // ======== 0x4_ ========
-
-            // LD C, A
-            0x4F => {
+            opcode!("LD C, A") => {
                 self.cpu.c = self.cpu.a;
 
                 false
             }
-
-            // ======== 0x7_ ========
-
-            // LD (HL), A
-            0x77 => {
+            opcode!("LD (HL), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
 
                 false
             }
-
-            // LD A, E
-            0x7B => {
+            opcode!("LD A, E") => {
                 self.cpu.a = self.cpu.e;
 
                 false
             }
-
-            // ======== 0x9_ ========
-
-            // SUB L
-            0x95 => {
+            opcode!("SUB L") => {
                 self.cpu.a -= self.cpu.l;
 
                 false
             }
-
-            // ======== 0xA_ ========
-
-            // XOR A
-            0xAF => {
+            opcode!("XOR A") => {
                 self.cpu.a ^= self.cpu.a;
                 set_flags!(self.cpu.f => 1 0 0 0);
 
                 false
             }
-
-            // ======== 0xC_ ========
-
-            // POP BC
-            0xC1 => {
+            opcode!("POP BC") => {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.sp += 2u16;
                 self.cpu.set_bc(val);
 
                 false
             }
-
-            // PUSH BC
-            0xC5 => {
+            opcode!("PUSH BC") => {
                 self.cpu.sp -= 2u16;
                 self.store_word(self.cpu.sp, self.cpu.bc());
 
                 false
             }
-
-            // RET
-            0xC9 => {
+            opcode!("RET") => {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.pc = val;
                 self.cpu.sp += 2u16;
 
                 false
             }
-
-            // PREFIX CB
-            0xCB => {
+            opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
                 let op_code = self.load_byte(instr_start);
                 let instr = PREFIXED_INSTRUCTIONS[op_code];
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
-                    // ======== 0x1_ ========
-
-                    // RL C
-                    0x11 => {
+                    prefixed_opcode!("RL C") => {
                         let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
                         let zero = self.cpu.c == Byte::zero();
                         set_flags!(self.cpu.f => zero 0 0 carry);
                     }
-
-                    // ======== 0xA_ ========
-
-                    // BIT 7, H
-                    0x7C => {
+                    prefixed_opcode!("BIT 7, H") => {
                         let zero = (self.cpu.h.get() & 0b1000_0000) == 0;
                         set_flags!(self.cpu.f => zero 0 1 -);
                     }
@@ -263,15 +191,13 @@ impl Machine {
                     _ => {
                         debug!(
                             "Template:\n\
-                            // {}\n\
-                            0x{:02X} => {{\
+                            prefixed_opcode!(\"{}\") => {{\
                             \n\
                             \n\
                             \n\
                             false\n\
                             }}",
                             instr.mnemonic,
-                            instr.opcode.get(),
                         );
                         terminate!(
                             "Unimplemented prefix instruction {:?} in position: {} after: \
@@ -287,45 +213,31 @@ impl Machine {
 
                 false
             }
-
-            // CALL a16
-            0xCD => {
+            opcode!("CALL a16") => {
                 self.cpu.sp -= 2u16;
                 self.store_word(self.cpu.sp, self.cpu.pc);
                 self.cpu.pc = arg_word;
 
                 false
             }
-
-            // ======== 0xE_ ========
-
-            // LDH (a8), A
-            0xE0 => {
+            opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
                 self.store_byte(dst, self.cpu.a);
 
                 false
             }
-
-            // LD (C), A
-            0xE2 => {
+            opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
 
                 false
             }
-
-            // LD (a16), A
-            0xEA => {
+            opcode!("LD (a16), A") => {
                 self.store_byte(arg_word, self.cpu.a);
 
                 false
             }
-
-            // ======== 0xF_ ========
-
-            // CP d8
-            0xFE => {
+            opcode!("CP d8") => {
                 // Subtract the value in d8 from A and set flags accordingly, but don't store
                 // the result.
                 let mut copy = self.cpu.a;
@@ -339,15 +251,13 @@ impl Machine {
             _ => {
                 debug!(
                     "Template:\n\
-                    // {}\n\
-                    0x{:02X} => {{\
+                    opcode!(\"{}\") => {{\
                     \n\
                     \n\
                     \n\
                     false\n\
                     }}",
                     instr.mnemonic,
-                    instr.opcode.get(),
                 );
                 terminate!(
                     "Unimplemented instruction {:?} in position: {} after: \
