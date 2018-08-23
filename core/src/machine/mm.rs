@@ -16,7 +16,7 @@ impl Machine {
             0x0000..0x0100 if self.bios_mounted() => self.bios[addr],
 
             0x0000..0x8000 => self.cartridge.load_byte(addr), // Cartridge
-            0x8000..0xA000 => self.vram[addr - 0x8000], // vram
+            0x8000..0xA000 => self.ppu.load_vram_byte(addr),
             0xA000..0xC000 => unimplemented!(), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000], // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000], // wram echo
@@ -36,7 +36,7 @@ impl Machine {
             0x0000..0x0100 if self.bios_mounted() => warn!("Wrote to BIOS ROM!"),
 
             0x0000..0x8000 => warn!("Wrote to cartridge!"), // Cartridge
-            0x8000..0xA000 => self.vram[addr - 0x8000] = byte, // vram
+            0x8000..0xA000 => self.ppu.store_vram_byte(addr, byte),
             0xA000..0xC000 => unimplemented!(), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000] = byte, // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000] = byte, // wram echo

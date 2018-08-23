@@ -52,7 +52,7 @@ impl Emulator {
     /// (defined as peripherals) and the display buffer can be written to the actual display.
     pub fn execute_frame(
         &mut self,
-        _peripherals: &mut impl Peripherals,
+        peripherals: &mut impl Peripherals,
         mut should_pause: impl FnMut(&Machine) -> bool,
     ) -> Result<(), Disruption> {
         loop {
@@ -61,6 +61,8 @@ impl Emulator {
             }
 
             self.machine.step()?;
+            self.machine.ppu.step(peripherals.display());
+
             if self.machine.cycle_counter.is_between_frames() {
                 break;
             }
