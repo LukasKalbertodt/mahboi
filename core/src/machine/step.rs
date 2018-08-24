@@ -579,10 +579,10 @@ impl Machine {
             }
         };
 
-        let cycles_spent = if op_code.get() == opcode!("PREFIX CB") {
-            PREFIXED_INSTRUCTIONS[op_code].cycles
+        let clocks_spent = if op_code.get() == opcode!("PREFIX CB") {
+            PREFIXED_INSTRUCTIONS[op_code].clocks
         } else if action_taken {
-            match instr.cycles_taken {
+            match instr.clocks_taken {
                 Some(c) => c,
                 None => {
                     terminate!(
@@ -595,13 +595,12 @@ impl Machine {
                 }
             }
         } else {
-            instr.cycles
+            instr.clocks
         };
 
-        // Internally, we work with 4Mhz cycle counts. All instructions take a
-        // multiple of 4 many cycles. The rest of the emulator works with 1Mhz
-        // cycles, so we can simply divide by 4 to make the cycle count
-        // compatible.
-        Ok(cycles_spent / 4)
+        // Internally, we work with 4Mhz clocks. All instructions take a
+        // multiple of 4 many clocks. The rest of the emulator works with 1Mhz
+        // cycles, so we can simply divide by 4.
+        Ok(clocks_spent / 4)
     }
 }
