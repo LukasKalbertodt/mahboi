@@ -12,6 +12,24 @@ use crate::{
 impl Machine {
     /// Executes one (the next) operation.
     pub(crate) fn step(&mut self) -> Result<u8, Disruption> {
+        // Check if an interrupt was requested
+        if let Some(interrupt) = self.interrupt_controller.should_interrupt() {
+            debug!("Interrupt triggered: {:?}", interrupt);
+
+            // push pc onto stack
+            self.push(self.cpu.pc);
+
+            // jump to address
+            self.cpu.pc = interrupt.addr();
+
+            // reset interrupts
+            self.interrupt_controller.ime = false;
+            self.interrupt_controller.reset_interrupt_flag(interrupt);
+
+            // It takes 20 clocks to dispatch an interrupt.
+            return Ok(20 / 4);
+        }
+
         // Variable initializsation (before macros, so they can be used there)
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
