@@ -4,6 +4,7 @@ use crate::{
 };
 use self::{
     ppu::Ppu,
+    interrupt::InterruptController,
 };
 
 
@@ -13,6 +14,7 @@ mod macros;
 mod mm;
 pub mod ppu;
 mod step;
+mod interrupt;
 
 
 pub struct Machine {
@@ -28,7 +30,8 @@ pub struct Machine {
     pub(crate) ppu: Ppu,
 
     pub hram: Memory,
-    pub ie: Byte,
+
+    pub(crate) interrupt_controller: InterruptController,
 
     pub cycle_counter: CycleCounter,
 }
@@ -47,7 +50,7 @@ impl Machine {
             ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
-            ie: Byte::zero(),
+            interrupt_controller: InterruptController::new(),
             cycle_counter: CycleCounter::zero(),
         }
     }

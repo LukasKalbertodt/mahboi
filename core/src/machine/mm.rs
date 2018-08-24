@@ -23,10 +23,12 @@ impl Machine {
             0xFE00..0xFEA0 => unimplemented!(), // oam
             0xFEA0..0xFF00 => unimplemented!(), // not usable (random ram, maybe use as rng???)
 
+            // IF register
+            0xFF0F => self.interrupt_controller.get_if(),
             0xFF40..0xFF4B => self.ppu.load_io_byte(addr),
             0xFF00..0xFF80 => self.io[addr - 0xFF00], // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80], // hram
-            0xFFFF => self.ie, // ie
+            0xFFFF => self.interrupt_controller.interrupt_enable, // IE register
             _ => unreachable!(),
         }
     }
@@ -50,10 +52,12 @@ impl Machine {
             // unmounted, the write access is denied. We assume the Gameboy hardware does the same.
             0xFF50 if !self.bios_mounted() => warn!("Tried to re-mount BIOS!"),
 
+            // IF register
+            0xFF0F => self.interrupt_controller.set_if(byte),
             0xFF40..0xFF4B => self.ppu.store_io_byte(addr, byte),
             0xFF00..0xFF80 => self.io[addr - 0xFF00] = byte, // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80] = byte, // hram
-            0xFFFF => unimplemented!(), // ie
+            0xFFFF => self.interrupt_controller.interrupt_enable = byte, // IE register
             _ => unreachable!(),
         }
     }
