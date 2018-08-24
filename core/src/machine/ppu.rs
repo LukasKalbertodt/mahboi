@@ -2,6 +2,7 @@ use crate::{
     env::Display,
     primitives::{Byte, Word, Memory},
 };
+use super::interrupt::{InterruptController, Interrupt};
 
 
 /// Pixel processing unit.
@@ -157,21 +158,12 @@ impl Ppu {
         self.stat = Byte::new((self.stat.get() & 0b1111_1000) | v);
     }
 
-    /// Checks if an interrupt should be triggered and if yes, returnes the
-    /// address of the interrupt vector.
-    pub(crate) fn should_interrupt(&self) -> Option<Byte> {
-        match (self.current_line.get(), self.cycle_in_line) {
-            // V-Blank interrupt
-            (144, 0) => Some(Byte::new(0x40)),
-
-            // TODO: other interrupts
-
-            _ => None,
-        }
-    }
-
     /// Executes one machine cycle (1 Mhz).
-    pub(crate) fn step(&mut self, _display: &mut impl Display) {
+    pub(crate) fn step(
+        &mut self,
+        _display: &mut impl Display,
+        interrupt_controller: &mut InterruptController,
+    ) {
         // Update state/phase
         self.cycle_in_line += 1;
         if self.cycle_in_line == 114 {
@@ -194,7 +186,10 @@ impl Ppu {
             (line, 63) if line < 144 => self.set_phase(Phase::HBlank),
 
             // Drawn all lines, starting vblank
-            (144, 0) => self.set_phase(Phase::VBlank),
+            (144, 0) => {
+                self.set_phase(Phase::VBlank);
+                interrupt_controller.request_interrupt(Interrupt::Vblank);
+            },
 
             _ => {}
         }
