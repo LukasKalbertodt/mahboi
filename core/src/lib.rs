@@ -60,15 +60,18 @@ impl Emulator {
                 return Err(Disruption::Paused);
             }
 
-            // Let the PPU do one cycle
-            self.machine.ppu.step(peripherals.display());
+            // Let the CPU execute one instruction
+            let cycles_spent = self.machine.step()?;
+
+            // Let the PPU run for the same number of cycles as the CPU did.
+            for _ in 0..cycles_spent {
+                self.machine.ppu.step(peripherals.display());
+            }
             if let Some(vector) = self.machine.ppu.should_interrupt() {
                 debug!("Interrupt at {}", vector);
             }
 
-            // Let the CPU do one cycle
-            self.machine.step()?;
-
+            self.machine.cycle_counter += cycles_spent;
             if self.machine.cycle_counter.is_between_frames() {
                 break;
             }

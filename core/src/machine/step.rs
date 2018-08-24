@@ -11,7 +11,7 @@ use crate::{
 
 impl Machine {
     /// Executes one (the next) operation.
-    pub(crate) fn step(&mut self) -> Result<(), Disruption> {
+    pub(crate) fn step(&mut self) -> Result<u8, Disruption> {
         // Variable initializsation (before macros, so they can be used there)
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
@@ -540,8 +540,6 @@ impl Machine {
                     }
                 }
 
-                self.cycle_counter += instr.cycles;
-
                 false
             }
 
@@ -566,7 +564,9 @@ impl Machine {
             }
         };
 
-        self.cycle_counter += if action_taken {
+        let cycles_spent = if op_code.get() == opcode!("PREFIX CB") {
+            PREFIXED_INSTRUCTIONS[op_code].cycles
+        } else if action_taken {
             match instr.cycles_taken {
                 Some(c) => c,
                 None => {
@@ -583,6 +583,10 @@ impl Machine {
             instr.cycles
         };
 
-        Ok(())
+        // Internally, we work with 4Mhz cycle counts. All instructions take a
+        // multiple of 4 many cycles. The rest of the emulator works with 1Mhz
+        // cycles, so we can simply divide by 4 to make the cycle count
+        // compatible.
+        Ok(cycles_spent / 4)
     }
 }
