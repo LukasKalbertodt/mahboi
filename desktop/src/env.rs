@@ -3,7 +3,8 @@ use minifb::{Key, WindowOptions, Window};
 
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
-    env::{self, Peripherals, Display, PixelPos, PixelColor},
+    env::{self, Peripherals, Display},
+    primitives::{PixelColor, PixelPos},
 };
 use crate::{
     args::Args,
