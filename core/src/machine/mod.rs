@@ -91,6 +91,12 @@ impl Machine {
     pub fn store_hl(&mut self, byte: Byte) {
         self.store_byte(self.cpu.hl(), byte);
     }
+
+    /// Pushes the given word onto the stack.
+    pub fn push(&mut self, word: Word) {
+        self.cpu.sp -= 2u16;
+        self.store_word(self.cpu.sp, word);
+    }
 }
 
 pub struct Cpu {

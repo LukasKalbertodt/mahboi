@@ -468,17 +468,14 @@ impl Machine {
 
                 false
             }
-            opcode!("PUSH BC") => {
-                self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, self.cpu.bc());
-
-                false
-            }
+            opcode!("PUSH BC") => no_branch!(self.push(self.cpu.bc())),
+            opcode!("PUSH DE") => no_branch!(self.push(self.cpu.de())),
+            opcode!("PUSH HL") => no_branch!(self.push(self.cpu.hl())),
+            opcode!("PUSH AF") => no_branch!(self.push(self.cpu.af())),
 
             // ========== CALL/RET ==========
             opcode!("CALL a16") => {
-                self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, self.cpu.pc);
+                self.push(self.cpu.pc);
                 self.cpu.pc = arg_word;
 
                 false
