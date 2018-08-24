@@ -459,6 +459,17 @@ impl PixelColor {
         }
     }
 
+    /// Creates a color from a classic gameboy color (2 bit). The given `c`
+    /// value has to be 0, 1, 2 or 3.
+    pub fn from_greyscale(c: u8) -> Self {
+        let v = c << 3;
+        Self {
+            r: v,
+            g: v,
+            b: v,
+        }
+    }
+
     /// Creates a new `PixelColor` instance. `r`, `g` and `b` have to be
     /// smaller than 32!
     pub fn new(r: u8, g: u8, b: u8) -> Self {
