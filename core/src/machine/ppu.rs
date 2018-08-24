@@ -17,7 +17,7 @@ pub(crate) struct Ppu {
     lcd_control: Byte,
 
     /// FF41: LCD status
-    stat: Byte,
+    status: Byte,
 
     /// FF42: y scroll position of background
     scroll_y: Byte,
@@ -32,6 +32,15 @@ pub(crate) struct Ppu {
     /// FF45: LY compare. Is compared to `current_line` all the time. If both
     /// values are equal, things happen.
     lyc: Byte,
+
+    // FF47: Background palette data.
+    background_palette: Byte,
+
+    // FF48: Sprite palette 0 data.
+    sprite_palette_0: Byte,
+
+    // FF49: Sprite palette 1 data.
+    sprite_palette_1: Byte,
 
     /// FF4A: Y window position
     win_y: Byte,
@@ -49,11 +58,14 @@ impl Ppu {
             cycle_in_line: 0,
 
             lcd_control: Byte::zero(),
-            stat: Byte::zero(),
+            status: Byte::zero(),
             scroll_y: Byte::zero(),
             scroll_x: Byte::zero(),
             current_line: Byte::zero(),
             lyc: Byte::zero(),
+            background_palette: Byte::zero(),
+            sprite_palette_0: Byte::zero(),
+            sprite_palette_1: Byte::zero(),
             win_y: Byte::zero(),
             win_x: Byte::zero(),
         }
@@ -94,15 +106,20 @@ impl Ppu {
     pub(crate) fn load_io_byte(&self, addr: Word) -> Byte {
         match addr.get() {
             0xFF40 => self.lcd_control,
-            0xFF41 => self.stat,
+            // Bit 7 is always 1
+            0xFF41 => self.status.map(|b| {
+                // TODO: bit 0, 1, 2 return 0 when LCD is off
+                // TODO: bit 0, 1, 2 have to be generated
+                b & 0b1000_0000
+            }),
             0xFF42 => self.scroll_y,
             0xFF43 => self.scroll_x,
             0xFF44 => self.current_line,
             0xFF45 => self.lyc,
             0xFF46 => unimplemented!(), // TODO
-            0xFF47 => unimplemented!(), // TODO
-            0xFF48 => unimplemented!(), // TODO
-            0xFF49 => unimplemented!(), // TODO
+            0xFF47 => self.background_palette,
+            0xFF48 => self.sprite_palette_0,
+            0xFF49 => self.sprite_palette_1,
             0xFF4A => self.win_y,
             0xFF4B => self.win_x,
             _ => panic!("called `Ppu::load_io_byte` with invalid address"),
@@ -118,17 +135,17 @@ impl Ppu {
             0xFF40 => self.lcd_control = byte,
             0xFF41 => {
                 // Only bit 3 to 6 are writable
-                let v = self.stat.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
-                self.stat = Byte::new(v);
+                let v = self.status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
+                self.status = Byte::new(v);
             },
             0xFF42 => self.scroll_y = byte,
             0xFF43 => self.scroll_x = byte,
             0xFF44 => {}, // read only
             0xFF45 => self.lyc = byte,
             0xFF46 => {}, // TODO
-            0xFF47 => {}, // TODO
-            0xFF48 => {}, // TODO
-            0xFF49 => {}, // TODO
+            0xFF47 => self.background_palette = byte,
+            0xFF48 => self.sprite_palette_0 = byte,
+            0xFF49 => self.sprite_palette_1 = byte,
             0xFF4A => self.win_y = byte,
             0xFF4B => self.win_x = byte,
             _ => panic!("called `Ppu::store_io_byte` with invalid address"),
@@ -137,7 +154,7 @@ impl Ppu {
 
     /// Returns in what phase the PPU currently is.
     pub fn phase(&self) -> Phase {
-        match self.stat.get() & 0b11 {
+        match self.status.get() & 0b11 {
             0 => Phase::HBlank,
             1 => Phase::VBlank,
             2 => Phase::OamSearch,
@@ -154,7 +171,7 @@ impl Ppu {
             Phase::PixelTransfer => 3,
         };
 
-        self.stat = Byte::new((self.stat.get() & 0b1111_1000) | v);
+        self.status = Byte::new((self.status.get() & 0b1111_1000) | v);
     }
 
     /// Checks if an interrupt should be triggered and if yes, returnes the
