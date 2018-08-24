@@ -105,7 +105,7 @@ impl Ppu {
             0xFF49 => unimplemented!(), // TODO
             0xFF4A => self.win_y,
             0xFF4B => self.win_x,
-            _ => panic!("called `Ppu::store_io_byte` with invalid address"),
+            _ => panic!("called `Ppu::load_io_byte` with invalid address"),
         }
     }
 
@@ -207,7 +207,7 @@ impl Ppu {
 ///
 /// Breakdown of one frame:
 ///
-/// ```
+/// ```ignore
 ///   ___|-- 20 clocks --|------- 43+ clocks -------|----------- 51- clocks -----------|
 ///    |                 |                          |                                  |
 ///    |                 |                             |                               |
