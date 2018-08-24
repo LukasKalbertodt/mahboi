@@ -1,17 +1,67 @@
-use mahboi::env;
+use failure::{Error, ResultExt};
+use minifb::{Key, WindowOptions, Window};
 
-pub(crate) struct Peripherals {
+use mahboi::{
+    SCREEN_WIDTH, SCREEN_HEIGHT,
+    env::{self, Peripherals, Display},
+    primitives::{PixelColor, PixelPos},
+};
+use crate::{
+    args::Args,
+};
 
+
+
+const WINDOW_TITLE: &str = "Mahboi";
+
+/// Native application window which also handles input and sound.
+pub(crate) struct NativeWindow {
+    win: Window,
+    buf: WinBuffer,
 }
 
-// TODO Input should be hot swapable (e.g. keyboard to controller)
-impl env::Peripherals for Peripherals {
-    type Display = Display;
+impl NativeWindow {
+    /// Opens a window configured by `args`.
+    pub(crate) fn open(args: &Args) -> Result<Self, Error> {
+        let options = WindowOptions {
+            borderless: false,
+            title: true,
+            resize: false,
+            scale: args.scale,
+        };
+
+        let win = Window::new(WINDOW_TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)?;
+        let buf = WinBuffer(vec![0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+
+        Ok(Self {
+            win,
+            buf,
+        })
+    }
+
+    /// Returns `true` if the window received signals to stop.
+    pub(crate) fn should_stop(&self) -> bool {
+        !self.win.is_open() || self.win.is_key_down(Key::Escape)
+    }
+
+    /// Updates the window with the internal buffer and handles new events.
+    pub(crate) fn update(&mut self) -> Result<(), Error> {
+        self.win.update_with_buffer(&self.buf.0)
+            .context("failed to update window buffer")?;
+
+        Ok(())
+    }
+}
+
+pub(crate) struct WinBuffer(Vec<u32>);
+
+impl Peripherals for NativeWindow {
+    type Display = WinBuffer;
     type Sound = Sound;
     type Input = Input;
 
     fn display(&mut self) -> &mut Self::Display {
-        unimplemented!()
+        &mut self.buf
     }
 
     fn sound(&mut self) -> &mut Self::Sound {
@@ -23,13 +73,17 @@ impl env::Peripherals for Peripherals {
     }
 }
 
-pub(crate) struct Display {
-
+impl Display for WinBuffer {
+    fn set_pixel(&mut self, pos: PixelPos, color: PixelColor) {
+        let idx = pos.x() as usize + pos.y() as usize * 160;
+        let [r, g, b] = color.to_srgb();
+        let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+        self.0[idx] = combined;
+    }
 }
 
-impl env::Display for Display {
 
-}
+// Dummy implementations
 
 pub(crate) struct Input {
 

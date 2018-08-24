@@ -29,36 +29,18 @@ pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
 
-pub struct Emulator<'a, P: 'a + Peripherals> {
+pub struct Emulator {
     machine: Machine,
-
-    // TODO: Remove
-    #[allow(dead_code)]
-    peripherals: &'a mut P,
 }
 
-impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
-    pub fn new(cartridge: Cartridge, peripherals: &'a mut P) -> Self {
+impl Emulator {
+    pub fn new(cartridge: Cartridge) -> Self {
         info!("Creating emulator");
 
         Self {
             machine: Machine::new(cartridge),
-            peripherals,
         }
     }
-
-    // TODO: put back in or remove
-    // fn display(&mut self) -> &mut P::Display {
-    //     self.peripherals.display()
-    // }
-
-    // fn sound(&mut self) -> &mut P::Sound {
-    //     self.peripherals.sound()
-    // }
-
-    // fn input(&mut self) -> &mut P::Input {
-    //     self.peripherals.input()
-    // }
 
     pub fn machine(&self) -> &Machine {
         &self.machine
@@ -70,6 +52,7 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
     /// (defined as peripherals) and the display buffer can be written to the actual display.
     pub fn execute_frame(
         &mut self,
+        peripherals: &mut impl Peripherals,
         mut should_pause: impl FnMut(&Machine) -> bool,
     ) -> Result<(), Disruption> {
         loop {
@@ -77,7 +60,18 @@ impl<'a, P: 'a + Peripherals> Emulator<'a, P> {
                 return Err(Disruption::Paused);
             }
 
-            self.machine.step()?;
+            // Let the CPU execute one instruction
+            let cycles_spent = self.machine.step()?;
+
+            // Let the PPU run for the same number of cycles as the CPU did.
+            for _ in 0..cycles_spent {
+                self.machine.ppu.step(peripherals.display());
+            }
+            if let Some(vector) = self.machine.ppu.should_interrupt() {
+                debug!("Interrupt at {}", vector);
+            }
+
+            self.machine.cycle_counter += cycles_spent;
             if self.machine.cycle_counter.is_between_frames() {
                 break;
             }

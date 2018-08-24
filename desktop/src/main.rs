@@ -4,17 +4,16 @@
 use std::fs;
 
 use failure::{Error, ResultExt};
-use minifb::{Key, WindowOptions, Window};
 use structopt::StructOpt;
 
 use mahboi::{
-    SCREEN_WIDTH, SCREEN_HEIGHT, Emulator, Disruption,
+    Emulator, Disruption,
     cartridge::Cartridge,
     log::*,
 };
 use crate::{
     debug::{Action, TuiDebugger},
-    env::Peripherals,
+    env::NativeWindow,
     args::Args,
 };
 
@@ -53,37 +52,34 @@ fn run() -> Result<(), Error> {
 
     // Load ROM
     let rom = fs::read(&args.path_to_rom)?;
-
-    // Create emulator
     let cartridge = Cartridge::from_bytes(&rom);
     info!("Loaded: {:#?}", cartridge);
-    let mut peripherals = Peripherals {};
 
-    let mut emulator = Emulator::new(cartridge, &mut peripherals);
+    // Create emulator
+    let mut emulator = Emulator::new(cartridge);
 
-    let mut window = open_window(&args).context("failed to open window")?;
+    // Open window
+    let mut window = NativeWindow::open(&args).context("failed to open window")?;
     info!("Opened window");
 
-    let mut buffer: Vec<u32> = vec![0; SCREEN_WIDTH * SCREEN_HEIGHT];
-    let mut color = 0;
     let mut is_paused = args.debug;
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        for i in buffer.iter_mut() {
-            *i = color;
-        }
-        color += 1;
-
-        window.update_with_buffer(&buffer).unwrap();
+    while !window.should_stop() {
+        // Update window buffer and read input.
+        window.update()?;
 
         // Run the emulator.
         if !is_paused {
-            let res = emulator.execute_frame(|machine| {
+            let res = emulator.execute_frame(&mut window, |machine| {
+                // If we have a TUI debugger, we ask it when to pause.
+                // Otherwise, we never stop.
                 if let Some(debugger) = &mut tui_debugger {
                     debugger.should_pause(machine)
                 } else {
                     false
                 }
             });
+
+            // React to abnormal disruptions
             match res {
                 Ok(_) => {},
                 Err(Disruption::Paused) => is_paused = true,
@@ -114,19 +110,4 @@ fn run() -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-/// Opens a `minifb` window configured by `args`.
-fn open_window(args: &Args) -> Result<Window, Error> {
-    const TITLE: &str = "Mahboi";
-
-    let options = WindowOptions {
-        borderless: false,
-        title: true,
-        resize: false,
-        scale: args.scale,
-    };
-
-    Window::new(TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)
-        .map_err(|e| e.into())
 }

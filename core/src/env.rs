@@ -1,3 +1,7 @@
+use crate::{
+    primitives::{PixelColor, PixelPos},
+};
+
 pub trait Peripherals {
     type Display: Display;
     type Sound: Sound;
@@ -9,7 +13,7 @@ pub trait Peripherals {
 }
 
 pub trait Display {
-//    fn set_pixel(...);
+   fn set_pixel(&mut self, pos: PixelPos, color: PixelColor);
 }
 
 pub trait Sound {

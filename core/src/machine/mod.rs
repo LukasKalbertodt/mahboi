@@ -2,12 +2,16 @@ use crate::{
     primitives::{Byte, Word, Memory, CycleCounter},
     cartridge::{Cartridge},
 };
+use self::{
+    ppu::Ppu,
+};
 
 
 #[macro_use]
 mod macros;
 
 mod mm;
+pub mod ppu;
 mod step;
 
 
@@ -18,10 +22,10 @@ pub struct Machine {
 
     // TODO These should be arrays!
     pub bios: Memory,
-    pub vram: Memory,
     pub wram: Memory,
-    pub oam: Memory,
     pub io: Memory,
+
+    pub(crate) ppu: Ppu,
 
     pub hram: Memory,
     pub ie: Byte,
@@ -39,9 +43,8 @@ impl Machine {
                     concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
                 )
             ),
-            vram: Memory::zeroed(Word::new(0x2000)),
             wram: Memory::zeroed(Word::new(0x1000)),
-            oam: Memory::zeroed(Word::new(0xA0)),
+            ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
             ie: Byte::zero(),
