@@ -322,18 +322,29 @@ impl Ppu {
             // The color number of each pixel is split between the bytes:
             // `byte0` defines the lower bit of the color number, while `byte1`
             // defines the upper bit.
-            let new_pixels = [
-                (ColorPattern::from_byte(((byte0 >> 7) & 0b1) | (((byte1 >> 7) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 6) & 0b1) | (((byte1 >> 6) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 5) & 0b1) | (((byte1 >> 5) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 4) & 0b1) | (((byte1 >> 4) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 3) & 0b1) | (((byte1 >> 3) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 2) & 0b1) | (((byte1 >> 2) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 1) & 0b1) | (((byte1 >> 1) & 0b1) << 1)), PixelSource::Background),
-                (ColorPattern::from_byte(((byte0 >> 0) & 0b1) | (((byte1 >> 0) & 0b1) << 1)), PixelSource::Background),
-            ];
+            // let new_pixels = [
+            //     ColorPattern::from_byte(((byte0 >> 7) & 0b1) | (((byte1 >> 7) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 6) & 0b1) | (((byte1 >> 6) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 5) & 0b1) | (((byte1 >> 5) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 4) & 0b1) | (((byte1 >> 4) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 3) & 0b1) | (((byte1 >> 3) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 2) & 0b1) | (((byte1 >> 2) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 1) & 0b1) | (((byte1 >> 1) & 0b1) << 1)),
+            //     ColorPattern::from_byte(((byte0 >> 0) & 0b1) | (((byte1 >> 0) & 0b1) << 1)),
+            // ];
             // [(ColorPattern, PixelSource); 8]
-            self.fifo.add_data(new_pixels);
+            let new_pixels = ((byte1 as u16) << 8) | (byte0 as u16);
+            // let new_pixels = 0
+            //     | ((byte0 >> 7) & 0b1) | (((byte1 >> 7) & 0b1) << 1)
+            //     | ((byte0 >> 6) & 0b1) | (((byte1 >> 6) & 0b1) << 1)
+            //     | ((byte0 >> 5) & 0b1) | (((byte1 >> 5) & 0b1) << 1)
+            //     | ((byte0 >> 4) & 0b1) | (((byte1 >> 4) & 0b1) << 1)
+            //     | ((byte0 >> 3) & 0b1) | (((byte1 >> 3) & 0b1) << 1)
+            //     | ((byte0 >> 2) & 0b1) | (((byte1 >> 2) & 0b1) << 1)
+            //     | ((byte0 >> 1) & 0b1) | (((byte1 >> 1) & 0b1) << 1)
+            //     | ((byte0 >> 0) & 0b1) | (((byte1 >> 0) & 0b1) << 1)
+            // ;
+            self.fifo.add_data(new_pixels, PixelSource::Background);
             // if self.current_line == 0 {
             //     debug!(
             //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}\
@@ -360,19 +371,26 @@ impl Ppu {
     }
 
     fn push_pixel(&mut self, display: &mut impl Display) {
-        fn pattern_to_color(pattern: ColorPattern, palette: Byte) -> PixelColor {
-            let color = (palette.get() >> (pattern.as_byte() * 2)) & 0b11;
-
+        // Converts the color number to a real color depending on the given
+        // palette.
+        fn pattern_to_color(pattern: u8, palette: Byte) -> PixelColor {
+            // The palette contains four color values. Bit0 and bit1 define the
+            // color for the color number 0, bit2 and bit3 for color number 1
+            // and so on.
+            let color = (palette.get() >> (pattern * 2)) & 0b11;
             PixelColor::from_greyscale(color)
         }
 
         let (pattern, source) = self.fifo.emit();
-        let color = match source {
-            PixelSource::Background => pattern_to_color(pattern, self.background_palette),
-            PixelSource::Sprite0 => pattern_to_color(pattern, self.sprite_palette_0),
-            PixelSource::Sprite1 => pattern_to_color(pattern, self.sprite_palette_1),
+
+        // Determine the correct palette
+        let palette = match source {
+            PixelSource::Background => self.background_palette,
+            PixelSource::Sprite0 => self.sprite_palette_0,
+            PixelSource::Sprite1 => self.sprite_palette_1,
         };
 
+        let color = pattern_to_color(pattern, palette);
         let pos = PixelPos::new(self.current_column, self.current_line.get());
         display.set_pixel(pos, color);
         self.current_column += 1;
@@ -429,59 +447,59 @@ pub enum Phase {
     VBlank,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum ColorPattern {
-    Pat00,
-    Pat01,
-    Pat10,
-    Pat11,
-}
 
-impl ColorPattern {
-    fn from_byte(b: u8) -> Self {
-        match b {
-            0 => ColorPattern::Pat00,
-            1 => ColorPattern::Pat01,
-            2 => ColorPattern::Pat10,
-            3 => ColorPattern::Pat11,
-            _ => panic!("called `ColorPattern::from_byte` with byte > 3"),
-        }
-    }
-
-    fn as_byte(&self) -> u8 {
-        match self {
-            ColorPattern::Pat00 => 0,
-            ColorPattern::Pat01 => 1,
-            ColorPattern::Pat10 => 2,
-            ColorPattern::Pat11 => 3,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
 enum PixelSource {
     /// Pixel with background palette
-    Background,
+    Background = 0,
 
     /// Sprite with palette 0
-    Sprite0,
+    Sprite0 = 1,
 
     /// Sprite with palette 1
-    Sprite1,
+    Sprite1 = 2,
 }
 
+
+/// The pixel FIFO: stores pixels to be drawn on the LCD.
+///
+/// The FIFO is stored in the fields `colors` and `sources`. Each logical
+/// element in the FIFO is a pair of a color number (0-3) and a source/palette
+/// (background = 0, sprite0 = 1 or sprite1 = 2). Both of these things can be
+/// encoded with 2 bits. The color number is encoded in `colors` and the source
+/// is encoded in `sources`. One logical element in the FIFO is made of 4 bits,
+/// two from `colors` and two from `sources`.
+///
+/// The following graph shows a completely-full FIFO. `cNN` and `sNN` refer to
+/// the NNth bit of `colors` and `sources` respectively.
+///
+/// ```ignore
+///  ┌───────┬───────┬───────┬───────┬───────┬───────┬───────┐
+///  │c31&c30│c29&c28│c27&c26│  ...  │c05&c04│c03&c02│c01&c00│
+///  ├───────┼───────┼───────┼───────┼───────┼───────┼───────┤
+///  │s31&s30│s29&s28│s27&s26│  ...  │s05&s04│s03&s02│s01&s00│
+///  └───────┴───────┴───────┴───────┴───────┴───────┴───────┘
+///     ^^^                                             ^^^
+///    front                                            back
+/// ```
+///
+/// The `len` field stores how many elements are currently in the queue. The
+/// last logical element is stored in bits `31 - len * 2` and `30 - len * 2` of
+/// `colors` and `sources`.
 struct PixelFifo {
-    data: [(ColorPattern, PixelSource); 16],
-    start: usize,
+    /// Unused bits are always 0.
+    colors: u32,
+    /// Unused bits are always 0.
+    sources: u32,
     len: usize,
 }
 
 impl PixelFifo {
     fn new() -> Self {
         Self {
-            // Dummy data
-            data: [(ColorPattern::Pat00, PixelSource::Background); 16],
-            start: 0,
+            colors: 0,
+            sources: 0,
             len: 0,
         }
     }
@@ -490,30 +508,106 @@ impl PixelFifo {
         self.len as u8
     }
 
+    /// Clears all data from the FIFO (sets length to 0).
     fn clear(&mut self) {
-        self.start = 0;
         self.len = 0;
     }
 
-    fn emit(&mut self) -> (ColorPattern, PixelSource) {
-        assert!(self.len() > 0, "Called emit() on empty pixel FIFO");
+    /// Removes the element at the front of the FIFO and returns it.
+    ///
+    /// The returned tuple contains `(color, palette)`. The color is the color
+    /// pattern of the pixel (always <= 3).
+    ///
+    /// If this function is called when the FIFO is empty, it panics in debug
+    /// mode. In release mode, the behavior is unspecified.
+    fn emit(&mut self) -> (u8, PixelSource) {
+        debug_assert!(self.len() > 0, "Called emit() on empty pixel FIFO");
 
-        let out = self.data[self.start];
+        // Extract two bits each
+        let color = (self.colors >> 30) as u8;
+        let palette = match self.sources >> 30 {
+            0 => PixelSource::Background,
+            1 => PixelSource::Sprite0,
+            2 => PixelSource::Sprite1,
+            _ => panic!("internal pixel FIFO error: 4 as source"),
+        };
+
+        // Shift FIFO to the left and reduce len
+        self.colors <<= 2;
+        self.sources <<= 2;
         self.len -= 1;
-        self.start += 1;
-        if self.start == self.data.len() {
-            self.start = 0;
-        }
 
-        out
+        (color, palette)
     }
 
-    fn add_data(&mut self, data: [(ColorPattern, PixelSource); 8]) {
-        assert!(self.len() <= 8, "called `add_data` for pixel FIFO with more than 8 pixels");
+    /// Adds data for 8 pixels.
+    ///
+    /// The color data has to be encoded like the FIFO itself. See the main doc
+    /// comment for more information.
+    ///
+    /// If this function is called when the FIFO has less than 8 free spots, it
+    /// panics in debug mode. In release mode, the behavior is unspecified.
+    fn add_data(&mut self, colors: u16, source: PixelSource) {
+        debug_assert!(self.len() <= 8, "called `add_data` for pixel FIFO with more than 8 pixels");
 
-        for (i, &elem) in data.iter().enumerate() {
-            self.data[(self.start + self.len + i) % 16] = elem;
-        }
+        // Build the 16 bit value from the single source.
+        let mut sources = (source as u8) as u16;
+        sources |= sources << 2;
+        sources |= sources << 4;
+        sources |= sources << 8;
+
+        // Add the data at the correct position and increase the length
+        let shift_by = 16 - self.len * 2;
+        self.colors |= (colors as u32) << shift_by;
+        self.sources |= (sources as u32) << shift_by;
         self.len += 8;
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fifo_simple() {
+        let mut fifo = PixelFifo::new();
+        assert_eq!(fifo.len(), 0);
+
+        let new_pixels = 0b00_01_10_11_01_00_11_10u16;
+        fifo.add_data(new_pixels, PixelSource::Background);
+        assert_eq!(fifo.len(), 8);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b00);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b01);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b10);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b11);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b01);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b00);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b11);
+        assert_eq!(palette, PixelSource::Background);
+
+        let (color, palette) = fifo.emit();
+        assert_eq!(color, 0b10);
+        assert_eq!(palette, PixelSource::Background);
     }
 }
