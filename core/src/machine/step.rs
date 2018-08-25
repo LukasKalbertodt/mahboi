@@ -48,6 +48,21 @@ impl Machine {
         };
         self.cpu.pc += instr.len as u16;
 
+        // TODO: Check if this position for enable_interrupts_next_step check is a good choice.
+        // Why? According to [1] the IME is set in the cycle AFTER the EI instruction. It is
+        // not clear when exactly this happens during the next cycle. The timing here is
+        // important, because some instructions (like DI) access the IME. If this check is done
+        // after the opcode match block the behavior of some opcodes would change!
+        //
+        // [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
+
+        // Check if interrupts should be enabled during this cycle so they will be active in
+        // the next cylce.
+        if self.enable_interrupts_next_step {
+            self.interrupt_controller.ime = true;
+            self.enable_interrupts_next_step = false;
+        }
+
         // ============================
         // ========== MACROS ==========
         // ============================
@@ -191,21 +206,6 @@ impl Machine {
 
                 false
             }}
-        }
-
-        // TODO: Check if this position for enable_interrupts_next_step check is a good choice.
-        // Why? According to [1] the IME is set in the cycle AFTER the EI instruction. It is
-        // not clear when exactly this happens during the next cycle. The timing here is
-        // important, because some instructions (like DI) access the IME. If this check is done
-        // after the opcode match block the behavior of some opcodes would change!
-        //
-        // [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
-
-        // Check if interrupts should be enabled during this cycle so they will be active in
-        // the next cylce.
-        if self.enable_interrupts_next_step {
-            self.interrupt_controller.ime = true;
-            self.enable_interrupts_next_step = false;
         }
 
         // Execute the fetched instruction
