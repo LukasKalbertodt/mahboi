@@ -4,7 +4,7 @@ use crate::{
 };
 use self::{
     ppu::Ppu,
-    interrupt::InterruptController,
+    interrupt::{InterruptController, Interrupt},
 };
 
 
@@ -34,6 +34,30 @@ pub struct Machine {
     pub(crate) interrupt_controller: InterruptController,
 
     pub cycle_counter: CycleCounter,
+
+    /// Because the EI instruction enables the interrupts during the next cycle we have to store
+    /// the request for doing this. This is the purpose of this variable.
+    pub enable_interrupts_next_step: bool,
+
+    /// Indicates if the machine is in HALT mode. This mode can be exited in three ways:
+    ///
+    /// IME is set to true
+    ///     1. The CPU jumps to the next enabled and requested interrupt
+    ///
+    /// IME is set to false
+    ///     2. (IE & IF & 0x1F) == 0 -> The CPU resumes to normal, when an enabled interrupt is
+    ///                                 requested but doesn't jump to the ISR.
+    ///     3. (IE & IF & 0x1F) != 0 -> HALT bug occurs: The CPU fails to increase PC when
+    ///                                 executing the next instruction, so it is executed twice.
+    ///                                 Examples are given in chapter 4.10. of [1].
+    ///
+    /// [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
+    pub halt: bool,
+
+    /// Indicates whether the halt bug occurs or not. This is necessary because the bug actually
+    /// occurs in the next cycle after the HALT instruction was executed. For more details see
+    /// chapter 4.10. of [1].
+    pub halt_bug: bool,
 }
 
 impl Machine {
@@ -52,6 +76,9 @@ impl Machine {
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
             cycle_counter: CycleCounter::zero(),
+            enable_interrupts_next_step: false,
+            halt: false,
+            halt_bug: false,
         }
     }
 
@@ -96,6 +123,29 @@ impl Machine {
     pub fn push(&mut self, word: Word) {
         self.cpu.sp -= 2u16;
         self.store_word(self.cpu.sp, word);
+    }
+
+    /// Executes the interrupt service routine and returns the number of clocks used for this.
+    pub fn isr(&mut self, interrupt: Interrupt) -> u8 {
+        // push pc onto stack
+        self.push(self.cpu.pc);
+
+        // jump to address
+        self.cpu.pc = interrupt.addr();
+
+        // reset interrupts
+        self.interrupt_controller.ime = false;
+        self.interrupt_controller.reset_interrupt_flag(interrupt);
+
+        // It takes 20 clocks to dispatch a normal interrupt + 4 clocks when returning
+        // from HALT mode.
+        if self.halt {
+            // Exit HALT mode if we are in it
+            self.halt = false;
+            24
+        } else {
+            20
+        }
     }
 }
 

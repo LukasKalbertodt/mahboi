@@ -15,25 +15,23 @@ impl Machine {
         // Check if an interrupt was requested
         if let Some(interrupt) = self.interrupt_controller.should_interrupt() {
             debug!("Interrupt triggered: {:?}", interrupt);
-
-            // push pc onto stack
-            self.push(self.cpu.pc);
-
-            // jump to address
-            self.cpu.pc = interrupt.addr();
-
-            // reset interrupts
-            self.interrupt_controller.ime = false;
-            self.interrupt_controller.reset_interrupt_flag(interrupt);
-
-            // It takes 20 clocks to dispatch an interrupt.
-            return Ok(20 / 4);
+            return Ok(self.isr(interrupt) / 4);
         }
 
-        // Variable initializsation (before macros, so they can be used there)
+        // Check if we are in HALT mode
+        if self.halt {
+            // If no interrupt was triggered (otherwise we wouldn't have gotten here) but at least
+            // one interrupt was requested -> exit HALT mode.
+            if self.interrupt_controller.is_interrupt_requested() {
+                self.halt = false;
+            }
+
+            // Executed 1 cycle doing nothing ＼(＾O＾)／
+            return Ok(1);
+        }
+
+        // Variable initializsation
         let instr_start = self.cpu.pc;
-        let arg_byte = self.load_byte(instr_start + 1u16);
-        let arg_word = self.load_word(instr_start + 1u16);
         let op_code = self.load_byte(instr_start);
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
@@ -46,7 +44,24 @@ impl Machine {
                 );
             }
         };
-        self.cpu.pc += instr.len as u16;
+        let mut arg_offset = 1u16;
+        let mut pc_inc = instr.len as u16;
+
+        // If this step is affected by the HALT bug, act accordingly.
+        // For details see [`Machine::halt`].
+        if self.halt_bug {
+            // Reset HALT bug for next step
+            self.halt_bug = false;
+
+            // Do NOT increment the PC in this step
+            pc_inc = 0;
+
+            // TODO: Load crazy things in `arg_byte` and `arg_word`
+        }
+
+        let arg_byte = self.load_byte(instr_start + arg_offset);
+        let arg_word = self.load_word(instr_start + arg_offset);
+        self.cpu.pc += pc_inc;
 
         // ============================
         // ========== MACROS ==========
@@ -193,7 +208,22 @@ impl Machine {
             }}
         }
 
-        // Normal method stuff starts here
+        // TODO: Check if this position for enable_interrupts_next_step check is a good choice.
+        // Why? According to [1] the IME is set in the cycle AFTER the EI instruction. It is
+        // not clear when exactly this happens during the next cycle. The timing here is
+        // important, because some instructions (like DI) access the IME. If this check is done
+        // after the opcode match block the behavior of some opcodes would change!
+        //
+        // [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
+
+        // Check if interrupts should be enabled during this cycle so they will be active in
+        // the next cylce.
+        if self.enable_interrupts_next_step {
+            self.interrupt_controller.ime = true;
+            self.enable_interrupts_next_step = false;
+        }
+
+        // Execute the fetched instruction
         let action_taken = match op_code.get() {
             // ========== LD ==========
             opcode!("LD B, d8") => ld_d8!(self.cpu.b),
@@ -513,6 +543,20 @@ impl Machine {
 
                 false
             }
+            opcode!("DI") => no_branch!(self.interrupt_controller.ime = false),
+            opcode!("EI") => no_branch!(self.enable_interrupts_next_step = true),
+            opcode!("HALT") => {
+                // Check for HALT bug. See [`Machine::halt`] for details.
+                let halt_bug = !self.interrupt_controller.ime
+                    && self.interrupt_controller.is_interrupt_requested();
+                if halt_bug {
+                    self.halt_bug = true;
+                } else {
+                    self.halt = true;
+                }
+
+                false
+            },
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
