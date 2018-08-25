@@ -24,6 +24,7 @@ use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
 use mahboi::{
+    opcode,
     log::*,
     machine::{Cpu, Machine},
     primitives::Word,
@@ -128,6 +129,10 @@ pub(crate) struct TuiDebugger {
 
     /// A set of addresses at which we will pause execution
     breakpoints: Breakpoints,
+
+    /// Flag that is set when the user requested to run until the next RET
+    /// instruction.
+    pause_on_ret: bool,
 }
 
 impl TuiDebugger {
@@ -173,6 +178,7 @@ impl TuiDebugger {
             event_sink,
             step_over: None,
             breakpoints: Breakpoints::new(),
+            pause_on_ret: false,
         };
 
         // Build the TUI view
@@ -247,6 +253,14 @@ impl TuiDebugger {
                         return Ok(Action::Continue);
                     }
                 }
+                'f' => {
+                    if self.pause_mode {
+                        self.step_over = Some(machine.cpu.pc);
+                        self.pause_on_ret = true;
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
                 _ => panic!("internal error: unexpected event"),
             }
         }
@@ -308,6 +322,25 @@ impl TuiDebugger {
             return true;
         }
 
+        // If we are supposed to pause on a RET instruction...
+        if self.pause_on_ret {
+            // ... check if the next instruction is an RET-like instruction
+            let opcode = machine.load_byte(machine.cpu.pc);
+            match opcode.get() {
+                opcode!("RET")
+                | opcode!("RETI")
+                | opcode!("RET NZ")
+                | opcode!("RET NC")
+                | opcode!("RET Z")
+                | opcode!("RET C") => {
+                    // Reset the flag
+                    self.pause_on_ret = false;
+                    return true;
+                }
+                _ => {}
+            }
+        }
+
         false
     }
 
@@ -319,7 +352,7 @@ impl TuiDebugger {
 
         // Other global events are just forwarded to be handled in the next
         // `update()` call.
-        for &c in &['p', 'r', 's'] {
+        for &c in &['p', 'r', 's', 'f'] {
             let tx = self.event_sink.clone();
             self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
         }
@@ -448,17 +481,20 @@ impl TuiDebugger {
             })
         };
 
-        // Buttons for the 'r' and 's' actions
+        // Buttons for the 'r', 's' and 'f' actions
         let tx = self.event_sink.clone();
         let run_button = Button::new("Continue [r]", move |_| tx.send('r').unwrap());
         let tx = self.event_sink.clone();
         let step_button = Button::new("Single step [s]", move |_| tx.send('s').unwrap());
+        let tx = self.event_sink.clone();
+        let fun_end_button = Button::new("Run to RET-like [f]", move |_| tx.send('f').unwrap());
 
         // Wrap all buttons
         let debug_buttons = LinearLayout::vertical()
             .child(button_breakpoints)
             .child(run_button)
-            .child(step_button);
+            .child(step_button)
+            .child(fun_end_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
