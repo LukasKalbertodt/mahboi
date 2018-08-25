@@ -123,7 +123,7 @@ impl Machine {
     }
 
     /// Executes the interrupt service routine and returns the number of clocks used for this.
-    pub fn isr(&mut self, interrupt: Interrupt) -> u8 {
+    pub(crate) fn isr(&mut self, interrupt: Interrupt) -> u8 {
         // push pc onto stack
         self.push(self.cpu.pc);
 
