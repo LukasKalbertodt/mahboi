@@ -39,6 +39,9 @@ pub struct Machine {
     /// the request for doing this. This is the purpose of this variable.
     pub enable_interrupts_next_step: bool,
 
+    // TODO: HALT bug is not implemented!
+    // An incomplete version can be found in the previous commit (58dccd7).
+
     /// Indicates if the machine is in HALT mode. This mode can be exited in three ways:
     ///
     /// IME is set to true
@@ -53,11 +56,6 @@ pub struct Machine {
     ///
     /// [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
     pub halt: bool,
-
-    /// Indicates whether the halt bug occurs or not. This is necessary because the bug actually
-    /// occurs in the next cycle after the HALT instruction was executed. For more details see
-    /// chapter 4.10. of [1].
-    pub halt_bug: bool,
 }
 
 impl Machine {
@@ -78,7 +76,6 @@ impl Machine {
             cycle_counter: CycleCounter::zero(),
             enable_interrupts_next_step: false,
             halt: false,
-            halt_bug: false,
         }
     }
 

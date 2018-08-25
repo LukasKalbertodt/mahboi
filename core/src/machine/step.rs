@@ -32,6 +32,8 @@ impl Machine {
 
         // Variable initializsation
         let instr_start = self.cpu.pc;
+        let arg_byte = self.load_byte(instr_start + 1u16);
+        let arg_word = self.load_word(instr_start + 1u16);
         let op_code = self.load_byte(instr_start);
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
@@ -44,24 +46,7 @@ impl Machine {
                 );
             }
         };
-        let mut arg_offset = 1u16;
-        let mut pc_inc = instr.len as u16;
-
-        // If this step is affected by the HALT bug, act accordingly.
-        // For details see [`Machine::halt`].
-        if self.halt_bug {
-            // Reset HALT bug for next step
-            self.halt_bug = false;
-
-            // Do NOT increment the PC in this step
-            pc_inc = 0;
-
-            // TODO: Load crazy things in `arg_byte` and `arg_word`
-        }
-
-        let arg_byte = self.load_byte(instr_start + arg_offset);
-        let arg_word = self.load_word(instr_start + arg_offset);
-        self.cpu.pc += pc_inc;
+        self.cpu.pc += instr.len as u16;
 
         // ============================
         // ========== MACROS ==========
@@ -545,18 +530,7 @@ impl Machine {
             }
             opcode!("DI") => no_branch!(self.interrupt_controller.ime = false),
             opcode!("EI") => no_branch!(self.enable_interrupts_next_step = true),
-            opcode!("HALT") => {
-                // Check for HALT bug. See [`Machine::halt`] for details.
-                let halt_bug = !self.interrupt_controller.ime
-                    && self.interrupt_controller.is_interrupt_requested();
-                if halt_bug {
-                    self.halt_bug = true;
-                } else {
-                    self.halt = true;
-                }
-
-                false
-            },
+            opcode!("HALT") => no_branch!(self.halt = true),
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
