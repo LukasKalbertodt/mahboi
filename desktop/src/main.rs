@@ -67,7 +67,7 @@ fn run() -> Result<(), Error> {
     let mut window = NativeWindow::open(&args).context("failed to open window")?;
     info!("Opened window");
 
-    let mut is_paused = args.debug;
+    let mut is_paused = args.debug && !args.instant_start;
     while !window.should_stop() {
         // Update window buffer and read input.
         window.update()?;

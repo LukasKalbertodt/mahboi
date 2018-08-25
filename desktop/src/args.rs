@@ -37,6 +37,14 @@ pub(crate) struct Args {
             specified in hexadecimal.",
     )]
     pub(crate) breakpoints: Vec<Word>,
+
+    #[structopt(
+        long = "--instant-start",
+        requires = "debug",
+        help = "When starting in debugging mode, don't pause at the beginning, but start running \
+            right ahead (particularly useful in combination with `--breakpoints`)",
+    )]
+    pub(crate) instant_start: bool,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
