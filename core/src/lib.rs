@@ -65,10 +65,10 @@ impl Emulator {
 
             // Let the PPU run for the same number of cycles as the CPU did.
             for _ in 0..cycles_spent {
-                self.machine.ppu.step(peripherals.display());
-            }
-            if let Some(vector) = self.machine.ppu.should_interrupt() {
-                debug!("Interrupt at {}", vector);
+                self.machine.ppu.step(
+                    peripherals.display(),
+                    &mut self.machine.interrupt_controller,
+                );
             }
 
             self.machine.cycle_counter += cycles_spent;

@@ -1,8 +1,9 @@
 use crate::{
     env::Display,
-    log::*,
+    // log::*,
     primitives::{Byte, Word, Memory, PixelPos, PixelColor},
 };
+use super::interrupt::{InterruptController, Interrupt};
 
 
 /// Pixel processing unit.
@@ -160,11 +161,11 @@ impl Ppu {
                 self.status = Byte::new(v);
             },
             0xFF42 => {
-                debug!("[ppu] scroll_y set to {}", byte);
+                // debug!("[ppu] scroll_y set to {}", byte);
                 self.scroll_y = byte;
             }
             0xFF43 => {
-                debug!("[ppu] scroll_y set to {}", byte);
+                // debug!("[ppu] scroll_y set to {}", byte);
                 self.scroll_x = byte;
             }
             0xFF44 => {}, // read only
@@ -201,27 +202,18 @@ impl Ppu {
         self.status = Byte::new((self.status.get() & 0b1111_1000) | v);
     }
 
-    /// Checks if an interrupt should be triggered and if yes, returnes the
-    /// address of the interrupt vector.
-    pub(crate) fn should_interrupt(&self) -> Option<Byte> {
-        match (self.current_line.get(), self.cycle_in_line) {
-            // V-Blank interrupt
-            (144, 0) => Some(Byte::new(0x40)),
-
-            // TODO: other interrupts
-
-            _ => None,
-        }
-    }
-
     /// Executes one machine cycle (1 Mhz).
-    pub(crate) fn step(&mut self, display: &mut impl Display) {
+    pub(crate) fn step(
+        &mut self,
+        display: &mut impl Display,
+        interrupt_controller: &mut InterruptController,
+    ) {
         // Check if we're currently in V-Blank or not.
         if self.current_line.get() >= 144 {
             // ===== V-Blank =====
             if self.current_line == 144 && self.cycle_in_line == 0 {
                 self.set_phase(Phase::VBlank);
-                // TODO: trigger interrupt
+                interrupt_controller.request_interrupt(Interrupt::Vblank);
             }
         } else {
             // ===== Not in V-Blank =====
@@ -258,8 +250,6 @@ impl Ppu {
                 self.current_line = Byte::new(0);
             }
         }
-
-
     }
 
     /// Performs one step of the pixel transfer phase. This involves fetching

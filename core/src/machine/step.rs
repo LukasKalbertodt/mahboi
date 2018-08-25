@@ -12,6 +12,24 @@ use crate::{
 impl Machine {
     /// Executes one (the next) operation.
     pub(crate) fn step(&mut self) -> Result<u8, Disruption> {
+        // Check if an interrupt was requested
+        if let Some(interrupt) = self.interrupt_controller.should_interrupt() {
+            debug!("Interrupt triggered: {:?}", interrupt);
+
+            // push pc onto stack
+            self.push(self.cpu.pc);
+
+            // jump to address
+            self.cpu.pc = interrupt.addr();
+
+            // reset interrupts
+            self.interrupt_controller.ime = false;
+            self.interrupt_controller.reset_interrupt_flag(interrupt);
+
+            // It takes 20 clocks to dispatch an interrupt.
+            return Ok(20 / 4);
+        }
+
         // Variable initializsation (before macros, so they can be used there)
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
@@ -468,17 +486,14 @@ impl Machine {
 
                 false
             }
-            opcode!("PUSH BC") => {
-                self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, self.cpu.bc());
-
-                false
-            }
+            opcode!("PUSH BC") => no_branch!(self.push(self.cpu.bc())),
+            opcode!("PUSH DE") => no_branch!(self.push(self.cpu.de())),
+            opcode!("PUSH HL") => no_branch!(self.push(self.cpu.hl())),
+            opcode!("PUSH AF") => no_branch!(self.push(self.cpu.af())),
 
             // ========== CALL/RET ==========
             opcode!("CALL a16") => {
-                self.cpu.sp -= 2u16;
-                self.store_word(self.cpu.sp, self.cpu.pc);
+                self.push(self.cpu.pc);
                 self.cpu.pc = arg_word;
 
                 false
@@ -564,10 +579,10 @@ impl Machine {
             }
         };
 
-        let cycles_spent = if op_code.get() == opcode!("PREFIX CB") {
-            PREFIXED_INSTRUCTIONS[op_code].cycles
+        let clocks_spent = if op_code.get() == opcode!("PREFIX CB") {
+            PREFIXED_INSTRUCTIONS[op_code].clocks
         } else if action_taken {
-            match instr.cycles_taken {
+            match instr.clocks_taken {
                 Some(c) => c,
                 None => {
                     terminate!(
@@ -580,13 +595,12 @@ impl Machine {
                 }
             }
         } else {
-            instr.cycles
+            instr.clocks
         };
 
-        // Internally, we work with 4Mhz cycle counts. All instructions take a
-        // multiple of 4 many cycles. The rest of the emulator works with 1Mhz
-        // cycles, so we can simply divide by 4 to make the cycle count
-        // compatible.
-        Ok(cycles_spent / 4)
+        // Internally, we work with 4Mhz clocks. All instructions take a
+        // multiple of 4 many clocks. The rest of the emulator works with 1Mhz
+        // cycles, so we can simply divide by 4.
+        Ok(clocks_spent / 4)
     }
 }
