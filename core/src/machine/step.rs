@@ -520,6 +520,17 @@ impl Machine {
 
                 false
             }
+            opcode!("RETI") => {
+                // Return
+                let val = self.load_word(self.cpu.sp);
+                self.cpu.pc = val;
+                self.cpu.sp += 2u16;
+
+                // Enable interrupts
+                self.interrupt_controller.ime = true;
+
+                false
+            }
 
             // ========== miscellaneous ==========
             opcode!("RLA") => {
