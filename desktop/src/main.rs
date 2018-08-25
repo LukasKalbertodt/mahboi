@@ -45,12 +45,7 @@ fn run() -> Result<(), Error> {
 
     // Create the TUI debugger if we're in debug mode.
     let mut tui_debugger = if args.debug {
-        let debugger = TuiDebugger::new()?;
-        for &bp in &args.breakpoints {
-            debugger.breakpoints().add(bp);
-        }
-
-        Some(debugger)
+        Some(TuiDebugger::new(&args)?)
     } else {
         None
     };

@@ -29,6 +29,7 @@ use mahboi::{
     machine::{Cpu, Machine},
     primitives::Word,
 };
+use crate::args::Args;
 use super::{Action};
 use self::{
     asm_view::AsmView,
@@ -136,7 +137,7 @@ pub(crate) struct TuiDebugger {
 }
 
 impl TuiDebugger {
-    pub(crate) fn new() -> Result<Self, Error> {
+    pub(crate) fn new(args: &Args) -> Result<Self, Error> {
         // Create a handle to the terminal (with the correct backend).
         let mut siv = Cursive::ncurses();
 
@@ -181,14 +182,15 @@ impl TuiDebugger {
             pause_on_ret: false,
         };
 
+        // Add all breakpoints specified by CLI
+        for &bp in &args.breakpoints {
+            out.breakpoints.add(bp);
+        }
+
         // Build the TUI view
         out.setup_tui();
 
         Ok(out)
-    }
-
-    pub(crate) fn breakpoints(&self) -> &Breakpoints {
-        &self.breakpoints
     }
 
     /// Updates the debugger view and handles events. Should be called
