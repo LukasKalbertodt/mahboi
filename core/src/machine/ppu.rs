@@ -22,6 +22,7 @@ pub(crate) struct Ppu {
     /// boolean usually flips every cycle during pixel transfer.
     fetch_started: bool,
 
+    /// The first pixel of the next 8 pixel the fetcher need to fetch.
     fetch_offset: u8,
 
     /// ...
@@ -215,7 +216,7 @@ impl Ppu {
 
     /// Executes one machine cycle (1 Mhz).
     pub(crate) fn step(&mut self, display: &mut impl Display) {
-        // Check if we're currently in V-Blank or ont.
+        // Check if we're currently in V-Blank or not.
         if self.current_line.get() >= 144 {
             // ===== V-Blank =====
             if self.current_line == 144 && self.cycle_in_line == 0 {
@@ -229,7 +230,7 @@ impl Ppu {
                     // TODO: OAM Search
                 }
                 (20..144, col) if col < 160 => {
-                    self.fifo_step(display);
+                    self.pixel_transfer_step(display);
                 }
                 (43..144, _) => {
                     // TODO: H-Blank
@@ -242,41 +243,17 @@ impl Ppu {
             }
         }
 
-        // match (self.current_line.get(), self.cycle_in_line) {
-        //     // New line, we start OAM search
-        //     (0..144, 0..20) => {
-        //         // TODO: OAM Search
-        //         self.set_phase(Phase::OamSearch);
-        //     }
-
-        //     // End of OAM search
-        //     (0..144, 20..) => {
-        //         self.set_phase(Phase::PixelTransfer);
-        //     }
-
-        //     // TODO: hblank
-        //     // // End of pixel transfer. TODO: this is not fixed!
-        //     // (0..144, 63) => self.set_phase(Phase::HBlank),
-
-        //     // Drawn all lines, starting vblank
-        //     (144, 0) => {
-        //         self.set_phase(Phase::VBlank);
-        //         // TODO: Trigger interrupt
-        //     }
-
-        //     _ => {}
-        // }
-
-        // Update state/phase
+        // Update cycles and line
         self.cycle_in_line += 1;
         if self.cycle_in_line == 114 {
+            // Bump the line and reset a bunch of values.
             self.current_line += 1;
             self.cycle_in_line = 0;
             self.current_column = 0;
             self.fetch_offset = 0;
             self.fifo.clear();
-            // debug!("NEW LINE {} ---------------------------------------------", self.current_line);
 
+            // Reset line if we reached the last one.
             if self.current_line == 154 {
                 self.current_line = Byte::new(0);
             }
@@ -285,7 +262,9 @@ impl Ppu {
 
     }
 
-    fn fifo_step(&mut self, display: &mut impl Display) {
+    /// Performs one step of the pixel transfer phase. This involves fetching
+    /// new tile data and emitting the pixels.
+    fn pixel_transfer_step(&mut self, display: &mut impl Display) {
         // Push out up to four new pixels if we have enough data in the FIFO.
         let mut pixel_pushed = 0;
         while self.fifo.len() > 8 && pixel_pushed < 4 {
@@ -293,58 +272,46 @@ impl Ppu {
             pixel_pushed += 1;
         }
 
-        // Fetch new data. We need two steps to perform once fetch. We just
-        // don't do anything the first time `step()` except for setting
-        // `fetch_start = true`. The actual work is done in the second step.
+        // Fetch new data. We need two steps to perform one fetch. We just
+        // don't do anything the first time `step()` is called, except for
+        // setting `fetch_start = true`. The actual work is done in the second
+        // step.
         if !self.fetch_started {
             self.fetch_started = true;
         } else {
+            // TODO: it's a waste to calculate all of these positions every
+            // time again. The `y` value doesn't change for the whole line and
+            // the `x` value need to be calculate only once and can then be
+            // incremented by 1 after each fetch.
+
+            // The position of the first pixel we want to fetch in the
+            // background map.
             let pos_x = (self.scroll_x + self.fetch_offset).get();
             let pos_y = (self.scroll_y + self.current_line).get();
 
+            // Dividing by 8 and rounding down to get the position in the 32*32
+            // tile grid.
             let tile_x = pos_x / 8;
             let tile_y = pos_y / 8;
 
-            // Background map data is stored in: 0x9800 - 0x9BFF
+            // Background map data is stored in: 0x9800 - 0x9BFF. We have to
+            // lookup the index of our tile there.
             let background_addr = Word::new(0x9800 + tile_y as u16 * 32 + tile_x as u16);
-            let tile_id = self.load_vram_byte(background_addr);
+            let tile_idx = self.load_vram_byte(background_addr);
 
             // We calculate the start address of the tile we want to load from.
             // Each tile uses 16 bytes.
-            let tile_start = Word::new(0x8000 + tile_id.get() as u16 * 16);
+            let tile_start = Word::new(0x8000 + tile_idx.get() as u16 * 16);
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
             let line_offset = tile_start + 2 * (pos_y % 8);
-            let byte0 = self.load_vram_byte(line_offset).get();
-            let byte1 = self.load_vram_byte(line_offset + 1u8).get();
 
-            // The color number of each pixel is split between the bytes:
-            // `byte0` defines the lower bit of the color number, while `byte1`
-            // defines the upper bit.
-            // let new_pixels = [
-            //     ColorPattern::from_byte(((byte0 >> 7) & 0b1) | (((byte1 >> 7) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 6) & 0b1) | (((byte1 >> 6) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 5) & 0b1) | (((byte1 >> 5) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 4) & 0b1) | (((byte1 >> 4) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 3) & 0b1) | (((byte1 >> 3) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 2) & 0b1) | (((byte1 >> 2) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 1) & 0b1) | (((byte1 >> 1) & 0b1) << 1)),
-            //     ColorPattern::from_byte(((byte0 >> 0) & 0b1) | (((byte1 >> 0) & 0b1) << 1)),
-            // ];
-            // [(ColorPattern, PixelSource); 8]
-            let new_pixels = ((byte1 as u16) << 8) | (byte0 as u16);
-            // let new_pixels = 0
-            //     | ((byte0 >> 7) & 0b1) | (((byte1 >> 7) & 0b1) << 1)
-            //     | ((byte0 >> 6) & 0b1) | (((byte1 >> 6) & 0b1) << 1)
-            //     | ((byte0 >> 5) & 0b1) | (((byte1 >> 5) & 0b1) << 1)
-            //     | ((byte0 >> 4) & 0b1) | (((byte1 >> 4) & 0b1) << 1)
-            //     | ((byte0 >> 3) & 0b1) | (((byte1 >> 3) & 0b1) << 1)
-            //     | ((byte0 >> 2) & 0b1) | (((byte1 >> 2) & 0b1) << 1)
-            //     | ((byte0 >> 1) & 0b1) | (((byte1 >> 1) & 0b1) << 1)
-            //     | ((byte0 >> 0) & 0b1) | (((byte1 >> 0) & 0b1) << 1)
-            // ;
-            self.fifo.add_data(new_pixels, PixelSource::Background);
+            // Load the two bytes and add all pixels to the FIFO.
+            let lo = self.load_vram_byte(line_offset).get();
+            let hi = self.load_vram_byte(line_offset + 1u8).get();
+            self.fifo.add_data(hi, lo, PixelSource::Background);
+
             // if self.current_line == 0 {
             //     debug!(
             //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}\
@@ -364,12 +331,14 @@ impl Ppu {
             //     );
             // }
 
-            // Reset status flag
+            // Reset status flag and bump the fetch offset
             self.fetch_started = false;
             self.fetch_offset += 8;
         }
     }
 
+    /// Takes the first pixel from the pixel FIFO, calculate its real color (by
+    /// palette lookup) and writes that color to the display.
     fn push_pixel(&mut self, display: &mut impl Display) {
         // Converts the color number to a real color depending on the given
         // palette.
@@ -381,6 +350,7 @@ impl Ppu {
             PixelColor::from_greyscale(color)
         }
 
+        // Receive pixel data from the FIFO
         let (pattern, source) = self.fifo.emit();
 
         // Determine the correct palette
@@ -390,13 +360,14 @@ impl Ppu {
             PixelSource::Sprite1 => self.sprite_palette_1,
         };
 
+        // Convert to real color
         let color = pattern_to_color(pattern, palette);
+
+        // Write to display
         let pos = PixelPos::new(self.current_column, self.current_line.get());
         display.set_pixel(pos, color);
+
         self.current_column += 1;
-        // if pattern != ColorPattern::Pat00 {
-        //     debug!("[ppu] pushed pixel {:?} to pattern {:?}", pos, pattern);
-        // }
     }
 }
 
@@ -464,19 +435,22 @@ enum PixelSource {
 
 /// The pixel FIFO: stores pixels to be drawn on the LCD.
 ///
-/// The FIFO is stored in the fields `colors` and `sources`. Each logical
-/// element in the FIFO is a pair of a color number (0-3) and a source/palette
-/// (background = 0, sprite0 = 1 or sprite1 = 2). Both of these things can be
-/// encoded with 2 bits. The color number is encoded in `colors` and the source
-/// is encoded in `sources`. One logical element in the FIFO is made of 4 bits,
-/// two from `colors` and two from `sources`.
+/// The FIFO is stored in the fields `colors_hi`, `colors_lo` and `sources`.
+/// Each logical element in the FIFO is a pair of a color number (0-3) and a
+/// source/palette (background = 0, sprite0 = 1 or sprite1 = 2). Both of these
+/// things can be encoded with 2 bits. The source is encoded in `sources`. The
+/// color is encoded in `colors_hi` and `colors_lo`. The former stores the high
+/// bit of the two bit number, the latter the low bit.
 ///
-/// The following graph shows a completely-full FIFO. `cNN` and `sNN` refer to
-/// the NNth bit of `colors` and `sources` respectively.
+/// The following graph shows a completely-full FIFO. `hNN`, `lNN` and `sNN`
+/// refer to the NNth bit of `colors_hi`, `colors_lo` and `sources`
+/// respectively.
 ///
 /// ```ignore
 ///  ┌───────┬───────┬───────┬───────┬───────┬───────┬───────┐
-///  │c31&c30│c29&c28│c27&c26│  ...  │c05&c04│c03&c02│c01&c00│
+///  │  h15  │  h14  │  h13  │  ...  │  h02  │  h01  │  h00  │
+///  ├───────┼───────┼───────┼───────┼───────┼───────┼───────┤
+///  │  l15  │  l14  │  l13  │  ...  │  l02  │  l01  │  l00  │
 ///  ├───────┼───────┼───────┼───────┼───────┼───────┼───────┤
 ///  │s31&s30│s29&s28│s27&s26│  ...  │s05&s04│s03&s02│s01&s00│
 ///  └───────┴───────┴───────┴───────┴───────┴───────┴───────┘
@@ -484,13 +458,11 @@ enum PixelSource {
 ///    front                                            back
 /// ```
 ///
-/// The `len` field stores how many elements are currently in the queue. The
-/// last logical element is stored in bits `31 - len * 2` and `30 - len * 2` of
-/// `colors` and `sources`.
+/// The `len` field stores how many elements are currently in the queue.
 struct PixelFifo {
-    /// Unused bits are always 0.
-    colors: u32,
-    /// Unused bits are always 0.
+    // Unused bits in `colors_hi`, `colors_lo` and `sources` are always 0.
+    colors_hi: u16,
+    colors_lo: u16,
     sources: u32,
     len: usize,
 }
@@ -498,12 +470,14 @@ struct PixelFifo {
 impl PixelFifo {
     fn new() -> Self {
         Self {
-            colors: 0,
+            colors_hi: 0,
+            colors_lo: 0,
             sources: 0,
             len: 0,
         }
     }
 
+    /// Returns the current length of the FIFO.
     fn len(&self) -> u8 {
         self.len as u8
     }
@@ -524,7 +498,7 @@ impl PixelFifo {
         debug_assert!(self.len() > 0, "Called emit() on empty pixel FIFO");
 
         // Extract two bits each
-        let color = (self.colors >> 30) as u8;
+        let color = ((self.colors_hi >> 14) & 0b10) | (self.colors_lo >> 15);
         let palette = match self.sources >> 30 {
             0 => PixelSource::Background,
             1 => PixelSource::Sprite0,
@@ -533,21 +507,23 @@ impl PixelFifo {
         };
 
         // Shift FIFO to the left and reduce len
-        self.colors <<= 2;
+        self.colors_hi <<= 1;
+        self.colors_lo <<= 1;
         self.sources <<= 2;
         self.len -= 1;
 
-        (color, palette)
+        (color as u8, palette)
     }
 
     /// Adds data for 8 pixels.
     ///
-    /// The color data has to be encoded like the FIFO itself. See the main doc
-    /// comment for more information.
+    /// The color data for the new pixels have to be encoded in two separate
+    /// bytes: `colors_hi` contains all the high bits and `color_lo` all the
+    /// low bits. This means that pixel 7 is: `(hi & 1) * 2 + (lo & 1)`.
     ///
     /// If this function is called when the FIFO has less than 8 free spots, it
     /// panics in debug mode. In release mode, the behavior is unspecified.
-    fn add_data(&mut self, colors: u16, source: PixelSource) {
+    fn add_data(&mut self, colors_hi: u8, colors_lo: u8, source: PixelSource) {
         debug_assert!(self.len() <= 8, "called `add_data` for pixel FIFO with more than 8 pixels");
 
         // Build the 16 bit value from the single source.
@@ -557,9 +533,10 @@ impl PixelFifo {
         sources |= sources << 8;
 
         // Add the data at the correct position and increase the length
-        let shift_by = 16 - self.len * 2;
-        self.colors |= (colors as u32) << shift_by;
-        self.sources |= (sources as u32) << shift_by;
+        let shift_by = 8 - self.len;
+        self.colors_hi |= (colors_hi as u16) << shift_by;
+        self.colors_lo |= (colors_lo as u16) << shift_by;
+        self.sources |= (sources as u32) << (shift_by * 2);
         self.len += 8;
     }
 }
@@ -574,40 +551,18 @@ mod tests {
         let mut fifo = PixelFifo::new();
         assert_eq!(fifo.len(), 0);
 
-        let new_pixels = 0b00_01_10_11_01_00_11_10u16;
-        fifo.add_data(new_pixels, PixelSource::Background);
+        let color_hi = 0b00_11_00_11u8;
+        let color_lo = 0b01_01_10_10u8;
+        fifo.add_data(color_hi, color_lo, PixelSource::Background);
         assert_eq!(fifo.len(), 8);
 
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b00);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b01);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b10);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b11);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b01);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b00);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b11);
-        assert_eq!(palette, PixelSource::Background);
-
-        let (color, palette) = fifo.emit();
-        assert_eq!(color, 0b10);
-        assert_eq!(palette, PixelSource::Background);
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
     }
 }

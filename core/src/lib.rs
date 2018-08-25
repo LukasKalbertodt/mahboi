@@ -68,7 +68,7 @@ impl Emulator {
                 self.machine.ppu.step(peripherals.display());
             }
             if let Some(vector) = self.machine.ppu.should_interrupt() {
-                // debug!("Interrupt at {}", vector);
+                debug!("Interrupt at {}", vector);
             }
 
             self.machine.cycle_counter += cycles_spent;
