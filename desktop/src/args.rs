@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use minifb::Scale;
 use structopt::StructOpt;
-use std::path::PathBuf;
+
+use mahboi::primitives::Word;
 
 
 #[derive(Debug, StructOpt)]
@@ -25,6 +28,15 @@ pub(crate) struct Args {
         help = "Path to the ROM that should be loaded into the emulator.",
     )]
     pub(crate) path_to_rom: PathBuf,
+
+    #[structopt(
+        long = "--breakpoints",
+        parse(try_from_str = "parse_breakpoint"),
+        requires = "debug",
+        help = "Breakpoint that is added to the debugger at the very beginning. Breakpoints are \
+            specified in hexadecimal.",
+    )]
+    pub(crate) breakpoints: Vec<Word>,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
@@ -38,4 +50,10 @@ fn parse_scale(src: &str) -> Result<Scale, &'static str> {
         "fit" => Ok(Scale::FitScreen),
         _ => Err("only '1', '2', '4', '8', '16', '32' or 'fit' are allowed"),
     }
+}
+
+fn parse_breakpoint(src: &str) -> Result<Word, String> {
+    u16::from_str_radix(src, 16)
+        .map(Word::new)
+        .map_err(|e| format!("failed to parse breakpoint: {}", e))
 }
