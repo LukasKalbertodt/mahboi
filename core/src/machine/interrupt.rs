@@ -1,40 +1,43 @@
 use crate::primitives::{Byte, Word};
 
 
+/// Manages the IE and IF register as well as the IME flag. This type is also responsible for
+/// requesting interrupts and giving information about when an interrupt should be executed.
 pub struct InterruptController {
-    // Register to enable certain interrupts. The bits in the register belong to the following
-    // interrupts:
-    //   7   6   5   4   3   2   1   0    <- Bits
-    // +---+---+---+---+---+---+---+---+
-    // | X | X | X |   |   |   |   |   |
-    // +---+---+---+---+---+---+---+---+
-    //                               ↑
-    //                           ↑   +---- V-Blank
-    //                       ↑   +---- LCD STAT
-    //                   ↑   +---- Timer
-    //               ↑   +---- Serial
-    //               +---- Joypad
+    /// Register to enable certain interrupts. The bits in the register belong to the following
+    /// interrupts:
+    ///   7   6   5   4   3   2   1   0    <- Bits
+    /// +---+---+---+---+---+---+---+---+
+    /// | X | X | X |   |   |   |   |   |
+    /// +---+---+---+---+---+---+---+---+
+    ///                               ↑
+    ///                           ↑   +---- V-Blank
+    ///                       ↑   +---- LCD STAT
+    ///                   ↑   +---- Timer
+    ///               ↑   +---- Serial
+    ///               +---- Joypad
     pub interrupt_enable: Byte,
 
-    // Register to request certain interrupts. The bit <-> interrupt relation in this register
-    // is the same as in `interrupt_enable`.
+    /// Register to request certain interrupts. The bit <-> interrupt relation in this register
+    /// is the same as in `interrupt_enable`.
     interrupt_flag: Byte,
 
-    // Interrupt master enable (controlled by DI and EI instructions)
+    /// Interrupt master enable (controlled by DI and EI instructions)
     pub ime: bool,
 }
 
 impl InterruptController {
     pub(crate) fn new() -> Self {
         InterruptController {
+            // TODO: Check if this initialization is correct
             interrupt_enable: Byte::zero(),
             interrupt_flag: Byte::zero(),
             ime: false,
         }
     }
 
-    /// Convenience method to check if an interrupt should be triggered. This method returns the
-    /// address where the requested ISR starts.
+    /// Checks if an interrupt should be triggered and returns that interrupt or `None` if
+    /// no interrupt should be triggered.
     pub(crate) fn should_interrupt(&self) -> Option<Interrupt> {
         if !self.ime {
             return None;
@@ -117,6 +120,7 @@ pub(crate) enum Interrupt {
 }
 
 impl Interrupt {
+    /// Returns the address of the interrupt service routine used by this interrupt.
     pub(crate) fn addr(&self) -> Word {
         match self {
             Interrupt::Vblank => Word::new(0x40),
