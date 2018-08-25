@@ -78,7 +78,7 @@ impl InterruptController {
     }
 
     /// Returns the IF register.
-    pub(crate) fn get_if(&self) -> Byte {
+    pub(crate) fn load_if(&self) -> Byte {
         // Only the 5 lower bits of this register are (R/W), the others return '1'
         // always when read.
         let v = (self.interrupt_flag.get() & 0b0001_1111) | 0b1110_0000;
@@ -86,7 +86,7 @@ impl InterruptController {
     }
 
     /// Sets the given byte to the IF register.
-    pub(crate) fn set_if(&mut self, byte: Byte) {
+    pub(crate) fn store_if(&mut self, byte: Byte) {
         // Only the 5 lower bits of this register are (R/W).
         let v = byte.get() & 0b0001_1111;
         self.interrupt_flag = Byte::new(v);
