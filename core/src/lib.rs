@@ -78,7 +78,6 @@ impl Emulator {
         }
 
         Ok(())
-        // Err(Disruption::Paused)
     }
 }
 

@@ -16,7 +16,7 @@ pub(crate) struct Ppu {
 
 
 
-    // ===== State of the pixel FIFO ======
+    // ===== State of the pixel transfer operation ======
     fifo: PixelFifo,
 
     /// Stores whether or not an fetch operation has already been started. This
@@ -366,21 +366,21 @@ impl Ppu {
 /// Breakdown of one frame:
 ///
 /// ```ignore
-///   ___|-- 20 cycles --|------- 43+ cycles -------|----------- 51- cycles -----------|
-///    |                 |                          |                                  |
-///    |                 |                             |                               |
-///    |                 |                           |                                 |
-///  144       OAM       |         Pixel                 |         H-Blank             |
-/// lines     Search     |        Transfer          |                                  |
-///    |                 |                            |                                |
-///    |                 |                             |                               |
-///    |                 |                          |                                  |
-///   -+-----------------+--------------------------+----------------------------------+
-///    |                                                                               |
-///   10                                  V-Blank                                      |
-/// lines                                                                              |
-///    |                                                                               |
-///    +-------------------------------------------------------------------------------+
+///    ┌── 20 cycles ──┬─────── 43+ cycles ───────┬─────────── 51- cycles ───────────┐
+///    │               │                          |                                  │
+///    │               │                             │                               │
+///    │               │                           │                                 │
+///  144      OAM      │         Pixel                 │         H-Blank             │
+/// lines    Search    │        Transfer          │                                  │
+///    │               │                            │                                │
+///    │               │                             │                               │
+///    │               │                          │                                  │
+///    ├───────────────┴──────────────────────────┴──────────────────────────────────┤
+///    │                                                                             │
+///   10                                V-Blank                                      │
+/// lines                                                                            │
+///    │                                                                             │
+///    └─────────────────────────────────────────────────────────────────────────────┘
 /// ```
 ///
 /// All cycles are machine-cycles (1 Mhz = 1_048_576). Pixel transfer can vary
