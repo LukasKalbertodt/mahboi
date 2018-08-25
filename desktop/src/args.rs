@@ -34,7 +34,9 @@ pub(crate) struct Args {
         parse(try_from_str = "parse_breakpoint"),
         requires = "debug",
         help = "Breakpoint that is added to the debugger at the very beginning. Breakpoints are \
-            specified in hexadecimal.",
+            specified in hexadecimal. To add multiple breakpoints, you can either list them after \
+            one `--breakpoints` flag or specify `--breakpoints` multiple times. Example: \
+            `--breakpoints 23 FF --breakpoints 10B`.",
     )]
     pub(crate) breakpoints: Vec<Word>,
 
@@ -63,5 +65,9 @@ fn parse_scale(src: &str) -> Result<Scale, &'static str> {
 fn parse_breakpoint(src: &str) -> Result<Word, String> {
     u16::from_str_radix(src, 16)
         .map(Word::new)
-        .map_err(|e| format!("failed to parse breakpoint: {}", e))
+        .map_err(|e| format!(
+            "failed to parse breakpoint: {} (values like '1f' are valid -- no \
+                leading `0x`!)",
+            e,
+        ))
 }
