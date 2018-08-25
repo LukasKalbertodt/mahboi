@@ -7,13 +7,23 @@ matrix:
     - name: "Check style"
       language: generic
       script: ./ci/check-basic-style.sh
-    - name: "Compile & Test"
+    - name: "Compile & Test Desktop"
       language: rust
       rust: nightly
       env:
         - RUSTFLAGS="--deny warnings"
+      before_script:
+        - sudo apt-get install xorg-dev
+      script:
+        - cargo build --verbose -p mahboi -p mahboi-desktop
+        - cargo test --verbose -p mahboi -p mahboi-desktop
       # speeds up travis build
       cache: cargo
+    - name: "Compile & Test WASM"
+      language: rust
+      rust: nightly
+      env:
+        - RUSTFLAGS="--deny warnings"
       before_script:
         - sudo apt-get install xorg-dev nodejs npm
         - hash cargo-script 2>/dev/null || cargo install -f cargo-script
@@ -22,6 +32,8 @@ matrix:
         - npm config set strict-ssl false # because some random NPM error... uhg
         - sudo npm install -g typescript
       script:
-        - cargo build --verbose
-        - cargo test --verbose
+        - cargo build --verbose -p mahboi -p mahboi-web
+        - cargo test --verbose  -p mahboi -p mahboi-web
         - cd web && ./build-all.rs
+      # speeds up travis build
+      cache: cargo
