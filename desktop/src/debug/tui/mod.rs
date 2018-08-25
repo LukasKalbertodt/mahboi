@@ -181,6 +181,10 @@ impl TuiDebugger {
         Ok(out)
     }
 
+    pub(crate) fn breakpoints(&self) -> &Breakpoints {
+        &self.breakpoints
+    }
+
     /// Updates the debugger view and handles events. Should be called
     /// regularly.
     ///
@@ -554,7 +558,7 @@ impl TuiDebugger {
 /// easily usable from everywhere. Just `clone()` this to get another owned
 /// reference.
 #[derive(Clone)]
-struct Breakpoints(Rc<RefCell<BTreeSet<Word>>>);
+pub(crate) struct Breakpoints(Rc<RefCell<BTreeSet<Word>>>);
 
 impl Breakpoints {
     fn new() -> Self {
@@ -563,7 +567,7 @@ impl Breakpoints {
 
     /// Add a breakpoint to the collection. If it's already inside, nothing
     /// happens.
-    fn add(&self, addr: Word) {
+    pub(crate) fn add(&self, addr: Word) {
         self.0.borrow_mut().insert(addr);
     }
 
