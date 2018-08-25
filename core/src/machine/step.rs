@@ -63,19 +63,13 @@ impl Machine {
             self.enable_interrupts_next_step = false;
         }
 
+        // Check if a branch was taken in the opcode. This needs to be set by opcodes which have
+        // a `Some` in their `clocks_taken` field.
+        let mut action_taken: Option<bool> = None;
+
         // ============================
         // ========== MACROS ==========
         // ============================
-
-        /// This is a convenience macro for all single line instructions. This basically adds
-        /// the false return value.
-        macro_rules! no_branch {
-            ($x:expr) => {{
-                $x;
-
-                false
-            }};
-        }
 
         /// This is a template macro for all DEC instructions. Which can be used by passing
         /// the register in which should be decremented.
@@ -84,8 +78,6 @@ impl Machine {
                 let (_, half_carry) = $x.sub_with_carries(Byte::new(1));
                 let zero = $x == 0;
                 set_flags!(self.cpu.f => zero 1 half_carry -);
-
-                false
             }}
         }
 
@@ -96,8 +88,6 @@ impl Machine {
                 let (_, half_carry) = $x.add_with_carries(Byte::new(1));
                 let zero = $x == 0;
                 set_flags!(self.cpu.f => zero 0 half_carry -);
-
-                false
             }}
         }
 
@@ -107,8 +97,6 @@ impl Machine {
                 let (carry, half_carry) = self.cpu.a.sub_with_carries($x);
                 let zero = self.cpu.a == Byte::zero();
                 set_flags!(self.cpu.f => zero 1 half_carry carry);
-
-                false
             }}
         }
 
@@ -116,7 +104,7 @@ impl Machine {
         macro_rules! sbc {
             ($x:expr) => {{
                 let val = $x - (self.cpu.carry() as u8);
-                sub!(val)
+                sub!(val);
             }}
         }
 
@@ -126,8 +114,6 @@ impl Machine {
                 let (carry, half_carry) = self.cpu.a.add_with_carries($x);
                 let zero = self.cpu.a == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 half_carry carry);
-
-                false
             }}
         }
 
@@ -145,8 +131,6 @@ impl Machine {
                 self.cpu.a &= $x;
                 let zero = self.cpu.a == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 1 0);
-
-                false
             }}
         }
 
@@ -156,8 +140,6 @@ impl Machine {
                 self.cpu.a ^= $x;
                 let zero = self.cpu.a == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 0);
-
-                false
             }}
         }
 
@@ -167,8 +149,6 @@ impl Machine {
                 self.cpu.a |= $x;
                 let zero = self.cpu.a == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 0);
-
-                false
             }}
         }
 
@@ -181,8 +161,6 @@ impl Machine {
                 let (carry, half_carry) = copy.sub_with_carries($x);
                 let zero = copy == Byte::zero();
                 set_flags!(self.cpu.f => zero 1 half_carry carry);
-
-                false
             }}
         }
 
@@ -190,26 +168,22 @@ impl Machine {
         /// B, C, A, E, L, D, H). Which can be used by passing the register
         /// to which `arg_byte` should be loaded (e.g.: `ld_d8!(self.cpu.a);`).
         macro_rules! ld_d8 {
-            ($x:expr) => {{
-                $x = arg_byte;
-
-                false
-            }}
+            ($x:expr) => {
+                $x = arg_byte
+            }
         }
 
         /// This is a template macro for all LD r, s instructions (where `r` and `s` can be one of:
         /// B, C, A, E, L, D, H). Which can be used by passing the registers in
         /// (e.g.: `ld!(self.cpu.a, self.cpu.b);`).
         macro_rules! ld {
-            ($lhs:expr, $rhs:expr) => {{
-                $lhs = $rhs;
-
-                false
-            }}
+            ($lhs:expr, $rhs:expr) => {
+                $lhs = $rhs
+            }
         }
 
         // Execute the fetched instruction
-        let action_taken = match op_code.get() {
+        match op_code.get() {
             // ========== LD ==========
             opcode!("LD B, d8") => ld_d8!(self.cpu.b),
             opcode!("LD C, d8") => ld_d8!(self.cpu.c),
@@ -282,74 +256,46 @@ impl Machine {
             opcode!("LD A, (HL)")   => ld!(self.cpu.a, self.load_hl()),
             opcode!("LD A, A")      => ld!(self.cpu.a, self.cpu.a),
 
-            opcode!("LD (HL), B") => no_branch!(self.store_hl(self.cpu.b)),
-            opcode!("LD (HL), C") => no_branch!(self.store_hl(self.cpu.c)),
-            opcode!("LD (HL), D") => no_branch!(self.store_hl(self.cpu.d)),
-            opcode!("LD (HL), E") => no_branch!(self.store_hl(self.cpu.e)),
-            opcode!("LD (HL), H") => no_branch!(self.store_hl(self.cpu.h)),
-            opcode!("LD (HL), L") => no_branch!(self.store_hl(self.cpu.l)),
-            opcode!("LD (HL), A") => no_branch!(self.store_hl(self.cpu.a)),
+            opcode!("LD (HL), B") => self.store_hl(self.cpu.b),
+            opcode!("LD (HL), C") => self.store_hl(self.cpu.c),
+            opcode!("LD (HL), D") => self.store_hl(self.cpu.d),
+            opcode!("LD (HL), E") => self.store_hl(self.cpu.e),
+            opcode!("LD (HL), H") => self.store_hl(self.cpu.h),
+            opcode!("LD (HL), L") => self.store_hl(self.cpu.l),
+            opcode!("LD (HL), A") => self.store_hl(self.cpu.a),
 
             opcode!("LD A, (DE)") => {
                 let val = self.load_byte(self.cpu.de());
                 self.cpu.a = val;
-
-                false
             }
 
-            opcode!("LD HL, d16") => {
-                self.cpu.set_hl(arg_word);
-
-                false
-            }
-            opcode!("LD DE, d16") => {
-                self.cpu.set_de(arg_word);
-
-                false
-            }
-            opcode!("LD SP, d16") => {
-                self.cpu.sp = arg_word;
-
-                false
-            }
+            opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
+            opcode!("LD DE, d16") => self.cpu.set_de(arg_word),
+            opcode!("LD SP, d16") => self.cpu.sp = arg_word,
 
             opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
-
-                false
             }
-            opcode!("LD (a16), A") => {
-                self.store_byte(arg_word, self.cpu.a);
-
-                false
-            }
+            opcode!("LD (a16), A") => self.store_byte(arg_word, self.cpu.a),
             opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
                 self.store_byte(dst, self.cpu.a);
-
-                false
             }
             opcode!("LDH A, (a8)") => {
                 let src = Word::new(0xFF00) + arg_byte;
                 self.cpu.a = self.load_byte(src);
-
-                false
             }
 
             opcode!("LD (HL+), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst + 1u16);
-
-                false
             }
             opcode!("LD (HL-), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst - 1);
-
-                false
             }
 
             // ========== DEC ==========
@@ -361,10 +307,10 @@ impl Machine {
             opcode!("DEC L") => dec!(self.cpu.l),
             opcode!("DEC A") => dec!(self.cpu.a),
 
-            opcode!("DEC BC") => no_branch!(self.cpu.set_bc(self.cpu.bc() - 1u16)),
-            opcode!("DEC DE") => no_branch!(self.cpu.set_de(self.cpu.de() - 1u16)),
-            opcode!("DEC HL") => no_branch!(self.cpu.set_hl(self.cpu.hl() - 1u16)),
-            opcode!("DEC SP") => no_branch!(self.cpu.sp -= 1u16),
+            opcode!("DEC BC") => self.cpu.set_bc(self.cpu.bc() - 1u16),
+            opcode!("DEC DE") => self.cpu.set_de(self.cpu.de() - 1u16),
+            opcode!("DEC HL") => self.cpu.set_hl(self.cpu.hl() - 1u16),
+            opcode!("DEC SP") => self.cpu.sp -= 1u16,
 
             // ========== INC ==========
             opcode!("INC B") => inc!(self.cpu.b),
@@ -375,10 +321,10 @@ impl Machine {
             opcode!("INC L") => inc!(self.cpu.l),
             opcode!("INC A") => inc!(self.cpu.a),
 
-            opcode!("INC BC") => no_branch!(self.cpu.set_bc(self.cpu.bc() + 1u16)),
-            opcode!("INC DE") => no_branch!(self.cpu.set_de(self.cpu.de() + 1u16)),
-            opcode!("INC HL") => no_branch!(self.cpu.set_hl(self.cpu.hl() + 1u16)),
-            opcode!("INC SP") => no_branch!(self.cpu.sp += 1u16),
+            opcode!("INC BC") => self.cpu.set_bc(self.cpu.bc() + 1u16),
+            opcode!("INC DE") => self.cpu.set_de(self.cpu.de() + 1u16),
+            opcode!("INC HL") => self.cpu.set_hl(self.cpu.hl() + 1u16),
+            opcode!("INC SP") => self.cpu.sp += 1u16,
 
             // ========== ADD ==========
             opcode!("ADD A, B")     => add!(self.cpu.b),
@@ -469,27 +415,21 @@ impl Machine {
             opcode!("CP d8")   => cp!(arg_byte),
 
             // ========== JR ==========
-            opcode!("JR r8") => {
-                self.cpu.pc += arg_byte.get() as i8;
-
-                false
-            }
+            opcode!("JR r8") => self.cpu.pc += arg_byte.get() as i8,
             opcode!("JR NZ, r8") => {
                 if !self.cpu.zero() {
                     self.cpu.pc += arg_byte.get() as i8;
-
-                    true
+                    action_taken = Some(true);
                 } else {
-                    false
+                    action_taken = Some(false);
                 }
             }
             opcode!("JR Z, r8") => {
                 if self.cpu.zero() {
                     self.cpu.pc += arg_byte.get() as i8;
-
-                    true
+                    action_taken = Some(true);
                 } else {
-                    false
+                    action_taken = Some(false);
                 }
             }
 
@@ -498,27 +438,21 @@ impl Machine {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.sp += 2u16;
                 self.cpu.set_bc(val);
-
-                false
             }
-            opcode!("PUSH BC") => no_branch!(self.push(self.cpu.bc())),
-            opcode!("PUSH DE") => no_branch!(self.push(self.cpu.de())),
-            opcode!("PUSH HL") => no_branch!(self.push(self.cpu.hl())),
-            opcode!("PUSH AF") => no_branch!(self.push(self.cpu.af())),
+            opcode!("PUSH BC") => self.push(self.cpu.bc()),
+            opcode!("PUSH DE") => self.push(self.cpu.de()),
+            opcode!("PUSH HL") => self.push(self.cpu.hl()),
+            opcode!("PUSH AF") => self.push(self.cpu.af()),
 
             // ========== CALL/RET ==========
             opcode!("CALL a16") => {
                 self.push(self.cpu.pc);
                 self.cpu.pc = arg_word;
-
-                false
             }
             opcode!("RET") => {
                 let val = self.load_word(self.cpu.sp);
                 self.cpu.pc = val;
                 self.cpu.sp += 2u16;
-
-                false
             }
             opcode!("RETI") => {
                 // Return
@@ -528,20 +462,16 @@ impl Machine {
 
                 // Enable interrupts
                 self.interrupt_controller.ime = true;
-
-                false
             }
 
             // ========== miscellaneous ==========
             opcode!("RLA") => {
                 let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
                 set_flags!(self.cpu.f => 0 0 0 carry);
-
-                false
             }
-            opcode!("DI") => no_branch!(self.interrupt_controller.ime = false),
-            opcode!("EI") => no_branch!(self.enable_interrupts_next_step = true),
-            opcode!("HALT") => no_branch!(self.halt = true),
+            opcode!("DI") => self.interrupt_controller.ime = false,
+            opcode!("EI") => self.enable_interrupts_next_step = true,
+            opcode!("HALT") => self.halt = true,
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
@@ -568,9 +498,6 @@ impl Machine {
                             "Template:\n\
                             prefixed_opcode!(\"{}\") => {{\
                             \n\
-                            \n\
-                            \n\
-                            false\n\
                             }}",
                             instr.mnemonic,
                         );
@@ -583,8 +510,6 @@ impl Machine {
                         );
                     }
                 }
-
-                false
             }
 
             _ => {
@@ -592,9 +517,6 @@ impl Machine {
                     "Template:\n\
                     opcode!(\"{}\") => {{\
                     \n\
-                    \n\
-                    \n\
-                    false\n\
                     }}",
                     instr.mnemonic,
                 );
@@ -606,6 +528,25 @@ impl Machine {
                     self.cycle_counter,
                 );
             }
+        }
+
+        // Unwrap the action_taken `Option` to check, if it was set when we get a branch instruction
+        let action_taken = match instr.clocks_taken {
+            Some(_) => {
+                match action_taken {
+                    Some(t) => t,
+                    None => {
+                        terminate!(
+                            "action_taken not set for branch instruction {:?} in position: \
+                                {} after: {} cycles!",
+                            instr,
+                            instr_start,
+                            self.cycle_counter,
+                        );
+                    },
+                }
+            },
+            None => false,
         };
 
         let clocks_spent = if op_code.get() == opcode!("PREFIX CB") {
