@@ -1,6 +1,6 @@
 //! Instruction data.
 //!
-//! This module contains some basic information like size and cycle count for
+//! This module contains some basic information like size and clock count for
 //! all instructions. It is stored in two 256-element long arrays -- one for
 //! the main instructions and one for all PREFIX CB instructions.
 
@@ -30,15 +30,15 @@ pub struct Instr {
     /// Length in bytes
     pub len: u8,
 
-    /// CPU cylces
-    pub cycles: u8,
+    /// CPU clocks (4 Mhz steps - 1 Mhz steps are called cycles)
+    pub clocks: u8,
 
-    /// CPU cylces, if branch is taken.
+    /// CPU clocks, if branch is taken.
     ///
     /// This is only set for instructions that have to decide something and
     /// only sometimes perform an operation (conditional jumps, mostly). If the
-    /// branch/action is not taken, `cycles` is the correct value.
-    pub cycles_taken: Option<u8>,
+    /// branch/action is not taken, `clocks` is the correct value.
+    pub clocks_taken: Option<u8>,
 }
 
 impl Instr {
@@ -46,15 +46,15 @@ impl Instr {
         opcode: u8,
         mnemonic: &'static str,
         len: u8,
-        cycles: u8,
-        cycles_taken: Option<u8>,
+        clocks: u8,
+        clocks_taken: Option<u8>,
     ) -> Option<Self> {
         Some(Instr {
             opcode: Byte::new(opcode),
             mnemonic,
             len,
-            cycles,
-            cycles_taken,
+            clocks,
+            clocks_taken,
         })
     }
 
@@ -62,15 +62,15 @@ impl Instr {
         opcode: u8,
         mnemonic: &'static str,
         len: u8,
-        cycles: u8,
-        cycles_taken: Option<u8>,
+        clocks: u8,
+        clocks_taken: Option<u8>,
     ) -> Self {
         Instr {
             opcode: Byte::new(opcode),
             mnemonic,
             len,
-            cycles,
-            cycles_taken,
+            clocks,
+            clocks_taken,
         }
     }
 }
@@ -91,8 +91,8 @@ impl<T> Index<Byte> for InstrDb<T> {
 /// Entries with the value `None` are invalid opcodes.
 ///
 /// Regarding the special CB PREFIX instructions: in this array it has a len
-/// and cycle number of 0. In the cheat sheet, those values are stated as 1 and
-/// 4 respectively. This is wrong in a sense: the length/cycle values for all
+/// and clock number of 0. In the cheat sheet, those values are stated as 1 and
+/// 4 respectively. This is wrong in a sense: the length/clock values for all
 /// CB-instructions in `PREFIXED_INSTRUCTIONS` already contains the total
 /// value. The actual prefix doesn't add anything.
 pub const INSTRUCTIONS: InstrDb<Option<Instr>> = InstrDb([
