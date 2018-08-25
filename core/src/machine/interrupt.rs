@@ -43,6 +43,12 @@ impl InterruptController {
             return None;
         }
 
+        self.requested_interrupt()
+    }
+
+    /// Returns an interrupt if one is requested and enabled regardless if the IME is set,
+    /// otherwise it returns `None`.
+    pub(crate) fn requested_interrupt(&self) -> Option<Interrupt> {
         // Convert IE and IF register to u8 and bitwise and them both, to check, if the interrupt
         // was enabled AND requested, then mask them, to get the 5 lowest bits.
         let interrupt_enable = self.interrupt_enable.get();
@@ -58,6 +64,15 @@ impl InterruptController {
             () if (0b0000_1000 & masked_interrupts) == 1 => Some(Interrupt::Serial),
             () if (0b0001_0000 & masked_interrupts) == 1 => Some(Interrupt::Joypad),
             _ => None,
+        }
+    }
+
+    /// Returns true, if at least one interrupt is enabled and requested regardless if the IME is
+    /// set, otherwise it returns `false`.
+    pub(crate) fn is_interrupt_requested(&self) -> bool {
+        match self.requested_interrupt() {
+            None => false,
+            _ => true,
         }
     }
 
