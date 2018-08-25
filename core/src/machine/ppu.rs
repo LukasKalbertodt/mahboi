@@ -304,8 +304,9 @@ impl Ppu {
 
             // if self.current_line == 0 {
             //     debug!(
-            //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}\
-            //             , bg_addr: {}, tile_id: {}, tile_start: {}, line_offset: {}, new FIFO len: {}",
+            //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, \
+            //             scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}, bg_addr: {}, \
+            //             tile_id: {}, tile_start: {}, line_offset: {}, new FIFO len: {}",
             //         self.current_column,
             //         pos_x,
             //         pos_y,
