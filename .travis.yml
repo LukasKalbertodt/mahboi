@@ -3,6 +3,8 @@
 # - "Compile & Test": this actually needs Rust and compiles everything
 matrix:
   fast_finish: true
+  allow_failures:
+    - name: "Compile & Test WASM"
   include:
     - name: "Check style"
       language: generic
