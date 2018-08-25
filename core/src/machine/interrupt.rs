@@ -63,17 +63,16 @@ impl InterruptController {
 
     /// Resets the corresponding flag in the IF register for the given interrupt.
     pub(crate) fn reset_interrupt_flag(&mut self, interrupt: Interrupt) {
-        let mut mask_bit = |mask: u8| {
-            let v = self.interrupt_flag.get() & mask;
-            self.interrupt_flag = Byte::new(v);
+        let mut reset_bit = |mask: u8| {
+            self.interrupt_flag = self.interrupt_flag.map(|b| b & mask);
         };
 
         match interrupt {
-            Interrupt::Vblank => mask_bit(0b0001_1110),
-            Interrupt::LcdStat => mask_bit(0b0001_1101),
-            Interrupt::Timer => mask_bit(0b0001_1011),
-            Interrupt::Serial => mask_bit(0b0001_0111),
-            Interrupt::Joypad => mask_bit(0b0000_1111),
+            Interrupt::Vblank => reset_bit(0b0001_1110),
+            Interrupt::LcdStat => reset_bit(0b0001_1101),
+            Interrupt::Timer => reset_bit(0b0001_1011),
+            Interrupt::Serial => reset_bit(0b0001_0111),
+            Interrupt::Joypad => reset_bit(0b0000_1111),
         };
     }
 
@@ -81,30 +80,27 @@ impl InterruptController {
     pub(crate) fn load_if(&self) -> Byte {
         // Only the 5 lower bits of this register are (R/W), the others return '1'
         // always when read.
-        let v = (self.interrupt_flag.get() & 0b0001_1111) | 0b1110_0000;
-        Byte::new(v)
+        self.interrupt_flag.map(|b| b | 0b1110_0000)
     }
 
     /// Sets the given byte to the IF register.
     pub(crate) fn store_if(&mut self, byte: Byte) {
         // Only the 5 lower bits of this register are (R/W).
-        let v = byte.get() & 0b0001_1111;
-        self.interrupt_flag = Byte::new(v);
+        self.interrupt_flag = byte.map(|b| b & 0b0001_1111);
     }
 
     /// This requests the given interrupt by setting the corresponding IF register bit.
     pub(crate) fn request_interrupt(&mut self, interrupt: Interrupt) {
-        let mut mask_bit = |mask: u8| {
-            let v = self.interrupt_flag.get() | mask;
-            self.interrupt_flag = Byte::new(v);
+        let mut set_bit = |mask: u8| {
+            self.interrupt_flag = self.interrupt_flag.map(|b| b | mask);
         };
 
         match interrupt {
-            Interrupt::Vblank => mask_bit(0b0000_0001),
-            Interrupt::LcdStat => mask_bit(0b0000_0010),
-            Interrupt::Timer => mask_bit(0b0000_0100),
-            Interrupt::Serial => mask_bit(0b0000_1000),
-            Interrupt::Joypad => mask_bit(0b0001_0000),
+            Interrupt::Vblank => set_bit(0b0000_0001),
+            Interrupt::LcdStat => set_bit(0b0000_0010),
+            Interrupt::Timer => set_bit(0b0000_0100),
+            Interrupt::Serial => set_bit(0b0000_1000),
+            Interrupt::Joypad => set_bit(0b0001_0000),
         };
     }
 }
