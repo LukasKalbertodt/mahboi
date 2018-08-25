@@ -216,6 +216,7 @@ impl TuiDebugger {
         if is_paused {
             self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
             self.update_cpu_data(&machine.cpu);
+            self.update_stack_data(machine);
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -405,6 +406,31 @@ impl TuiDebugger {
         )
     }
 
+    fn update_stack_data(&mut self, machine: &Machine) {
+        let mut body = StyledString::new();
+
+        let start = machine.cpu.sp.get();
+        let end = start.saturating_add(10);
+
+        for addr in start..end {
+            let addr = Word::new(addr);
+            body.append_styled(addr.to_string(), Color::Light(BaseColor::Blue));
+            body.append_styled(" │   ", Color::Light(BaseColor::Blue));
+            body.append_styled(
+                machine.load_byte(addr).to_string(),
+                Color::Dark(BaseColor::Yellow),
+            );
+
+            if addr == start {
+                body.append_plain("   ← SP");
+            }
+
+            body.append_plain("\n");
+        }
+
+        self.siv.find_id::<TextView>("stack_view").unwrap().set_content(body);
+    }
+
     fn update_cpu_data(&mut self, cpu: &Cpu) {
         let reg_style = Color::Light(BaseColor::Magenta);
 
@@ -474,6 +500,8 @@ impl TuiDebugger {
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
+        let stack_body = TextView::new("no data yet").with_id("stack_view");
+        let stack_view = Dialog::around(stack_body).title("Stack");
 
         // Setup Buttons
         let button_breakpoints = {
@@ -502,6 +530,8 @@ impl TuiDebugger {
         // Build the complete right side
         let right_panel = LinearLayout::vertical()
             .child(cpu_view)
+            .child(DummyView)
+            .child(stack_view)
             .child(DummyView)
             .child(debug_buttons)
             .fixed_width(30);
