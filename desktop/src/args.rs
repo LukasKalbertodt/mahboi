@@ -47,6 +47,14 @@ pub(crate) struct Args {
             right ahead (particularly useful in combination with `--breakpoints`)",
     )]
     pub(crate) instant_start: bool,
+
+    #[structopt(
+        long = "--turbo-mode-factor",
+        default_value = "4",
+        help = "Defines how much faster turbo mode (key Q) is than 100%. So, a value of `2` \
+            means double the speed, while `4` would mean 400% speed (= roughly 240FPS).",
+    )]
+    pub(crate) turbo_mode_factor: f64,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
