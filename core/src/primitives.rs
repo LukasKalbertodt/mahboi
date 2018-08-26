@@ -70,6 +70,28 @@ impl Byte {
 
         (carry, half_carry)
     }
+
+    /// Shifts all bits one step to the left, wrapping the truncated bits to the end and returns
+    /// true, if a 1-bit was wrapped around, false otherwise.
+    pub fn rotate_left(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b1000_0000) != 0;
+
+        self.0 = self.get().rotate_left(1);
+
+        out
+    }
+
+    /// Shifts all bits one step to the right, wrapping the truncated bits to the end and returns
+    /// true, if a 1-bit was wrapped around, false otherwise.
+    pub fn rotate_right(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b0000_0001) != 0;
+
+        self.0 = self.get().rotate_right(1);
+
+        out
+    }
 }
 
 impl Add for Byte {
