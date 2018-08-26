@@ -182,6 +182,24 @@ impl Machine {
             }
         }
 
+        /// This is a template macro for all RLC b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rlc {
+            ($x:expr) => {{
+                let carry = $x.rotate_left();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all RRC b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rrc {
+            ($x:expr) => {{
+                let carry = $x.rotate_right();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -480,6 +498,34 @@ impl Machine {
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
+                    // ========== RLC ==========
+                    prefixed_opcode!("RLC B") => rlc!(self.cpu.b),
+                    prefixed_opcode!("RLC C") => rlc!(self.cpu.c),
+                    prefixed_opcode!("RLC D") => rlc!(self.cpu.d),
+                    prefixed_opcode!("RLC E") => rlc!(self.cpu.e),
+                    prefixed_opcode!("RLC H") => rlc!(self.cpu.h),
+                    prefixed_opcode!("RLC L") => rlc!(self.cpu.l),
+                    prefixed_opcode!("RLC (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        rlc!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("RLC A") => rlc!(self.cpu.a),
+
+                    // ========== RRC ==========
+                    prefixed_opcode!("RRC B") => rrc!(self.cpu.b),
+                    prefixed_opcode!("RRC C") => rrc!(self.cpu.c),
+                    prefixed_opcode!("RRC D") => rrc!(self.cpu.d),
+                    prefixed_opcode!("RRC E") => rrc!(self.cpu.e),
+                    prefixed_opcode!("RRC H") => rrc!(self.cpu.h),
+                    prefixed_opcode!("RRC L") => rrc!(self.cpu.l),
+                    prefixed_opcode!("RRC (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        rrc!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("RRC A") => rrc!(self.cpu.a),
+
                     // ========== RL ==========
                     prefixed_opcode!("RL C") => {
                         let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
