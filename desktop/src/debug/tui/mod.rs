@@ -15,7 +15,7 @@ use cursive::{
     view::{Boxable, Identifiable, Scrollable, ScrollStrategy},
     views::{
         OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
-        LinearLayout, Dialog
+        LinearLayout, Dialog, ScrollView, IdView,
     },
     utils::markup::StyledString,
 };
@@ -143,6 +143,10 @@ pub(crate) struct TuiDebugger {
 
     /// Was the boot ROM already disabled? This is used to do cache management.
     boot_rom_disabled: bool,
+
+    /// Sometimes the ASM view has to be scrolled to a specific position. This
+    /// has to be done after `siv.step()`. That's why its stored here.
+    scroll_asm_view: Option<usize>,
 }
 
 impl TuiDebugger {
@@ -191,6 +195,7 @@ impl TuiDebugger {
             pause_on_ret: false,
             boot_rom_disabled: false,
             update_needed: true,
+            scroll_asm_view: None,
         };
 
         // Add all breakpoints specified by CLI
@@ -281,15 +286,27 @@ impl TuiDebugger {
         // Receive events and update view.
         self.siv.step();
 
+        // Perform certain steps after the TUI has been drawn (re-layouted)
+        if let Some(pos) = self.scroll_asm_view {
+            self.siv.find_id::<ScrollView<IdView<AsmView>>>("asm_view_scroll")
+                .unwrap()
+                .set_offset((0, pos));
+            self.scroll_asm_view = None;
+        }
+
         Ok(Action::Nothing)
     }
 
     fn update_debugger(&mut self, machine: &Machine) {
+        let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
+        asm_view.update(machine);
+        let line = asm_view.get_active_line();
+        self.scroll_asm_view = Some(line.saturating_sub(10));
 
-        // Update views
-        self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
         self.update_cpu_data(&machine.cpu);
         self.update_stack_data(machine);
+
+
     }
 
     /// Switch to pause mode.
@@ -530,7 +547,8 @@ impl TuiDebugger {
         // Main body (left)
         let asm_view = AsmView::new()
             .with_id("asm_view")
-            .scrollable();
+            .scrollable()
+            .with_id("asm_view_scroll");
 
         // Right panel
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");

@@ -112,6 +112,12 @@ impl AsmView {
         }
     }
 
+    pub(crate) fn get_active_line(&self) -> usize {
+        self.lines.iter()
+            .position(|l| l.current)
+            .expect("internal asm_view error: no line is current")
+    }
+
     fn get_current_range(&self) -> Range<Word> {
         // Determine the bounds in which we show instructions. The start
         // position is a bit tricky. It might be the case that it shows into
