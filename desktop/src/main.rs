@@ -106,7 +106,9 @@ fn run() -> Result<(), Error> {
         }
 
         // Sleep for a while to reach our target FPS
-        loop_helper.loop_sleep();
+        if !window.in_turbo_mode() {
+            loop_helper.loop_sleep();
+        }
     }
 
     Ok(())

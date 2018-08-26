@@ -58,6 +58,10 @@ impl NativeWindow {
         let new_title = format!("{} - {}", WINDOW_TITLE, postfix);
         self.win.set_title(&new_title);
     }
+
+    pub(crate) fn in_turbo_mode(&self) -> bool {
+        self.win.is_key_down(Key::Q)
+    }
 }
 
 pub(crate) struct WinBuffer(Vec<u32>);
