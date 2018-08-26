@@ -268,6 +268,16 @@ impl Word {
 
         (Byte::new(lsb), Byte::new(msb))
     }
+
+    /// Adds the given [`Word`] to this [`Word`] and returns a tuple containing information
+    /// about carry and half carry bits: (carry, half_carry)
+    pub fn add_with_carries(&mut self, rhs: Word) -> (bool, bool) {
+        let half_carry = (((self.get() & 0x00ff) + (rhs.get() & 0x00ff)) & 0x0100) == 0x0100;
+        let carry = self.get().checked_add(rhs.get()).is_none();
+        *self += rhs;
+
+        (carry, half_carry)
+    }
 }
 
 impl Add for Word {
@@ -294,7 +304,6 @@ impl Add<u8> for Word {
     }
 }
 
-
 impl Add<u16> for Word {
     type Output = Self;
 
@@ -308,6 +317,12 @@ impl Add<Byte> for Word {
 
     fn add(self, rhs: Byte) -> Self {
         Word(self.0.wrapping_add(rhs.get() as u16))
+    }
+}
+
+impl AddAssign for Word {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -466,13 +481,13 @@ mod test {
             Byte::new(lhs).add_with_carries(Byte::new(rhs))
         }
 
-        assert_eq!(run(0,   0)  , (false,   false));
-        assert_eq!(run(0,   255), (false,   false));
-        assert_eq!(run(255, 255), (true,    true));
-        assert_eq!(run(255, 0)  , (false,   false));
-        assert_eq!(run(255, 1)  , (true,    true));
-        assert_eq!(run(127, 1)  , (false,   true));
-        assert_eq!(run(128, 128), (true,    false));
+        assert_eq!(run(0x00, 0x00), (false, false));
+        assert_eq!(run(0x00, 0xff), (false, false));
+        assert_eq!(run(0xff, 0xff), (true,  true));
+        assert_eq!(run(0xff, 0x00), (false, false));
+        assert_eq!(run(0xff, 0x01), (true,  true));
+        assert_eq!(run(0x7f, 0x01), (false, true));
+        assert_eq!(run(0x80, 0x80), (true,  false));
     }
 
     #[test]
@@ -481,15 +496,30 @@ mod test {
             Byte::new(lhs).sub_with_carries(Byte::new(rhs))
         }
 
-        assert_eq!(run(0,   0)  , (false,   false));
-        assert_eq!(run(0,   255), (true,    true));
-        assert_eq!(run(255, 255), (false,   false));
-        assert_eq!(run(255, 0)  , (false,   false));
-        assert_eq!(run(255, 1)  , (false,   false));
-        assert_eq!(run(127, 1)  , (false,   false));
-        assert_eq!(run(128, 1)  , (false,   true));
-        assert_eq!(run(128, 128), (false,   false));
-        assert_eq!(run(127, 128), (true,    false));
+        assert_eq!(run(0x00, 0x00), (false, false));
+        assert_eq!(run(0x00, 0xff), (true,  true));
+        assert_eq!(run(0xff, 0xff), (false, false));
+        assert_eq!(run(0xff, 0x00), (false, false));
+        assert_eq!(run(0xff, 0x01), (false, false));
+        assert_eq!(run(0x7f, 0x01), (false, false));
+        assert_eq!(run(0x80, 0x01), (false, true));
+        assert_eq!(run(0x80, 0x80), (false, false));
+        assert_eq!(run(0x7f, 0x80), (true,  false));
+    }
+
+    #[test]
+    fn test_word_add_with_carries() {
+        fn run(lhs: u16, rhs: u16) -> (bool, bool) {
+            Word::new(lhs).add_with_carries(Word::new(rhs))
+        }
+
+        assert_eq!(run(0x0000, 0x0000), (false, false));
+        assert_eq!(run(0x0000, 0xffff), (false, false));
+        assert_eq!(run(0xffff, 0xffff), (true,  true));
+        assert_eq!(run(0xffff, 0x0000), (false, false));
+        assert_eq!(run(0xffff, 0x0001), (true,  true));
+        assert_eq!(run(0x7fff, 0x0001), (false, true));
+        assert_eq!(run(0x8000, 0x8000), (true,  false));
     }
 }
 
