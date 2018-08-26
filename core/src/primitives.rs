@@ -149,6 +149,11 @@ impl Byte {
 
         out
     }
+
+    /// Returns a [`Byte`] with swapped low/high nybbles.
+    pub fn swap_nybbles(self) -> Self {
+        Byte(self.get().rotate_left(4))
+    }
 }
 
 impl Add for Byte {
