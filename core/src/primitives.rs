@@ -45,9 +45,33 @@ impl Byte {
         Self::new(f(self.0))
     }
 
+    /// Shifts all bits one step to left, prepending the passed in carry bit and wrapping
+    /// the truncated bits to the end and returns the new carry bit.
+    ///
+    /// Here is a small example
+    ///
+    /// Actual bit: 1010 1100
+    /// carry:      true
+    /// prepended:  1 1010 1100
+    ///             ↑
+    ///             The Carry bit (true => 1) is prepended
+    /// shifted:    1 0101 1001
+    ///             ↑
+    ///             This is the output value (new carry) of the method
+    /// The resulting byte is: 0101 1001
     pub fn rotate_left_through_carry(&mut self, carry: bool) -> bool {
         let out = (0b1000_0000 & self.0) != 0;
         self.0 = (self.0 << 1) | (carry as u8);
+        out
+    }
+
+    /// Shifts all bits one step to right, prepending the passed in carry bit and wrapping
+    /// the truncated bits to the end and returns the new carry bit.
+    ///
+    /// For an example see [`Byte::rotate_left_through_carry`].
+    pub fn rotate_right_through_carry(&mut self, carry: bool) -> bool {
+        let out = (0b0000_0001 & self.0) != 0;
+        self.0 = (self.0 >> 1) | ((carry as u8) << 7);
         out
     }
 
