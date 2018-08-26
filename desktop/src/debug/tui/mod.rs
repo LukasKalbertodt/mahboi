@@ -135,6 +135,11 @@ pub(crate) struct TuiDebugger {
     /// Flag that is set when the user requested to run until the next RET
     /// instruction.
     pause_on_ret: bool,
+
+    /// To avoid updating all elements every frame, we track whether an update
+    /// is necessary. This flag is set to `true` whenever `should_pause()` is
+    /// called and reset whenever all views are updated.
+    update_needed: bool,
 }
 
 impl TuiDebugger {
@@ -181,6 +186,7 @@ impl TuiDebugger {
             step_over: None,
             breakpoints: Breakpoints::new(),
             pause_on_ret: false,
+            update_needed: true,
         };
 
         // Add all breakpoints specified by CLI
@@ -214,8 +220,9 @@ impl TuiDebugger {
         }
 
         // If we're in pause mode, update elements in the debugging tab
-        if is_paused {
+        if is_paused && self.update_needed {
             self.update_debugger(machine);
+            self.update_needed = false;
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -311,6 +318,8 @@ impl TuiDebugger {
     }
 
     pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
+        self.update_needed = true;
+
         if let Some(addr) = self.step_over {
             // If we are at the address we should step over, we will ignore the
             // rest of this method and just *not* pause. But we will also reset

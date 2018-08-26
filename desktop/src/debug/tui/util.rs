@@ -11,7 +11,7 @@ use mahboi::{
 
 
 /// An argument of an instruction.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum InstrArg {
     /// This means that its a logical argument (seen in the mnemonic), but it's
     /// not actually stored. E.g. `BIT 2, C`: both arguments are static.
@@ -49,7 +49,7 @@ impl InstrArg {
 }
 
 /// A decoded instruction
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum DecodedInstr {
     NoArgs {
         name: &'static str,
