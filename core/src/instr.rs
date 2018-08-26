@@ -336,7 +336,7 @@ pub const INSTRUCTIONS: InstrDb<Option<Instr>> = InstrDb([
 
     Instr::some(0xe0, "LDH (a8), A",  2,  12, None),
     Instr::some(0xe1, "POP HL",       1,  12, None),
-    Instr::some(0xe2, "LD (C), A",    2,  8,  None),
+    Instr::some(0xe2, "LD (C), A",    1,  8,  None),
     None,
     None,
     Instr::some(0xe5, "PUSH HL",      1,  16, None),
@@ -353,7 +353,7 @@ pub const INSTRUCTIONS: InstrDb<Option<Instr>> = InstrDb([
 
     Instr::some(0xf0, "LDH A, (a8)",  2,  12, None),
     Instr::some(0xf1, "POP AF",       1,  12, None),
-    Instr::some(0xf2, "LD A, (C)",    2,  8,  None),
+    Instr::some(0xf2, "LD A, (C)",    1,  8,  None),
     Instr::some(0xf3, "DI",           1,  4,  None),
     None,
     Instr::some(0xf5, "PUSH AF",      1,  16, None),

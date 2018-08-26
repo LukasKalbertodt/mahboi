@@ -409,6 +409,7 @@ mod test {
 }
 
 /// Position of a pixel on a gameboy screen.
+#[derive(Clone, Copy, Debug)]
 pub struct PixelPos {
     x: u8,
     y: u8,
@@ -438,6 +439,7 @@ impl PixelPos {
 /// Each channel has a depth of 5 bit = 32 different values, so `r`, `g` and
 /// `b` hold values between 0 and 31 (inclusive). In sum, this means we have
 /// 32^3 = 32768 different colors.
+#[derive(Clone, Copy, Debug)]
 pub struct PixelColor {
     r: u8,
     g: u8,
@@ -456,6 +458,18 @@ impl PixelColor {
             r: ((w.get() >>  0) as u8) & 0b0001_1111,
             g: ((w.get() >>  5) as u8) & 0b0001_1111,
             b: ((w.get() >> 10) as u8) & 0b0001_1111,
+        }
+    }
+
+    /// Creates a color from a classic gameboy color (2 bit). The given `c`
+    /// value has to be 0, 1, 2 or 3.
+    pub fn from_greyscale(c: u8) -> Self {
+        assert!(c <= 3);
+        let v = (3 - c) << 3;
+        Self {
+            r: v,
+            g: v,
+            b: v,
         }
     }
 
