@@ -200,6 +200,24 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all RL b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rl {
+            ($x:expr) => {{
+                let carry = $x.rotate_left_through_carry(self.cpu.carry());
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all RR b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rr {
+            ($x:expr) => {{
+                let carry = $x.rotate_right_through_carry(self.cpu.carry());
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -527,11 +545,32 @@ impl Machine {
                     prefixed_opcode!("RRC A") => rrc!(self.cpu.a),
 
                     // ========== RL ==========
-                    prefixed_opcode!("RL C") => {
-                        let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
-                        let zero = self.cpu.c == Byte::zero();
-                        set_flags!(self.cpu.f => zero 0 0 carry);
-                    }
+                    prefixed_opcode!("RL B") => rl!(self.cpu.b),
+                    prefixed_opcode!("RL C") => rl!(self.cpu.c),
+                    prefixed_opcode!("RL D") => rl!(self.cpu.d),
+                    prefixed_opcode!("RL E") => rl!(self.cpu.e),
+                    prefixed_opcode!("RL H") => rl!(self.cpu.h),
+                    prefixed_opcode!("RL L") => rl!(self.cpu.l),
+                    prefixed_opcode!("RL (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        rl!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("RL A") => rl!(self.cpu.a),
+
+                    // ========== RR ==========
+                    prefixed_opcode!("RR B") => rr!(self.cpu.b),
+                    prefixed_opcode!("RR C") => rr!(self.cpu.c),
+                    prefixed_opcode!("RR D") => rr!(self.cpu.d),
+                    prefixed_opcode!("RR E") => rr!(self.cpu.e),
+                    prefixed_opcode!("RR H") => rr!(self.cpu.h),
+                    prefixed_opcode!("RR L") => rr!(self.cpu.l),
+                    prefixed_opcode!("RR (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        rr!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("RR A") => rr!(self.cpu.a),
 
                     // ========== BIT ==========
                     prefixed_opcode!("BIT 7, H") => {
