@@ -1,7 +1,10 @@
 #![feature(const_fn)]
 #![feature(const_vec_new)]
 
-use std::fs;
+use std::{
+    fs,
+    panic::{catch_unwind, AssertUnwindSafe},
+};
 
 use failure::{Error, ResultExt};
 use structopt::StructOpt;
@@ -63,29 +66,40 @@ fn run() -> Result<(), Error> {
 
         // Run the emulator if we're not in pause mode.
         if !is_paused {
-            let res = emulator.execute_frame(&mut window, |machine| {
-                // If we have a TUI debugger, we ask it when to pause.
-                // Otherwise, we never stop.
-                if let Some(debugger) = &mut tui_debugger {
-                    debugger.should_pause(machine)
-                } else {
-                    false
-                }
-            });
+            let res = catch_unwind(AssertUnwindSafe(|| {
+                emulator.execute_frame(&mut window, |machine| {
+                    // If we have a TUI debugger, we ask it when to pause.
+                    // Otherwise, we never stop.
+                    if let Some(debugger) = &mut tui_debugger {
+                        debugger.should_pause(machine)
+                    } else {
+                        false
+                    }
+                })}
+            ));
 
             // React to abnormal disruptions
             match res {
-                Ok(_) => {},
-                Err(Disruption::Paused) => is_paused = true,
-                Err(Disruption::Terminated) => {
-                    // If we are not in debug mode, we stop the program, as it
-                    // doesn't make much sense to keep running. In debug mode,
-                    // we just pause execution.
-                    warn!("[desktop] Emulator was terminated");
-                    if args.debug {
-                        is_paused = true;
-                    } else {
-                        break;
+                Err(_) => {
+                    warn!("Emulator panicked!");
+                    is_paused = true;
+                }
+                Ok(disruption) => {
+                    // React to abnormal disruptions
+                    match disruption {
+                        Ok(_) => {},
+                        Err(Disruption::Paused) => is_paused = true,
+                        Err(Disruption::Terminated) => {
+                            // If we are not in debug mode, we stop the program, as it
+                            // doesn't make much sense to keep running. In debug mode,
+                            // we just pause execution.
+                            warn!("[desktop] Emulator was terminated");
+                            if args.debug {
+                                is_paused = true;
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
             }
