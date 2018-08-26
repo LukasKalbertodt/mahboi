@@ -121,6 +121,36 @@ impl Ppu {
         }
     }
 
+    /// Loads a byte from OAM at the given (absolute!) address.
+    ///
+    /// The given address has to be in `0xFE00..0xFEA0`, otherwise this
+    /// function panics!
+    ///
+    /// This function behaves like the real OAM. Meaning: during pixel
+    /// transfer and OAM search, this returns garbage.
+    pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
+        match self.phase() {
+            Phase::PixelTransfer => Byte::new(0xff),
+            Phase::OamSearch => Byte::new(0xff),
+            _ => self.vram[addr - 0xFE00],
+        }
+    }
+
+    /// Stores a byte to OAM at the given (absolute!) address.
+    ///
+    /// The given address has to be in `0xFE00..0xFEA0`, otherwise this
+    /// function panics!
+    ///
+    /// This function behaves like the real OAM. Meaning: during pixel
+    /// transfer and OAM search, this write is lost (does nothing).
+    pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
+        match self.phase() {
+            Phase::PixelTransfer => {},
+            Phase::OamSearch => {},
+            _ => self.vram[addr - 0xFE00] = byte,
+        }
+    }
+
     /// Loads a byte from the IO port range `0xFF40..0xFF4B`.
     ///
     /// The given address has to be in `0xFF40..0xFF4B`, otherwise this
