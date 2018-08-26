@@ -14,12 +14,13 @@ use log::Level;
 struct Entry {
     level: Level,
     text: TextView,
+
+    /// Cached height. Is 0 before `required_size` was called.
     height: usize,
 }
 
 pub struct LogView {
     entries: Vec<Entry>,
-    height: usize,
 }
 
 impl LogView {
@@ -27,21 +28,15 @@ impl LogView {
     pub fn new() -> Self {
         Self {
             entries: vec![],
-            height: 0,
         }
     }
 
     /// Adds a tab to the tab view.
     pub fn add_row(&mut self, level: Level, msg: String) {
-        let mut text = TextView::new(msg);
-
-        let height = text.required_size(Vec2::max_value()).y;
-        self.height += height;
-
         self.entries.push(Entry {
             level,
-            text,
-            height,
+            text: TextView::new(msg),
+            height: 0,
         });
     }
 }
@@ -67,25 +62,28 @@ impl View for LogView {
         // we need, we simply don't draw the entries that don't start on the
         // screen. This should be replaced with a `ScrollView`, but
         // unfortunately it's at the moment...
-        let available_height = printer.size.y;
-        let mut y_offset = available_height as i32 - self.height as i32;
+        let mut y_offset = 0;
         for entry in &self.entries {
-            if y_offset >= 0 {
-                let color = level_to_color(entry.level);
-                printer.offset((0, y_offset)).with_color(color, |printer| {
-                    let lvl = format!("{:6} ", entry.level);
-                    printer.print((0, 0), &lvl);
+            let color = level_to_color(entry.level);
+            printer.offset((0, y_offset)).with_color(color, |printer| {
+                let lvl = format!("{:6} ", entry.level);
+                printer.print((0, 0), &lvl);
 
-                    entry.text.draw(&printer.offset((7, 0)));
-                });
-            }
+                entry.text.draw(&printer.offset((7, 0)));
+            });
+
             y_offset += entry.height as i32;
         }
     }
 
     fn required_size(&mut self, constraint: Vec2) -> Vec2 {
-        let height = cmp::max(constraint.y, self.height);
-        Vec2::new(constraint.x, height * 3)
+        let mut height = 0;
+        for entry in &mut self.entries {
+            entry.height = entry.text.required_size(constraint).y;
+            height += entry.height;
+        }
+
+        Vec2::new(constraint.x, height)
     }
 
     fn on_event(&mut self, _: Event) -> EventResult {
