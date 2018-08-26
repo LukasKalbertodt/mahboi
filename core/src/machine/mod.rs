@@ -122,6 +122,13 @@ impl Machine {
         self.store_word(self.cpu.sp, word);
     }
 
+    /// Pops the topmost word from the stack and returns it.
+    pub fn pop(&mut self) -> Word {
+        let val = self.load_word(self.cpu.sp);
+        self.cpu.sp += 2u16;
+        val
+    }
+
     /// Jumps to the interrupt service routine of the given interrupt and returns the number
     /// of clocks used for the jump.
     pub(crate) fn isr(&mut self, interrupt: Interrupt) -> u8 {
