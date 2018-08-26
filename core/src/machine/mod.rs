@@ -122,7 +122,8 @@ impl Machine {
         self.store_word(self.cpu.sp, word);
     }
 
-    /// Executes the interrupt service routine and returns the number of clocks used for this.
+    /// Jumps to the interrupt service routine of the given interrupt and returns the number
+    /// of clocks used for the jump.
     pub(crate) fn isr(&mut self, interrupt: Interrupt) -> u8 {
         // push pc onto stack
         self.push(self.cpu.pc);

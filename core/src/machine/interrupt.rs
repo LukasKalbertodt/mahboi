@@ -70,10 +70,7 @@ impl InterruptController {
     /// Returns true, if at least one interrupt is enabled and requested regardless if the IME is
     /// set, otherwise it returns `false`.
     pub(crate) fn is_interrupt_requested(&self) -> bool {
-        match self.requested_interrupt() {
-            None => false,
-            _ => true,
-        }
+        self.requested_interrupt().is_some()
     }
 
     /// Resets the corresponding flag in the IF register for the given interrupt.

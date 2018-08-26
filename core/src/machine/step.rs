@@ -30,7 +30,7 @@ impl Machine {
             return Ok(1);
         }
 
-        // Variable initializsation
+        // Variable initialization
         let instr_start = self.cpu.pc;
         let arg_byte = self.load_byte(instr_start + 1u16);
         let arg_word = self.load_word(instr_start + 1u16);
@@ -531,22 +531,27 @@ impl Machine {
         }
 
         // Unwrap the action_taken `Option` to check, if it was set when we get a branch instruction
-        let action_taken = match instr.clocks_taken {
-            Some(_) => {
-                match action_taken {
-                    Some(t) => t,
-                    None => {
-                        terminate!(
-                            "action_taken not set for branch instruction {:?} in position: \
-                                {} after: {} cycles!",
-                            instr,
-                            instr_start,
-                            self.cycle_counter,
-                        );
-                    },
-                }
-            },
-            None => false,
+        let action_taken = match (instr.clocks_taken, action_taken) {
+            (Some(_), Some(b)) => b,
+            (Some(_), None) => {
+                terminate!(
+                    "action_taken not set for branch instruction {:?} in position: \
+                        {} after: {} cycles!",
+                    instr,
+                    instr_start,
+                    self.cycle_counter,
+                );
+            }
+            (None, Some(_)) => {
+                terminate!(
+                    "action_taken set for non-branch instruction {:?} in position: \
+                        {} after: {} cycles!",
+                    instr,
+                    instr_start,
+                    self.cycle_counter,
+                );
+            }
+            (None, None) => false,
         };
 
         let clocks_spent = if op_code.get() == opcode!("PREFIX CB") {
