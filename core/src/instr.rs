@@ -644,6 +644,7 @@ pub const PREFIXED_INSTRUCTIONS: InstrDb<Instr> = InstrDb([
     Instr::new(0xff, "SET 7, A",     2,  8,  None),
 ]);
 
+#[macro_export]
 macro_rules! opcode {
     ("NOP") => { 0x00 };
     ("LD BC, d16") => { 0x01 };
@@ -907,6 +908,7 @@ macro_rules! opcode {
     ("RST 38H") => { 0xff };
 }
 
+#[macro_export]
 macro_rules! prefixed_opcode {
     ("RLC B") => { 0x00 };
     ("RLC C") => { 0x01 };

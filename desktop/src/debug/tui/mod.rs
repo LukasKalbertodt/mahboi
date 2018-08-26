@@ -24,10 +24,12 @@ use lazy_static::lazy_static;
 use log::{Log, Record, Level, Metadata};
 
 use mahboi::{
+    opcode,
     log::*,
     machine::{Cpu, Machine},
     primitives::Word,
 };
+use crate::args::Args;
 use super::{Action};
 use self::{
     asm_view::AsmView,
@@ -128,10 +130,14 @@ pub(crate) struct TuiDebugger {
 
     /// A set of addresses at which we will pause execution
     breakpoints: Breakpoints,
+
+    /// Flag that is set when the user requested to run until the next RET
+    /// instruction.
+    pause_on_ret: bool,
 }
 
 impl TuiDebugger {
-    pub(crate) fn new() -> Result<Self, Error> {
+    pub(crate) fn new(args: &Args) -> Result<Self, Error> {
         // Create a handle to the terminal (with the correct backend).
         let mut siv = Cursive::ncurses();
 
@@ -173,7 +179,13 @@ impl TuiDebugger {
             event_sink,
             step_over: None,
             breakpoints: Breakpoints::new(),
+            pause_on_ret: false,
         };
+
+        // Add all breakpoints specified by CLI
+        for &bp in &args.breakpoints {
+            out.breakpoints.add(bp);
+        }
 
         // Build the TUI view
         out.setup_tui();
@@ -204,6 +216,7 @@ impl TuiDebugger {
         if is_paused {
             self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
             self.update_cpu_data(&machine.cpu);
+            self.update_stack_data(machine);
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -240,6 +253,14 @@ impl TuiDebugger {
                         // avoid that, we also set the `step_over` exception to
                         // exectute one instruction.
                         self.step_over = Some(machine.cpu.pc);
+                        return Ok(Action::Continue);
+                    }
+                }
+                'f' => {
+                    if self.pause_mode {
+                        self.step_over = Some(machine.cpu.pc);
+                        self.pause_on_ret = true;
+                        self.resume();
                         return Ok(Action::Continue);
                     }
                 }
@@ -304,6 +325,25 @@ impl TuiDebugger {
             return true;
         }
 
+        // If we are supposed to pause on a RET instruction...
+        if self.pause_on_ret {
+            // ... check if the next instruction is an RET-like instruction
+            let opcode = machine.load_byte(machine.cpu.pc);
+            match opcode.get() {
+                opcode!("RET")
+                | opcode!("RETI")
+                | opcode!("RET NZ")
+                | opcode!("RET NC")
+                | opcode!("RET Z")
+                | opcode!("RET C") => {
+                    // Reset the flag
+                    self.pause_on_ret = false;
+                    return true;
+                }
+                _ => {}
+            }
+        }
+
         false
     }
 
@@ -315,7 +355,7 @@ impl TuiDebugger {
 
         // Other global events are just forwarded to be handled in the next
         // `update()` call.
-        for &c in &['p', 'r', 's'] {
+        for &c in &['p', 'r', 's', 'f'] {
             let tx = self.event_sink.clone();
             self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
         }
@@ -364,6 +404,31 @@ impl TuiDebugger {
             title,
             Style::from(Color::Dark(BaseColor::Green)).combine(Effect::Bold),
         )
+    }
+
+    fn update_stack_data(&mut self, machine: &Machine) {
+        let mut body = StyledString::new();
+
+        let start = machine.cpu.sp.get();
+        let end = start.saturating_add(10);
+
+        for addr in start..end {
+            let addr = Word::new(addr);
+            body.append_styled(addr.to_string(), Color::Light(BaseColor::Blue));
+            body.append_styled(" │   ", Color::Light(BaseColor::Blue));
+            body.append_styled(
+                machine.load_byte(addr).to_string(),
+                Color::Dark(BaseColor::Yellow),
+            );
+
+            if addr == start {
+                body.append_plain("   ← SP");
+            }
+
+            body.append_plain("\n");
+        }
+
+        self.siv.find_id::<TextView>("stack_view").unwrap().set_content(body);
     }
 
     fn update_cpu_data(&mut self, cpu: &Cpu) {
@@ -435,6 +500,8 @@ impl TuiDebugger {
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
+        let stack_body = TextView::new("no data yet").with_id("stack_view");
+        let stack_view = Dialog::around(stack_body).title("Stack");
 
         // Setup Buttons
         let button_breakpoints = {
@@ -444,22 +511,27 @@ impl TuiDebugger {
             })
         };
 
-        // Buttons for the 'r' and 's' actions
+        // Buttons for the 'r', 's' and 'f' actions
         let tx = self.event_sink.clone();
         let run_button = Button::new("Continue [r]", move |_| tx.send('r').unwrap());
         let tx = self.event_sink.clone();
         let step_button = Button::new("Single step [s]", move |_| tx.send('s').unwrap());
+        let tx = self.event_sink.clone();
+        let fun_end_button = Button::new("Run to RET-like [f]", move |_| tx.send('f').unwrap());
 
         // Wrap all buttons
         let debug_buttons = LinearLayout::vertical()
             .child(button_breakpoints)
             .child(run_button)
-            .child(step_button);
+            .child(step_button)
+            .child(fun_end_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
         let right_panel = LinearLayout::vertical()
             .child(cpu_view)
+            .child(DummyView)
+            .child(stack_view)
             .child(DummyView)
             .child(debug_buttons)
             .fixed_width(30);
@@ -554,7 +626,7 @@ impl TuiDebugger {
 /// easily usable from everywhere. Just `clone()` this to get another owned
 /// reference.
 #[derive(Clone)]
-struct Breakpoints(Rc<RefCell<BTreeSet<Word>>>);
+pub(crate) struct Breakpoints(Rc<RefCell<BTreeSet<Word>>>);
 
 impl Breakpoints {
     fn new() -> Self {
@@ -563,7 +635,7 @@ impl Breakpoints {
 
     /// Add a breakpoint to the collection. If it's already inside, nothing
     /// happens.
-    fn add(&self, addr: Word) {
+    pub(crate) fn add(&self, addr: Word) {
         self.0.borrow_mut().insert(addr);
     }
 
