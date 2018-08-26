@@ -53,6 +53,11 @@ impl NativeWindow {
 
         Ok(())
     }
+
+    pub(crate) fn set_title_postfix(&mut self, postfix: &str) {
+        let new_title = format!("{} - {}", WINDOW_TITLE, postfix);
+        self.win.set_title(&new_title);
+    }
 }
 
 pub(crate) struct WinBuffer(Vec<u32>);

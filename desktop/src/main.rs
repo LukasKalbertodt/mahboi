@@ -49,7 +49,13 @@ fn run() -> Result<(), Error> {
 
     // ===== MAIN LOOP ========================================================
     let mut is_paused = args.debug && !args.instant_start;
+    let mut loop_helper = spin_sleep::LoopHelper::builder()
+        .report_interval_s(0.2)
+        .build_with_target_rate(59.73);
+
     while !window.should_stop() {
+        loop_helper.loop_start();
+
         // Update window buffer and read input.
         window.update()?;
 
@@ -93,6 +99,14 @@ fn run() -> Result<(), Error> {
                 Action::Nothing => {}
             }
         }
+
+        // Write FPS into window title
+        if let Some(fps) = loop_helper.report_rate() {
+            window.set_title_postfix(&format!("{:.1} FPS", fps));
+        }
+
+        // Sleep for a while to reach our target FPS
+        loop_helper.loop_sleep();
     }
 
     Ok(())
