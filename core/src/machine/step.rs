@@ -236,6 +236,24 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all SRA b instructions (where `b` should be a [`Byte`]).
+        macro_rules! sra {
+            ($x:expr) => {{
+                let carry = $x.arithmetic_shift_right();
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SWAP b instructions (where `b` should be a [`Byte`]).
+        macro_rules! swap {
+            ($x:expr) => {{
+                $x = $x.swap_nybbles();
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 0);
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -617,6 +635,34 @@ impl Machine {
                         self.store_byte(self.cpu.hl(), val);
                     },
                     prefixed_opcode!("SRL A") => srl!(self.cpu.a),
+
+                    // ========== SRA ==========
+                    prefixed_opcode!("SRA B") => sra!(self.cpu.b),
+                    prefixed_opcode!("SRA C") => sra!(self.cpu.c),
+                    prefixed_opcode!("SRA D") => sra!(self.cpu.d),
+                    prefixed_opcode!("SRA E") => sra!(self.cpu.e),
+                    prefixed_opcode!("SRA H") => sra!(self.cpu.h),
+                    prefixed_opcode!("SRA L") => sra!(self.cpu.l),
+                    prefixed_opcode!("SRA (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        sra!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("SRA A") => sra!(self.cpu.a),
+
+                    // ========== SWAP ==========
+                    prefixed_opcode!("SWAP B") => swap!(self.cpu.b),
+                    prefixed_opcode!("SWAP C") => swap!(self.cpu.c),
+                    prefixed_opcode!("SWAP D") => swap!(self.cpu.d),
+                    prefixed_opcode!("SWAP E") => swap!(self.cpu.e),
+                    prefixed_opcode!("SWAP H") => swap!(self.cpu.h),
+                    prefixed_opcode!("SWAP L") => swap!(self.cpu.l),
+                    prefixed_opcode!("SWAP (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        swap!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("SWAP A") => swap!(self.cpu.a),
 
                     // ========== BIT ==========
                     prefixed_opcode!("BIT 7, H") => {
