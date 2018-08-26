@@ -507,8 +507,7 @@ impl Machine {
 
             // ========== POP/PUSH ==========
             opcode!("POP BC") => {
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.sp += 2u16;
+                let val = self.pop();
                 self.cpu.set_bc(val);
             }
             opcode!("PUSH BC") => self.push(self.cpu.bc()),
@@ -560,9 +559,9 @@ impl Machine {
                     prefixed_opcode!("RLC H") => rlc!(self.cpu.h),
                     prefixed_opcode!("RLC L") => rlc!(self.cpu.l),
                     prefixed_opcode!("RLC (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         rlc!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("RLC A") => rlc!(self.cpu.a),
 
@@ -574,9 +573,9 @@ impl Machine {
                     prefixed_opcode!("RRC H") => rrc!(self.cpu.h),
                     prefixed_opcode!("RRC L") => rrc!(self.cpu.l),
                     prefixed_opcode!("RRC (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         rrc!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("RRC A") => rrc!(self.cpu.a),
 
@@ -588,9 +587,9 @@ impl Machine {
                     prefixed_opcode!("RL H") => rl!(self.cpu.h),
                     prefixed_opcode!("RL L") => rl!(self.cpu.l),
                     prefixed_opcode!("RL (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         rl!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("RL A") => rl!(self.cpu.a),
 
@@ -602,9 +601,9 @@ impl Machine {
                     prefixed_opcode!("RR H") => rr!(self.cpu.h),
                     prefixed_opcode!("RR L") => rr!(self.cpu.l),
                     prefixed_opcode!("RR (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         rr!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("RR A") => rr!(self.cpu.a),
 
@@ -616,9 +615,9 @@ impl Machine {
                     prefixed_opcode!("SLA H") => sla!(self.cpu.h),
                     prefixed_opcode!("SLA L") => sla!(self.cpu.l),
                     prefixed_opcode!("SLA (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         sla!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("SLA A") => sla!(self.cpu.a),
 
@@ -630,9 +629,9 @@ impl Machine {
                     prefixed_opcode!("SRL H") => srl!(self.cpu.h),
                     prefixed_opcode!("SRL L") => srl!(self.cpu.l),
                     prefixed_opcode!("SRL (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         srl!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("SRL A") => srl!(self.cpu.a),
 
@@ -644,9 +643,9 @@ impl Machine {
                     prefixed_opcode!("SRA H") => sra!(self.cpu.h),
                     prefixed_opcode!("SRA L") => sra!(self.cpu.l),
                     prefixed_opcode!("SRA (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         sra!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("SRA A") => sra!(self.cpu.a),
 
@@ -658,9 +657,9 @@ impl Machine {
                     prefixed_opcode!("SWAP H") => swap!(self.cpu.h),
                     prefixed_opcode!("SWAP L") => swap!(self.cpu.l),
                     prefixed_opcode!("SWAP (HL)") => {
-                        let mut val = self.load_byte(self.cpu.hl());
+                        let mut val = self.load_hl();
                         swap!(val);
-                        self.store_byte(self.cpu.hl(), val);
+                        self.store_hl(val);
                     },
                     prefixed_opcode!("SWAP A") => swap!(self.cpu.a),
 
@@ -696,14 +695,14 @@ impl Machine {
                         // Handle (HL) in a special way, because we can't create a mutable borrow
                         // of it
                         if register_code == 6 {
-                            let byte = self.load_byte(self.cpu.hl());
+                            let byte = self.load_hl();
                             match instr_code {
                                 1 => {
                                     let zero = (byte & mask) == 0;
                                     set_flags!(self.cpu.f => zero 0 1 -);
                                 }
-                                2 => self.store_byte(self.cpu.hl(), byte & !mask),
-                                3 => self.store_byte(self.cpu.hl(), byte | mask),
+                                2 => self.store_hl(byte & !mask),
+                                3 => self.store_hl(byte | mask),
                                 _ => unreachable!(),
                             }
                         } else {
