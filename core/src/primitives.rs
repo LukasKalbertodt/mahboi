@@ -116,6 +116,28 @@ impl Byte {
 
         out
     }
+
+    /// Shifts all bits one step to the left, and sets bit 0 to zero and returns
+    /// true, if a 1-bit was shifted out, false otherwise.
+    pub fn shift_left(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b1000_0000) != 0;
+
+        self.0 = self.get() << 1;
+
+        out
+    }
+
+    /// Shifts all bits one step to the right, and sets bit 7 to zero and returns
+    /// true, if a 1-bit was shifted out, false otherwise.
+    pub fn shift_right(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b0000_0001) != 0;
+
+        self.0 = self.get() >> 1;
+
+        out
+    }
 }
 
 impl Add for Byte {
