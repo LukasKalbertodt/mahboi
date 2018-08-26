@@ -664,10 +664,71 @@ impl Machine {
                     },
                     prefixed_opcode!("SWAP A") => swap!(self.cpu.a),
 
-                    // ========== BIT ==========
-                    prefixed_opcode!("BIT 7, H") => {
-                        let zero = (self.cpu.h.get() & 0b1000_0000) == 0;
-                        set_flags!(self.cpu.f => zero 0 1 -);
+                    // ========== BIT/RES/SET ==========
+                    opcode @ 0x40..=0xFF => {
+                        // All BIT/RES/SET instructions follow the same structure. Because of this
+                        // all three instructions are handled in this match arm to reduce
+                        // duplicate code.
+                        //
+                        // The opcode structure is the following:
+                        // 00 000 000
+                        // ^^ ^^^ ^^^
+                        // || ||| |||
+                        // || ||| --------> The first three bits encode the register which is
+                        // || |||           used (0: B, 1: C, 2: D, 3: E, 4: H, 5: L, 6: (HL), 7: A)
+                        // ||  -----------> The next three bits encode the bit which should be
+                        // ||               passed to the instruction (0: LSB, up to 7: MSB)
+                        //  --------------> The last two bits encode the instruction which should
+                        //                  be executed (1: BIT, 2: RES, 3: SET)
+
+                        // Select register
+                        let register_code = opcode & 0b0000_0111;
+
+                        // Select instruction
+                        let instr_code = (opcode & 0b1100_0000) >> 6;
+
+                        // Select bit
+                        let bit = (opcode & 0b0011_1000) >> 3;
+
+                        // Get bit mask
+                        let mask = Byte::new(0b0000_0001 << bit);
+
+                        // Handle (HL) in a special way, because we can't create a mutable borrow
+                        // of it
+                        if register_code == 6 {
+                            let byte = self.load_byte(self.cpu.hl());
+                            match instr_code {
+                                1 => {
+                                    let zero = (byte & mask) == 0;
+                                    set_flags!(self.cpu.f => zero 0 1 -);
+                                }
+                                2 => self.store_byte(self.cpu.hl(), byte & !mask),
+                                3 => self.store_byte(self.cpu.hl(), byte | mask),
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            // Create a mutable borrow of the selected register and apply the
+                            // instruction on it
+                            let reg = match register_code {
+                                0 => &mut self.cpu.b,
+                                1 => &mut self.cpu.c,
+                                2 => &mut self.cpu.d,
+                                3 => &mut self.cpu.e,
+                                4 => &mut self.cpu.h,
+                                5 => &mut self.cpu.l,
+                                7 => &mut self.cpu.a,
+                                _ => unreachable!(),
+                            };
+                            match instr_code {
+                                1 => {
+                                    let zero = (*reg & mask) == 0;
+                                    set_flags!(self.cpu.f => zero 0 1 -);
+                                }
+                                2 => *reg &= !mask,
+                                3 => *reg |= mask,
+                                _ => unreachable!(),
+                            }
+                        }
                     }
 
                     _ => {
