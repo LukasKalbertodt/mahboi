@@ -1,5 +1,3 @@
-use std::cmp;
-
 use cursive::{
     Printer,
     direction::Direction,

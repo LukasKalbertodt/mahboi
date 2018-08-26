@@ -140,6 +140,9 @@ pub(crate) struct TuiDebugger {
     /// is necessary. This flag is set to `true` whenever `should_pause()` is
     /// called and reset whenever all views are updated.
     update_needed: bool,
+
+    /// Was the boot ROM already disabled? This is used to do cache management.
+    boot_rom_disabled: bool,
 }
 
 impl TuiDebugger {
@@ -186,6 +189,7 @@ impl TuiDebugger {
             step_over: None,
             breakpoints: Breakpoints::new(),
             pause_on_ret: false,
+            boot_rom_disabled: false,
             update_needed: true,
         };
 
@@ -318,12 +322,25 @@ impl TuiDebugger {
     }
 
     pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
+        // Do internal updating unrelated to determining if the emulator should
+        // stop.
         self.update_needed = true;
+        if machine.cpu.pc == 0x100 && !self.boot_rom_disabled {
+            self.boot_rom_disabled = true;
 
+            // The ASM view caches instructions and assumes the data in
+            // 0..0x4000 never changes... which is almost true. But if the boot
+            // ROM is disabled, we have to invalidate the cache for 0..0x100.
+            self.siv.find_id::<AsmView>("asm_view")
+                .unwrap()
+                .invalidate_cache(Word::new(0)..Word::new(0x100));
+
+        }
+
+        // If we are at the address we should step over, we will ignore the
+        // rest of this method and just *not* pause. But we will also reset the
+        // `step_over` value, to pause the next time.
         if let Some(addr) = self.step_over {
-            // If we are at the address we should step over, we will ignore the
-            // rest of this method and just *not* pause. But we will also reset
-            // the `step_over` value, to pause the next time.
             if addr == machine.cpu.pc {
                 self.step_over = None;
                 return false;

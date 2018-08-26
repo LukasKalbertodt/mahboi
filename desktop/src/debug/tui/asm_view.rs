@@ -15,7 +15,6 @@ use cursive::{
 };
 
 use mahboi::{
-    log::*,
     machine::Machine,
     primitives::Word,
 };
@@ -24,11 +23,11 @@ use super::{
 };
 
 /// How many bytes around PC should be showed in the view?
-const CONTEXT_SIZE: u16 = 50;
+const CONTEXT_SIZE: u16 = 100;
 
 /// When `update()` is called, how many instructions should be added to the
 /// cache (starting from the current instruction).
-const CACHE_LOOKAHEAD: u16 = 100;
+const CACHE_LOOKAHEAD: u16 = 200;
 
 #[derive(Clone, Debug)]
 struct Line {
@@ -41,7 +40,6 @@ pub struct AsmView {
     lines: Vec<Line>,
     instr_cache: BTreeMap<Word, DecodedInstr>,
     pc: Word,
-    boot_rom_disabled: bool,
 }
 
 impl AsmView {
@@ -51,11 +49,10 @@ impl AsmView {
             lines: vec![],
             instr_cache: BTreeMap::new(),
             pc: Word::new(0),
-            boot_rom_disabled: false,
         }
     }
 
-    fn invalidate_cache(&mut self, range: Range<Word>) {
+    pub(crate) fn invalidate_cache(&mut self, range: Range<Word>) {
         let keys = self.instr_cache.range(range)
             .map(|(addr, _)| *addr)
             .collect::<Vec<_>>();
@@ -73,13 +70,6 @@ impl AsmView {
     }
 
     pub fn update(&mut self, machine: &Machine) {
-        // Special case: check the boot ROM will be disabled. TODO: this is
-        // actually not good because `update()` is probably not called with pc
-        // == 100
-        if machine.cpu.pc == 0x100 && !self.boot_rom_disabled {
-            self.invalidate_cache(Word::new(0)..Word::new(0x100));
-        }
-
         self.pc = machine.cpu.pc;
 
         // Add new instructions to cache
@@ -107,7 +97,6 @@ impl AsmView {
         // Construct the lines we want to show.
         self.lines.clear();
         let curr_range = self.get_current_range();
-        debug!("range in update: {:?}", curr_range);
         let mut addr = curr_range.start;
         while addr < curr_range.end {
             // Print arrow to show where we are
