@@ -5,7 +5,7 @@ use std::{
     fmt::{self, Debug, Display},
 };
 
-use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign};
+use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 
 /// A single Gameboy byte.
@@ -25,6 +25,7 @@ use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, Bi
     BitAndAssign,
     BitOr,
     BitOrAssign,
+    Not,
 )]
 pub struct Byte(u8);
 
