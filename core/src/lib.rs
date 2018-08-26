@@ -8,6 +8,7 @@ use crate::{
     env::Peripherals,
     cartridge::{Cartridge},
     machine::Machine,
+    primitives::CYCLES_PER_FRAME,
     log::*,
 };
 
@@ -31,6 +32,7 @@ pub const SCREEN_HEIGHT: usize = 144;
 
 pub struct Emulator {
     machine: Machine,
+    cycles_in_frame: u64,
 }
 
 impl Emulator {
@@ -39,6 +41,7 @@ impl Emulator {
 
         Self {
             machine: Machine::new(cartridge),
+            cycles_in_frame: 0,
         }
     }
 
@@ -71,8 +74,10 @@ impl Emulator {
                 );
             }
 
+            self.cycles_in_frame += cycles_spent as u64;
             self.machine.cycle_counter += cycles_spent;
-            if self.machine.cycle_counter.is_between_frames() {
+            if self.cycles_in_frame >= CYCLES_PER_FRAME {
+                self.cycles_in_frame -= CYCLES_PER_FRAME;
                 break;
             }
         }
