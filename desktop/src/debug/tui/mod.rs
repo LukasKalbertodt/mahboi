@@ -40,6 +40,7 @@ use self::{
 mod asm_view;
 mod tab_view;
 mod log_view;
+mod util;
 
 
 // ============================================================================
@@ -214,9 +215,7 @@ impl TuiDebugger {
 
         // If we're in pause mode, update elements in the debugging tab
         if is_paused {
-            self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
-            self.update_cpu_data(&machine.cpu);
-            self.update_stack_data(machine);
+            self.update_debugger(machine);
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -272,6 +271,14 @@ impl TuiDebugger {
         self.siv.step();
 
         Ok(Action::Nothing)
+    }
+
+    fn update_debugger(&mut self, machine: &Machine) {
+
+        // Update views
+        self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
+        self.update_cpu_data(&machine.cpu);
+        self.update_stack_data(machine);
     }
 
     /// Switch to pause mode.
