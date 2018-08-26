@@ -45,7 +45,7 @@ fn run() -> Result<(), Error> {
 
     // Create the TUI debugger if we're in debug mode.
     let mut tui_debugger = if args.debug {
-        Some(TuiDebugger::new()?)
+        Some(TuiDebugger::new(&args)?)
     } else {
         None
     };
@@ -62,7 +62,7 @@ fn run() -> Result<(), Error> {
     let mut window = NativeWindow::open(&args).context("failed to open window")?;
     info!("Opened window");
 
-    let mut is_paused = args.debug;
+    let mut is_paused = args.debug && !args.instant_start;
     while !window.should_stop() {
         // Update window buffer and read input.
         window.update()?;
