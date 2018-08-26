@@ -3,6 +3,7 @@ use minifb::{Key, WindowOptions, Window};
 
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
+    log::*,
     env::{self, Peripherals, Display},
     primitives::{PixelColor, PixelPos},
 };
@@ -32,6 +33,7 @@ impl NativeWindow {
 
         let win = Window::new(WINDOW_TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)?;
         let buf = WinBuffer(vec![0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+        info!("[desktop] Opened window");
 
         Ok(Self {
             win,
