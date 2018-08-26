@@ -23,6 +23,8 @@ mod debug;
 mod env;
 
 
+const TARGET_FPS: f64 = 59.73;
+
 fn main() {
     // We just catch potential errors here and pretty print them.
     if let Err(e) = run() {
@@ -51,7 +53,7 @@ fn run() -> Result<(), Error> {
     let mut is_paused = args.debug && !args.instant_start;
     let mut loop_helper = spin_sleep::LoopHelper::builder()
         .report_interval_s(0.2)
-        .build_with_target_rate(59.73);
+        .build_with_target_rate(TARGET_FPS);
 
     while !window.should_stop() {
         loop_helper.loop_start();
@@ -106,9 +108,12 @@ fn run() -> Result<(), Error> {
         }
 
         // Sleep for a while to reach our target FPS
-        if !window.in_turbo_mode() {
-            loop_helper.loop_sleep();
+        if window.in_turbo_mode() {
+            loop_helper.set_target_rate(TARGET_FPS * args.turbo_mode_factor);
+        } else {
+            loop_helper.set_target_rate(TARGET_FPS);
         }
+        loop_helper.loop_sleep();
     }
 
     Ok(())
