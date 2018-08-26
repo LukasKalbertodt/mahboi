@@ -117,6 +117,17 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all ADD HL, w instructions (where `w` should
+        /// be a [`Byte`]).
+        macro_rules! add_hl {
+            ($x:expr) => {{
+                let mut val = self.cpu.hl();
+                let (carry, half_carry) = val.add_with_carries($x);
+                set_flags!(self.cpu.f => - 0 half_carry carry);
+                self.cpu.set_hl(val);
+            }}
+        }
+
         /// This is a template macro for all ADC A, b instructions (where `b` should be a [`Byte`]).
         macro_rules! adc {
             ($x:expr) => {{
@@ -437,6 +448,11 @@ impl Machine {
             opcode!("ADD A, A")     => add!(self.cpu.a),
             opcode!("ADD A, d8")    => add!(arg_byte),
 
+            opcode!("ADD HL, BC") => add_hl!(self.cpu.bc()),
+            opcode!("ADD HL, DE") => add_hl!(self.cpu.de()),
+            opcode!("ADD HL, HL") => add_hl!(self.cpu.hl()),
+            opcode!("ADD HL, SP") => add_hl!(self.cpu.sp),
+
             // ========== ADC ==========
             opcode!("ADC A, B")     => adc!(self.cpu.b),
             opcode!("ADC A, C")     => adc!(self.cpu.c),
@@ -570,6 +586,38 @@ impl Machine {
             // ========== JP ==========
             opcode!("JP a16") => self.cpu.pc = arg_word,
             opcode!("JP (HL)") => self.cpu.pc = self.cpu.hl(),
+            opcode!("JP Z, a16") => {
+                if self.cpu.zero() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP C, a16") => {
+                if self.cpu.carry() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP NZ, a16") => {
+                if !self.cpu.zero() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP NC, a16") => {
+                if !self.cpu.carry() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
 
             // ========== POP/PUSH ==========
             opcode!("POP BC") => {
