@@ -68,7 +68,7 @@ impl Machine {
                     concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
                 )
             ),
-            wram: Memory::zeroed(Word::new(0x1000)),
+            wram: Memory::zeroed(Word::new(0x2000)),
             ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
