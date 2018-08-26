@@ -254,6 +254,13 @@ impl Machine {
             }}
         }
 
+        /// This is a convenience macro for all RET-like instructions to reduce duplicate code.
+        macro_rules! ret {
+            () => {{
+                self.cpu.pc = self.pop();
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -335,21 +342,17 @@ impl Machine {
             opcode!("LD (HL), H") => self.store_hl(self.cpu.h),
             opcode!("LD (HL), L") => self.store_hl(self.cpu.l),
             opcode!("LD (HL), A") => self.store_hl(self.cpu.a),
+            opcode!("LD (HL), d8") => self.store_hl(arg_byte),
 
-            opcode!("LD A, (DE)") => {
-                let val = self.load_byte(self.cpu.de());
-                self.cpu.a = val;
-            }
-
-            opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
+            opcode!("LD BC, d16") => self.cpu.set_bc(arg_word),
             opcode!("LD DE, d16") => self.cpu.set_de(arg_word),
+            opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
             opcode!("LD SP, d16") => self.cpu.sp = arg_word,
 
             opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
             }
-            opcode!("LD (a16), A") => self.store_byte(arg_word, self.cpu.a),
             opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
                 self.store_byte(dst, self.cpu.a);
@@ -358,7 +361,6 @@ impl Machine {
                 let src = Word::new(0xFF00) + arg_byte;
                 self.cpu.a = self.load_byte(src);
             }
-
             opcode!("LD (HL+), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
@@ -369,6 +371,22 @@ impl Machine {
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst - 1);
             }
+            opcode!("LD A, (HL+)") => {
+                let dst = self.cpu.hl();
+                self.cpu.a = self.load_byte(dst);
+                self.cpu.set_hl(dst + 1u16);
+            }
+            opcode!("LD A, (HL-)") => {
+                let dst = self.cpu.hl();
+                self.cpu.a = self.load_byte(dst);
+                self.cpu.set_hl(dst - 1u16);
+            }
+            opcode!("LD A, (DE)") => self.cpu.a = self.load_byte(self.cpu.de()),
+            opcode!("LD A, (BC)") => self.cpu.a = self.load_byte(self.cpu.bc()),
+            opcode!("LD A, (a16)") => self.cpu.a = self.load_byte(arg_word),
+            opcode!("LD (DE), A") => self.store_byte(self.cpu.de(), self.cpu.a),
+            opcode!("LD (BC), A") => self.store_byte(self.cpu.bc(), self.cpu.a),
+            opcode!("LD (a16), A") => self.store_byte(arg_word, self.cpu.a),
 
             // ========== DEC ==========
             opcode!("DEC B") => dec!(self.cpu.b),
@@ -383,6 +401,11 @@ impl Machine {
             opcode!("DEC DE") => self.cpu.set_de(self.cpu.de() - 1u16),
             opcode!("DEC HL") => self.cpu.set_hl(self.cpu.hl() - 1u16),
             opcode!("DEC SP") => self.cpu.sp -= 1u16,
+            opcode!("DEC (HL)") => {
+                let mut val = self.load_hl();
+                dec!(val);
+                self.store_hl(val);
+            }
 
             // ========== INC ==========
             opcode!("INC B") => inc!(self.cpu.b),
@@ -397,6 +420,11 @@ impl Machine {
             opcode!("INC DE") => self.cpu.set_de(self.cpu.de() + 1u16),
             opcode!("INC HL") => self.cpu.set_hl(self.cpu.hl() + 1u16),
             opcode!("INC SP") => self.cpu.sp += 1u16,
+            opcode!("INC (HL)") => {
+                let mut val = self.load_hl();
+                inc!(val);
+                self.store_hl(val);
+            }
 
             // ========== ADD ==========
             opcode!("ADD A, B")     => add!(self.cpu.b),
@@ -486,6 +514,40 @@ impl Machine {
             opcode!("CP A")    => cp!(self.cpu.a),
             opcode!("CP d8")   => cp!(arg_byte),
 
+            // ========== RST ==========
+            opcode!("RST 00H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x00);
+            }
+            opcode!("RST 08H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x08);
+            }
+            opcode!("RST 10H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x10);
+            }
+            opcode!("RST 18H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x18);
+            }
+            opcode!("RST 20H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x20);
+            }
+            opcode!("RST 28H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x28);
+            }
+            opcode!("RST 30H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x30);
+            }
+            opcode!("RST 38H") => {
+                self.push(self.cpu.pc);
+                self.cpu.pc = Word::new(0x38);
+            }
+
             // ========== JR ==========
             opcode!("JR r8") => self.cpu.pc += arg_byte.get() as i8,
             opcode!("JR NZ, r8") => {
@@ -505,11 +567,27 @@ impl Machine {
                 }
             }
 
+            // ========== JP ==========
+            opcode!("JP a16") => self.cpu.pc = arg_word,
+            opcode!("JP (HL)") => self.cpu.pc = self.cpu.hl(),
+
             // ========== POP/PUSH ==========
             opcode!("POP BC") => {
                 let val = self.pop();
                 self.cpu.set_bc(val);
             }
+            opcode!("POP DE") => {
+                let val = self.pop();
+                self.cpu.set_de(val);
+            },
+            opcode!("POP HL") => {
+                let val = self.pop();
+                self.cpu.set_hl(val);
+            },
+            opcode!("POP AF") => {
+                let val = self.pop();
+                self.cpu.set_af(val);
+            },
             opcode!("PUSH BC") => self.push(self.cpu.bc()),
             opcode!("PUSH DE") => self.push(self.cpu.de()),
             opcode!("PUSH HL") => self.push(self.cpu.hl()),
@@ -520,17 +598,41 @@ impl Machine {
                 self.push(self.cpu.pc);
                 self.cpu.pc = arg_word;
             }
-            opcode!("RET") => {
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.pc = val;
-                self.cpu.sp += 2u16;
+            opcode!("RET") => ret!(),
+            opcode!("RET NZ") => {
+                if !self.cpu.zero() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("RET NC") => {
+                if !self.cpu.carry() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("RET Z") => {
+                if self.cpu.zero() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("RET C") => {
+                if self.cpu.carry() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
             }
             opcode!("RETI") => {
-                // Return
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.pc = val;
-                self.cpu.sp += 2u16;
-
+                ret!();
                 // Enable interrupts
                 self.interrupt_controller.ime = true;
             }
@@ -543,6 +645,8 @@ impl Machine {
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
+            opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
+            opcode!("CPL") => self.cpu.a = !self.cpu.a,
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
