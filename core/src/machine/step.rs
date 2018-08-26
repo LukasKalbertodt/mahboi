@@ -218,6 +218,24 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all SLA b instructions (where `b` should be a [`Byte`]).
+        macro_rules! sla {
+            ($x:expr) => {{
+                let carry = $x.shift_left();
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SRL b instructions (where `b` should be a [`Byte`]).
+        macro_rules! srl {
+            ($x:expr) => {{
+                let carry = $x.shift_right();
+                let zero = self.cpu.c == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -571,6 +589,34 @@ impl Machine {
                         self.store_byte(self.cpu.hl(), val);
                     },
                     prefixed_opcode!("RR A") => rr!(self.cpu.a),
+
+                    // ========== SLA ==========
+                    prefixed_opcode!("SLA B") => sla!(self.cpu.b),
+                    prefixed_opcode!("SLA C") => sla!(self.cpu.c),
+                    prefixed_opcode!("SLA D") => sla!(self.cpu.d),
+                    prefixed_opcode!("SLA E") => sla!(self.cpu.e),
+                    prefixed_opcode!("SLA H") => sla!(self.cpu.h),
+                    prefixed_opcode!("SLA L") => sla!(self.cpu.l),
+                    prefixed_opcode!("SLA (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        sla!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("SLA A") => sla!(self.cpu.a),
+
+                    // ========== SRL ==========
+                    prefixed_opcode!("SRL B") => srl!(self.cpu.b),
+                    prefixed_opcode!("SRL C") => srl!(self.cpu.c),
+                    prefixed_opcode!("SRL D") => srl!(self.cpu.d),
+                    prefixed_opcode!("SRL E") => srl!(self.cpu.e),
+                    prefixed_opcode!("SRL H") => srl!(self.cpu.h),
+                    prefixed_opcode!("SRL L") => srl!(self.cpu.l),
+                    prefixed_opcode!("SRL (HL)") => {
+                        let mut val = self.load_byte(self.cpu.hl());
+                        srl!(val);
+                        self.store_byte(self.cpu.hl(), val);
+                    },
+                    prefixed_opcode!("SRL A") => srl!(self.cpu.a),
 
                     // ========== BIT ==========
                     prefixed_opcode!("BIT 7, H") => {
