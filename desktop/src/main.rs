@@ -31,6 +31,8 @@ fn main() {
         for cause in e.iter_causes() {
             println!("  ... caused by: {}", cause);
         }
+
+        std::process::exit(1);
     }
 }
 
