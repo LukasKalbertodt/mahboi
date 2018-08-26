@@ -12,7 +12,7 @@ use std::{
 use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor, Style},
-    view::{Boxable, Identifiable},
+    view::{Boxable, Identifiable, Scrollable},
     views::{
         OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
         LinearLayout, Dialog
@@ -501,7 +501,7 @@ impl TuiDebugger {
         // Main body (left)
         let asm_view = AsmView::new()
             .with_id("asm_view")
-            .full_screen();
+            .scrollable();
 
         // Right panel
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");

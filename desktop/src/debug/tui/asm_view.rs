@@ -20,7 +20,7 @@ use super::{
     util::DecodedInstr,
 };
 
-const CONTEXT_SIZE: u16 = 40;
+const CONTEXT_SIZE: u16 = 60;
 
 #[derive(Clone)]
 struct Line {
