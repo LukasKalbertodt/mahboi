@@ -118,7 +118,7 @@ impl Machine {
         }
 
         /// This is a template macro for all ADD HL, w instructions (where `w` should
-        /// be a [`Byte`]).
+        /// be a [`Word`]).
         macro_rules! add_hl {
             ($x:expr) => {{
                 let mut val = self.cpu.hl();
