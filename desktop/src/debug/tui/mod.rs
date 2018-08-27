@@ -26,8 +26,11 @@ use log::{Log, Record, Level, Metadata};
 use mahboi::{
     opcode,
     log::*,
-    machine::{Cpu, Machine},
-    primitives::Word,
+    machine::{
+        Cpu, Machine,
+        ppu::Ppu,
+    },
+    primitives::{Byte, Word},
 };
 use crate::args::Args;
 use super::{Action};
@@ -305,8 +308,7 @@ impl TuiDebugger {
 
         self.update_cpu_data(&machine.cpu);
         self.update_stack_data(machine);
-
-
+        self.update_ppu_data(&machine.ppu);
     }
 
     /// Switch to pause mode.
@@ -484,6 +486,149 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("stack_view").unwrap().set_content(body);
     }
 
+    fn update_ppu_data(&mut self, ppu: &Ppu) {
+        // TODO:
+        // - FF40 bit 0
+        // - FF41 bit 2-6
+
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        let mut body = StyledString::new();
+
+        // Phase/Status
+        if ppu.lcd_enabled() {
+            body.append_plain("==> Phase: ");
+            body.append_plain(ppu.phase().to_string());
+            body.append_plain("\n");
+        } else {
+            body.append_plain("  --- LCD disabled! ---\n");
+        }
+        body.append_plain("\n");
+
+        // Tile data memory range for BG and window
+        body.append_plain("BG tile data: ");
+        let addr = if (ppu.lcd_control().get() & 0b0001_0000) != 0 {
+            "8000-8FFF\n"
+        } else {
+            "8800-97FF\n"
+        };
+        body.append_styled(addr, reg_style);
+
+        // FF44 current line
+        body.append_plain("Current line: ");
+        body.append_styled(ppu.current_line().get().to_string(), reg_style);
+        body.append_plain("\n");
+
+        // FF45 line compare
+        body.append_plain("Line compare: ");
+        body.append_styled(ppu.lyc().get().to_string(), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Palette information =====
+        fn format_palette(b: Byte) -> String {
+            let b = b.get();
+
+            format!(
+                "{:02b} {:02b} {:02b} {:02b}\n",
+                (b >> 6) & 0b11,
+                (b >> 4) & 0b11,
+                (b >> 2) & 0b11,
+                (b >> 0) & 0b11,
+            )
+        }
+        body.append_plain("## Palettes: \n");
+
+        body.append_plain("- BG: ");
+        body.append_styled(format_palette(ppu.background_palette()), reg_style);
+        body.append_plain("- S0: ");
+        body.append_styled(format_palette(ppu.sprite_palette_0()), reg_style);
+        body.append_plain("- S1: ");
+        body.append_styled(format_palette(ppu.sprite_palette_1()), reg_style);
+
+        body.append_plain("\n");
+
+
+        // ===== Background information =====
+        body.append_plain("## Background: \n");
+
+        // Tile map memory region
+        body.append_plain("- tile map: ");
+        if (ppu.lcd_control().get() & 0b0000_1000) != 0 {
+            body.append_styled("9C00-9FFF", reg_style);
+        } else {
+            body.append_styled("9800-9BFF", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Scroll
+        body.append_plain("- X: ");
+        body.append_styled(format!("{: >3}", ppu.scroll_x().get()), reg_style);
+        body.append_plain(",  Y: ");
+        body.append_styled(format!("{: >3}", ppu.scroll_y().get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Window information =====
+        body.append_plain("## Window: \n");
+
+        // Enabled?
+        body.append_plain("- ");
+        if (ppu.lcd_control().get() & 0b0010_0000) != 0 {
+            body.append_styled("enabled", reg_style);
+        } else {
+            body.append_styled("disabled", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Tile map memory region
+        body.append_plain("- tile map: ");
+        if (ppu.lcd_control().get() & 0b0100_0000) != 0 {
+            body.append_styled("09C00-09FFF", reg_style);
+        } else {
+            body.append_styled("09800-09BFF", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Scroll position
+        body.append_plain("- X: ");
+        body.append_styled(format!("{: >3}", ppu.win_x().get()), reg_style);
+        body.append_plain(",  Y: ");
+        body.append_styled(format!("{: >3}", ppu.win_y().get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Sprite information =====
+        body.append_plain("## Sprites: \n");
+
+        // Enabled?
+        body.append_plain("- ");
+        if (ppu.lcd_control().get() & 0b0000_0010) != 0 {
+            body.append_styled("enabled", reg_style);
+        } else {
+            body.append_styled("disabled", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Size
+        body.append_plain("- Size: ");
+        if (ppu.lcd_control().get() & 0b0000_0100) != 0 {
+            body.append_styled("8x16", reg_style);
+        } else {
+            body.append_styled("8x8", reg_style);
+        }
+        body.append_plain("\n");
+
+
+        self.siv.find_id::<TextView>("ppu_data").unwrap().set_content(body);
+    }
+
     fn update_cpu_data(&mut self, cpu: &Cpu) {
         let reg_style = Color::Light(BaseColor::Magenta);
 
@@ -554,21 +699,21 @@ impl TuiDebugger {
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
-        let ppu_body = TextView::new("not implemented yet").center().with_id("ppu_data");
-        let ppu_view = Dialog::around(ppu_body).title("PPU");
-
-        let first_right_panel = LinearLayout::vertical()
-            .child(cpu_view)
-            .child(DummyView)
-            .child(ppu_view)
-            .fixed_width(30);
-
-        // Second right column
         let stack_body = TextView::new("no data yet")
             .with_id("stack_view")
             .scrollable()
             .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
+
+        let first_right_panel = LinearLayout::vertical()
+            .child(cpu_view)
+            .child(DummyView)
+            .child(stack_view)
+            .fixed_width(30);
+
+        // Second right column
+        let ppu_body = TextView::new("not implemented yet").with_id("ppu_data");
+        let ppu_view = Dialog::around(ppu_body).title("PPU");
 
         // Setup Buttons
         let button_breakpoints = {
@@ -596,7 +741,7 @@ impl TuiDebugger {
 
         // Build the complete right side
         let second_right_panel = LinearLayout::vertical()
-            .child(stack_view)
+            .child(ppu_view)
             .child(DummyView)
             .child(debug_buttons)
             .fixed_width(30);
