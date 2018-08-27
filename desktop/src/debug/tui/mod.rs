@@ -603,9 +603,9 @@ impl TuiDebugger {
         // Tile map memory region
         body.append_plain("- tile map: ");
         if (ppu.lcd_control().get() & 0b0100_0000) != 0 {
-            body.append_styled("09C00-09FFF", reg_style);
+            body.append_styled("9C00-9FFF", reg_style);
         } else {
-            body.append_styled("09800-09BFF", reg_style);
+            body.append_styled("9800-9BFF", reg_style);
         }
         body.append_plain("\n");
 

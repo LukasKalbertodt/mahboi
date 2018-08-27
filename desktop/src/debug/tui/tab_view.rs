@@ -170,7 +170,14 @@ impl View for TabView {
                     Some(XY { y, .. }) if y <= 1 => return EventResult::Ignored,
 
                     // Other events are forwarded
-                    Some(_) => return self.selected_mut().body.on_event(event),
+                    Some(_) => {
+                        let event = Event::Mouse {
+                            event: mouse_event,
+                            position,
+                            offset: offset + Vec2::new(0, 2),
+                        };
+                        return self.selected_mut().body.on_event(event);
+                    }
 
                     // Except if the event is not over us at all
                     None => return EventResult::Ignored,
