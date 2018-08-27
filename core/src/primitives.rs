@@ -5,7 +5,7 @@ use std::{
     fmt::{self, Debug, Display},
 };
 
-use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign};
+use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 
 /// A single Gameboy byte.
@@ -25,6 +25,7 @@ use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, Bi
     BitAndAssign,
     BitOr,
     BitOrAssign,
+    Not,
 )]
 pub struct Byte(u8);
 
@@ -45,9 +46,33 @@ impl Byte {
         Self::new(f(self.0))
     }
 
+    /// Shifts all bits one step to left, prepending the passed in carry bit and wrapping
+    /// the truncated bits to the end and returns the new carry bit.
+    ///
+    /// Here is a small example
+    ///
+    /// Actual bit: 1010 1100
+    /// carry:      true
+    /// prepended:  1 1010 1100
+    ///             ↑
+    ///             The Carry bit (true => 1) is prepended
+    /// shifted:    1 0101 1001
+    ///             ↑
+    ///             This is the output value (new carry) of the method
+    /// The resulting byte is: 0101 1001
     pub fn rotate_left_through_carry(&mut self, carry: bool) -> bool {
         let out = (0b1000_0000 & self.0) != 0;
         self.0 = (self.0 << 1) | (carry as u8);
+        out
+    }
+
+    /// Shifts all bits one step to right, prepending the passed in carry bit and wrapping
+    /// the truncated bits to the end and returns the new carry bit.
+    ///
+    /// For an example see [`Byte::rotate_left_through_carry`].
+    pub fn rotate_right_through_carry(&mut self, carry: bool) -> bool {
+        let out = (0b0000_0001 & self.0) != 0;
+        self.0 = (self.0 >> 1) | ((carry as u8) << 7);
         out
     }
 
@@ -69,6 +94,66 @@ impl Byte {
         *self -= rhs;
 
         (carry, half_carry)
+    }
+
+    /// Shifts all bits one step to the left, wrapping the truncated bits to the end and returns
+    /// true, if a 1-bit was wrapped around, false otherwise.
+    pub fn rotate_left(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b1000_0000) != 0;
+
+        self.0 = self.get().rotate_left(1);
+
+        out
+    }
+
+    /// Shifts all bits one step to the right, wrapping the truncated bits to the end and returns
+    /// true, if a 1-bit was wrapped around, false otherwise.
+    pub fn rotate_right(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b0000_0001) != 0;
+
+        self.0 = self.get().rotate_right(1);
+
+        out
+    }
+
+    /// Shifts all bits one step to the left (logical shift), and sets bit 0 to zero and returns
+    /// true, if a 1-bit was shifted out, false otherwise.
+    pub fn shift_left(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b1000_0000) != 0;
+
+        self.0 = self.get() << 1;
+
+        out
+    }
+
+    /// Shifts all bits one step to the right (logical shift), and sets bit 7 to zero and returns
+    /// true, if a 1-bit was shifted out, false otherwise.
+    pub fn shift_right(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b0000_0001) != 0;
+
+        self.0 = self.get() >> 1;
+
+        out
+    }
+
+    /// Shifts all bits one step to the right (arithmetic shift), and preserves the value of
+    /// the MSB and returns true, if a 1-bit was shifted out, false otherwise.
+    pub fn arithmetic_shift_right(&mut self) -> bool {
+        // Check if a 1-bit is going to be shifted out
+        let out = (self.get() & 0b0000_0001) != 0;
+
+        self.0 = ((self.get() as i8 ) >> 1) as u8;
+
+        out
+    }
+
+    /// Returns a [`Byte`] with swapped low/high nybbles.
+    pub fn swap_nybbles(self) -> Self {
+        Byte(self.get().rotate_left(4))
     }
 }
 
@@ -183,6 +268,16 @@ impl Word {
 
         (Byte::new(lsb), Byte::new(msb))
     }
+
+    /// Adds the given [`Word`] to this [`Word`] and returns a tuple containing information
+    /// about carry and half carry bits: (carry, half_carry)
+    pub fn add_with_carries(&mut self, rhs: Word) -> (bool, bool) {
+        let half_carry = (((self.get() & 0x00ff) + (rhs.get() & 0x00ff)) & 0x0100) == 0x0100;
+        let carry = self.get().checked_add(rhs.get()).is_none();
+        *self += rhs;
+
+        (carry, half_carry)
+    }
 }
 
 impl Add for Word {
@@ -209,7 +304,6 @@ impl Add<u8> for Word {
     }
 }
 
-
 impl Add<u16> for Word {
     type Output = Self;
 
@@ -223,6 +317,12 @@ impl Add<Byte> for Word {
 
     fn add(self, rhs: Byte) -> Self {
         Word(self.0.wrapping_add(rhs.get() as u16))
+    }
+}
+
+impl AddAssign for Word {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
     }
 }
 
@@ -381,13 +481,13 @@ mod test {
             Byte::new(lhs).add_with_carries(Byte::new(rhs))
         }
 
-        assert_eq!(run(0,   0)  , (false,   false));
-        assert_eq!(run(0,   255), (false,   false));
-        assert_eq!(run(255, 255), (true,    true));
-        assert_eq!(run(255, 0)  , (false,   false));
-        assert_eq!(run(255, 1)  , (true,    true));
-        assert_eq!(run(127, 1)  , (false,   true));
-        assert_eq!(run(128, 128), (true,    false));
+        assert_eq!(run(0x00, 0x00), (false, false));
+        assert_eq!(run(0x00, 0xff), (false, false));
+        assert_eq!(run(0xff, 0xff), (true,  true));
+        assert_eq!(run(0xff, 0x00), (false, false));
+        assert_eq!(run(0xff, 0x01), (true,  true));
+        assert_eq!(run(0x7f, 0x01), (false, true));
+        assert_eq!(run(0x80, 0x80), (true,  false));
     }
 
     #[test]
@@ -396,15 +496,30 @@ mod test {
             Byte::new(lhs).sub_with_carries(Byte::new(rhs))
         }
 
-        assert_eq!(run(0,   0)  , (false,   false));
-        assert_eq!(run(0,   255), (true,    true));
-        assert_eq!(run(255, 255), (false,   false));
-        assert_eq!(run(255, 0)  , (false,   false));
-        assert_eq!(run(255, 1)  , (false,   false));
-        assert_eq!(run(127, 1)  , (false,   false));
-        assert_eq!(run(128, 1)  , (false,   true));
-        assert_eq!(run(128, 128), (false,   false));
-        assert_eq!(run(127, 128), (true,    false));
+        assert_eq!(run(0x00, 0x00), (false, false));
+        assert_eq!(run(0x00, 0xff), (true,  true));
+        assert_eq!(run(0xff, 0xff), (false, false));
+        assert_eq!(run(0xff, 0x00), (false, false));
+        assert_eq!(run(0xff, 0x01), (false, false));
+        assert_eq!(run(0x7f, 0x01), (false, false));
+        assert_eq!(run(0x80, 0x01), (false, true));
+        assert_eq!(run(0x80, 0x80), (false, false));
+        assert_eq!(run(0x7f, 0x80), (true,  false));
+    }
+
+    #[test]
+    fn test_word_add_with_carries() {
+        fn run(lhs: u16, rhs: u16) -> (bool, bool) {
+            Word::new(lhs).add_with_carries(Word::new(rhs))
+        }
+
+        assert_eq!(run(0x0000, 0x0000), (false, false));
+        assert_eq!(run(0x0000, 0xffff), (false, false));
+        assert_eq!(run(0xffff, 0xffff), (true,  true));
+        assert_eq!(run(0xffff, 0x0000), (false, false));
+        assert_eq!(run(0xffff, 0x0001), (true,  true));
+        assert_eq!(run(0x7fff, 0x0001), (false, true));
+        assert_eq!(run(0x8000, 0x8000), (true,  false));
     }
 }
 

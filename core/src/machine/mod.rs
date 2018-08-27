@@ -68,7 +68,7 @@ impl Machine {
                     concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
                 )
             ),
-            wram: Memory::zeroed(Word::new(0x1000)),
+            wram: Memory::zeroed(Word::new(0x2000)),
             ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
@@ -120,6 +120,13 @@ impl Machine {
     pub fn push(&mut self, word: Word) {
         self.cpu.sp -= 2u16;
         self.store_word(self.cpu.sp, word);
+    }
+
+    /// Pops the topmost word from the stack and returns it.
+    pub fn pop(&mut self) -> Word {
+        let val = self.load_word(self.cpu.sp);
+        self.cpu.sp += 2u16;
+        val
     }
 
     /// Jumps to the interrupt service routine of the given interrupt and returns the number

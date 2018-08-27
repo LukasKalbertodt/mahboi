@@ -343,7 +343,7 @@ pub const INSTRUCTIONS: InstrDb<Option<Instr>> = InstrDb([
     Instr::some(0xe6, "AND d8",       2,  8,  None),
     Instr::some(0xe7, "RST 20H",      1,  16, None),
     Instr::some(0xe8, "ADD SP, r8",   2,  16, None),
-    Instr::some(0xe9, "JP (HL)",      1,  4,  None),
+    Instr::some(0xe9, "JP HL",      1,  4,  None),
     Instr::some(0xea, "LD (a16), A",  3,  16, None),
     None,
     None,
@@ -888,7 +888,7 @@ macro_rules! opcode {
     ("AND d8") => { 0xe6 };
     ("RST 20H") => { 0xe7 };
     ("ADD SP, r8") => { 0xe8 };
-    ("JP (HL)") => { 0xe9 };
+    ("JP HL") => { 0xe9 };
     ("LD (a16), A") => { 0xea };
     ("XOR d8") => { 0xee };
     ("RST 28H") => { 0xef };

@@ -20,8 +20,12 @@ impl Machine {
             0xA000..0xC000 => unimplemented!(), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000], // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000], // wram echo
-            0xFE00..0xFEA0 => unimplemented!(), // oam
-            0xFEA0..0xFF00 => unimplemented!(), // not usable (random ram, maybe use as rng???)
+            0xFE00..0xFEA0 => self.ppu.load_oam_byte(addr), // oam
+            0xFEA0..0xFF00 => {
+                // On DMG this returns 0x00
+                // TODO: Add correct CGB behavior
+                Byte::zero()
+            }
 
             // IF register
             0xFF0F => self.interrupt_controller.load_if(),
@@ -44,8 +48,12 @@ impl Machine {
             0xA000..0xC000 => unimplemented!(), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000] = byte, // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000] = byte, // wram echo
-            0xFE00..0xFEA0 => unimplemented!(), // oam
-            0xFEA0..0xFF00 => unimplemented!(), // not usable (random ram, maybe use as rng???)
+            0xFE00..0xFEA0 => self.ppu.store_oam_byte(addr, byte), // oam
+            0xFEA0..0xFF00 => {
+                // On DMG writes to this are ignored
+                // TODO: Add correct CGB behavior
+                trace!("Wrote to {} which is in not writable range: 0xFEA0..0xFF00!", addr);
+            },
 
             // Register with flag for mounting/unmounting the BIOS (this is an IO register). To
             // this register may only be written, if the BIOS is mounted. When the BIOS is

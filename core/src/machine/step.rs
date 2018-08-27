@@ -117,6 +117,17 @@ impl Machine {
             }}
         }
 
+        /// This is a template macro for all ADD HL, w instructions (where `w` should
+        /// be a [`Word`]).
+        macro_rules! add_hl {
+            ($x:expr) => {{
+                let mut val = self.cpu.hl();
+                let (carry, half_carry) = val.add_with_carries($x);
+                set_flags!(self.cpu.f => - 0 half_carry carry);
+                self.cpu.set_hl(val);
+            }}
+        }
+
         /// This is a template macro for all ADC A, b instructions (where `b` should be a [`Byte`]).
         macro_rules! adc {
             ($x:expr) => {{
@@ -180,6 +191,93 @@ impl Machine {
             ($lhs:expr, $rhs:expr) => {
                 $lhs = $rhs
             }
+        }
+
+        /// This is a template macro for all RLC b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rlc {
+            ($x:expr) => {{
+                let carry = $x.rotate_left();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all RRC b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rrc {
+            ($x:expr) => {{
+                let carry = $x.rotate_right();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all RL b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rl {
+            ($x:expr) => {{
+                let carry = $x.rotate_left_through_carry(self.cpu.carry());
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all RR b instructions (where `b` should be a [`Byte`]).
+        macro_rules! rr {
+            ($x:expr) => {{
+                let carry = $x.rotate_right_through_carry(self.cpu.carry());
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SLA b instructions (where `b` should be a [`Byte`]).
+        macro_rules! sla {
+            ($x:expr) => {{
+                let carry = $x.shift_left();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SRL b instructions (where `b` should be a [`Byte`]).
+        macro_rules! srl {
+            ($x:expr) => {{
+                let carry = $x.shift_right();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SRA b instructions (where `b` should be a [`Byte`]).
+        macro_rules! sra {
+            ($x:expr) => {{
+                let carry = $x.arithmetic_shift_right();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 carry);
+            }}
+        }
+
+        /// This is a template macro for all SWAP b instructions (where `b` should be a [`Byte`]).
+        macro_rules! swap {
+            ($x:expr) => {{
+                $x = $x.swap_nybbles();
+                let zero = $x == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 0 0);
+            }}
+        }
+
+        /// This is a convenience macro for all RET-like instructions to reduce duplicate code.
+        macro_rules! ret {
+            () => {{
+                self.cpu.pc = self.pop();
+            }}
+        }
+
+        /// This is a convenience macro for all CALL-like instructions to reduce duplicate code.
+        macro_rules! call {
+            ($x:expr) => {{
+                self.push(self.cpu.pc);
+                self.cpu.pc = $x;
+            }}
         }
 
         // Execute the fetched instruction
@@ -263,21 +361,17 @@ impl Machine {
             opcode!("LD (HL), H") => self.store_hl(self.cpu.h),
             opcode!("LD (HL), L") => self.store_hl(self.cpu.l),
             opcode!("LD (HL), A") => self.store_hl(self.cpu.a),
+            opcode!("LD (HL), d8") => self.store_hl(arg_byte),
 
-            opcode!("LD A, (DE)") => {
-                let val = self.load_byte(self.cpu.de());
-                self.cpu.a = val;
-            }
-
-            opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
+            opcode!("LD BC, d16") => self.cpu.set_bc(arg_word),
             opcode!("LD DE, d16") => self.cpu.set_de(arg_word),
+            opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
             opcode!("LD SP, d16") => self.cpu.sp = arg_word,
 
             opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
             }
-            opcode!("LD (a16), A") => self.store_byte(arg_word, self.cpu.a),
             opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
                 self.store_byte(dst, self.cpu.a);
@@ -286,7 +380,6 @@ impl Machine {
                 let src = Word::new(0xFF00) + arg_byte;
                 self.cpu.a = self.load_byte(src);
             }
-
             opcode!("LD (HL+), A") => {
                 let dst = self.cpu.hl();
                 self.store_byte(dst, self.cpu.a);
@@ -297,6 +390,22 @@ impl Machine {
                 self.store_byte(dst, self.cpu.a);
                 self.cpu.set_hl(dst - 1);
             }
+            opcode!("LD A, (HL+)") => {
+                let dst = self.cpu.hl();
+                self.cpu.a = self.load_byte(dst);
+                self.cpu.set_hl(dst + 1u16);
+            }
+            opcode!("LD A, (HL-)") => {
+                let dst = self.cpu.hl();
+                self.cpu.a = self.load_byte(dst);
+                self.cpu.set_hl(dst - 1u16);
+            }
+            opcode!("LD A, (DE)") => self.cpu.a = self.load_byte(self.cpu.de()),
+            opcode!("LD A, (BC)") => self.cpu.a = self.load_byte(self.cpu.bc()),
+            opcode!("LD A, (a16)") => self.cpu.a = self.load_byte(arg_word),
+            opcode!("LD (DE), A") => self.store_byte(self.cpu.de(), self.cpu.a),
+            opcode!("LD (BC), A") => self.store_byte(self.cpu.bc(), self.cpu.a),
+            opcode!("LD (a16), A") => self.store_byte(arg_word, self.cpu.a),
 
             // ========== DEC ==========
             opcode!("DEC B") => dec!(self.cpu.b),
@@ -311,6 +420,11 @@ impl Machine {
             opcode!("DEC DE") => self.cpu.set_de(self.cpu.de() - 1u16),
             opcode!("DEC HL") => self.cpu.set_hl(self.cpu.hl() - 1u16),
             opcode!("DEC SP") => self.cpu.sp -= 1u16,
+            opcode!("DEC (HL)") => {
+                let mut val = self.load_hl();
+                dec!(val);
+                self.store_hl(val);
+            }
 
             // ========== INC ==========
             opcode!("INC B") => inc!(self.cpu.b),
@@ -325,6 +439,11 @@ impl Machine {
             opcode!("INC DE") => self.cpu.set_de(self.cpu.de() + 1u16),
             opcode!("INC HL") => self.cpu.set_hl(self.cpu.hl() + 1u16),
             opcode!("INC SP") => self.cpu.sp += 1u16,
+            opcode!("INC (HL)") => {
+                let mut val = self.load_hl();
+                inc!(val);
+                self.store_hl(val);
+            }
 
             // ========== ADD ==========
             opcode!("ADD A, B")     => add!(self.cpu.b),
@@ -336,6 +455,11 @@ impl Machine {
             opcode!("ADD A, (HL)")  => add!(self.load_hl()),
             opcode!("ADD A, A")     => add!(self.cpu.a),
             opcode!("ADD A, d8")    => add!(arg_byte),
+
+            opcode!("ADD HL, BC") => add_hl!(self.cpu.bc()),
+            opcode!("ADD HL, DE") => add_hl!(self.cpu.de()),
+            opcode!("ADD HL, HL") => add_hl!(self.cpu.hl()),
+            opcode!("ADD HL, SP") => add_hl!(self.cpu.sp),
 
             // ========== ADC ==========
             opcode!("ADC A, B")     => adc!(self.cpu.b),
@@ -414,6 +538,16 @@ impl Machine {
             opcode!("CP A")    => cp!(self.cpu.a),
             opcode!("CP d8")   => cp!(arg_byte),
 
+            // ========== RST ==========
+            opcode!("RST 00H") => call!(Word::new(0x00)),
+            opcode!("RST 08H") => call!(Word::new(0x08)),
+            opcode!("RST 10H") => call!(Word::new(0x10)),
+            opcode!("RST 18H") => call!(Word::new(0x18)),
+            opcode!("RST 20H") => call!(Word::new(0x20)),
+            opcode!("RST 28H") => call!(Word::new(0x28)),
+            opcode!("RST 30H") => call!(Word::new(0x30)),
+            opcode!("RST 38H") => call!(Word::new(0x38)),
+
             // ========== JR ==========
             opcode!("JR r8") => self.cpu.pc += arg_byte.get() as i8,
             opcode!("JR NZ, r8") => {
@@ -433,33 +567,101 @@ impl Machine {
                 }
             }
 
+            // ========== JP ==========
+            opcode!("JP a16") => self.cpu.pc = arg_word,
+            opcode!("JP HL") => self.cpu.pc = self.cpu.hl(),
+            opcode!("JP Z, a16") => {
+                if self.cpu.zero() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP C, a16") => {
+                if self.cpu.carry() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP NZ, a16") => {
+                if !self.cpu.zero() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JP NC, a16") => {
+                if !self.cpu.carry() {
+                    self.cpu.pc = arg_word;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+
             // ========== POP/PUSH ==========
             opcode!("POP BC") => {
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.sp += 2u16;
+                let val = self.pop();
                 self.cpu.set_bc(val);
             }
+            opcode!("POP DE") => {
+                let val = self.pop();
+                self.cpu.set_de(val);
+            },
+            opcode!("POP HL") => {
+                let val = self.pop();
+                self.cpu.set_hl(val);
+            },
+            opcode!("POP AF") => {
+                let val = self.pop();
+                self.cpu.set_af(val);
+            },
             opcode!("PUSH BC") => self.push(self.cpu.bc()),
             opcode!("PUSH DE") => self.push(self.cpu.de()),
             opcode!("PUSH HL") => self.push(self.cpu.hl()),
             opcode!("PUSH AF") => self.push(self.cpu.af()),
 
             // ========== CALL/RET ==========
-            opcode!("CALL a16") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = arg_word;
+            opcode!("CALL a16") => call!(arg_word),
+            opcode!("RET") => ret!(),
+            opcode!("RET NZ") => {
+                if !self.cpu.zero() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
             }
-            opcode!("RET") => {
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.pc = val;
-                self.cpu.sp += 2u16;
+            opcode!("RET NC") => {
+                if !self.cpu.carry() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("RET Z") => {
+                if self.cpu.zero() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("RET C") => {
+                if self.cpu.carry() {
+                    ret!();
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
             }
             opcode!("RETI") => {
-                // Return
-                let val = self.load_word(self.cpu.sp);
-                self.cpu.pc = val;
-                self.cpu.sp += 2u16;
-
+                ret!();
                 // Enable interrupts
                 self.interrupt_controller.ime = true;
             }
@@ -472,6 +674,8 @@ impl Machine {
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
+            opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
+            opcode!("CPL") => self.cpu.a = !self.cpu.a,
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
@@ -480,17 +684,183 @@ impl Machine {
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
-                    // ========== RL ==========
-                    prefixed_opcode!("RL C") => {
-                        let carry = self.cpu.c.rotate_left_through_carry(self.cpu.carry());
-                        let zero = self.cpu.c == Byte::zero();
-                        set_flags!(self.cpu.f => zero 0 0 carry);
-                    }
+                    // ========== RLC ==========
+                    prefixed_opcode!("RLC B") => rlc!(self.cpu.b),
+                    prefixed_opcode!("RLC C") => rlc!(self.cpu.c),
+                    prefixed_opcode!("RLC D") => rlc!(self.cpu.d),
+                    prefixed_opcode!("RLC E") => rlc!(self.cpu.e),
+                    prefixed_opcode!("RLC H") => rlc!(self.cpu.h),
+                    prefixed_opcode!("RLC L") => rlc!(self.cpu.l),
+                    prefixed_opcode!("RLC (HL)") => {
+                        let mut val = self.load_hl();
+                        rlc!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("RLC A") => rlc!(self.cpu.a),
 
-                    // ========== BIT ==========
-                    prefixed_opcode!("BIT 7, H") => {
-                        let zero = (self.cpu.h.get() & 0b1000_0000) == 0;
-                        set_flags!(self.cpu.f => zero 0 1 -);
+                    // ========== RRC ==========
+                    prefixed_opcode!("RRC B") => rrc!(self.cpu.b),
+                    prefixed_opcode!("RRC C") => rrc!(self.cpu.c),
+                    prefixed_opcode!("RRC D") => rrc!(self.cpu.d),
+                    prefixed_opcode!("RRC E") => rrc!(self.cpu.e),
+                    prefixed_opcode!("RRC H") => rrc!(self.cpu.h),
+                    prefixed_opcode!("RRC L") => rrc!(self.cpu.l),
+                    prefixed_opcode!("RRC (HL)") => {
+                        let mut val = self.load_hl();
+                        rrc!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("RRC A") => rrc!(self.cpu.a),
+
+                    // ========== RL ==========
+                    prefixed_opcode!("RL B") => rl!(self.cpu.b),
+                    prefixed_opcode!("RL C") => rl!(self.cpu.c),
+                    prefixed_opcode!("RL D") => rl!(self.cpu.d),
+                    prefixed_opcode!("RL E") => rl!(self.cpu.e),
+                    prefixed_opcode!("RL H") => rl!(self.cpu.h),
+                    prefixed_opcode!("RL L") => rl!(self.cpu.l),
+                    prefixed_opcode!("RL (HL)") => {
+                        let mut val = self.load_hl();
+                        rl!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("RL A") => rl!(self.cpu.a),
+
+                    // ========== RR ==========
+                    prefixed_opcode!("RR B") => rr!(self.cpu.b),
+                    prefixed_opcode!("RR C") => rr!(self.cpu.c),
+                    prefixed_opcode!("RR D") => rr!(self.cpu.d),
+                    prefixed_opcode!("RR E") => rr!(self.cpu.e),
+                    prefixed_opcode!("RR H") => rr!(self.cpu.h),
+                    prefixed_opcode!("RR L") => rr!(self.cpu.l),
+                    prefixed_opcode!("RR (HL)") => {
+                        let mut val = self.load_hl();
+                        rr!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("RR A") => rr!(self.cpu.a),
+
+                    // ========== SLA ==========
+                    prefixed_opcode!("SLA B") => sla!(self.cpu.b),
+                    prefixed_opcode!("SLA C") => sla!(self.cpu.c),
+                    prefixed_opcode!("SLA D") => sla!(self.cpu.d),
+                    prefixed_opcode!("SLA E") => sla!(self.cpu.e),
+                    prefixed_opcode!("SLA H") => sla!(self.cpu.h),
+                    prefixed_opcode!("SLA L") => sla!(self.cpu.l),
+                    prefixed_opcode!("SLA (HL)") => {
+                        let mut val = self.load_hl();
+                        sla!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("SLA A") => sla!(self.cpu.a),
+
+                    // ========== SRL ==========
+                    prefixed_opcode!("SRL B") => srl!(self.cpu.b),
+                    prefixed_opcode!("SRL C") => srl!(self.cpu.c),
+                    prefixed_opcode!("SRL D") => srl!(self.cpu.d),
+                    prefixed_opcode!("SRL E") => srl!(self.cpu.e),
+                    prefixed_opcode!("SRL H") => srl!(self.cpu.h),
+                    prefixed_opcode!("SRL L") => srl!(self.cpu.l),
+                    prefixed_opcode!("SRL (HL)") => {
+                        let mut val = self.load_hl();
+                        srl!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("SRL A") => srl!(self.cpu.a),
+
+                    // ========== SRA ==========
+                    prefixed_opcode!("SRA B") => sra!(self.cpu.b),
+                    prefixed_opcode!("SRA C") => sra!(self.cpu.c),
+                    prefixed_opcode!("SRA D") => sra!(self.cpu.d),
+                    prefixed_opcode!("SRA E") => sra!(self.cpu.e),
+                    prefixed_opcode!("SRA H") => sra!(self.cpu.h),
+                    prefixed_opcode!("SRA L") => sra!(self.cpu.l),
+                    prefixed_opcode!("SRA (HL)") => {
+                        let mut val = self.load_hl();
+                        sra!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("SRA A") => sra!(self.cpu.a),
+
+                    // ========== SWAP ==========
+                    prefixed_opcode!("SWAP B") => swap!(self.cpu.b),
+                    prefixed_opcode!("SWAP C") => swap!(self.cpu.c),
+                    prefixed_opcode!("SWAP D") => swap!(self.cpu.d),
+                    prefixed_opcode!("SWAP E") => swap!(self.cpu.e),
+                    prefixed_opcode!("SWAP H") => swap!(self.cpu.h),
+                    prefixed_opcode!("SWAP L") => swap!(self.cpu.l),
+                    prefixed_opcode!("SWAP (HL)") => {
+                        let mut val = self.load_hl();
+                        swap!(val);
+                        self.store_hl(val);
+                    },
+                    prefixed_opcode!("SWAP A") => swap!(self.cpu.a),
+
+                    // ========== BIT/RES/SET ==========
+                    opcode @ 0x40..=0xFF => {
+                        // All BIT/RES/SET instructions follow the same structure. Because of this
+                        // all three instructions are handled in this match arm to reduce
+                        // duplicate code.
+                        //
+                        // The opcode structure is the following:
+                        // 00 000 000
+                        // ^^ ^^^ ^^^
+                        // || ||| |||
+                        // || ||| --------> The first three bits encode the register which is
+                        // || |||           used (0: B, 1: C, 2: D, 3: E, 4: H, 5: L, 6: (HL), 7: A)
+                        // ||  -----------> The next three bits encode the bit which should be
+                        // ||               passed to the instruction (0: LSB, up to 7: MSB)
+                        //  --------------> The last two bits encode the instruction which should
+                        //                  be executed (1: BIT, 2: RES, 3: SET)
+
+                        // Select register
+                        let register_code = opcode & 0b0000_0111;
+
+                        // Select instruction
+                        let instr_code = (opcode & 0b1100_0000) >> 6;
+
+                        // Select bit
+                        let bit = (opcode & 0b0011_1000) >> 3;
+
+                        // Get bit mask
+                        let mask = Byte::new(0b0000_0001 << bit);
+
+                        // Handle (HL) in a special way, because we can't create a mutable borrow
+                        // of it
+                        if register_code == 6 {
+                            let byte = self.load_hl();
+                            match instr_code {
+                                1 => {
+                                    let zero = (byte & mask) == 0;
+                                    set_flags!(self.cpu.f => zero 0 1 -);
+                                }
+                                2 => self.store_hl(byte & !mask),
+                                3 => self.store_hl(byte | mask),
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            // Create a mutable borrow of the selected register and apply the
+                            // instruction on it
+                            let reg = match register_code {
+                                0 => &mut self.cpu.b,
+                                1 => &mut self.cpu.c,
+                                2 => &mut self.cpu.d,
+                                3 => &mut self.cpu.e,
+                                4 => &mut self.cpu.h,
+                                5 => &mut self.cpu.l,
+                                7 => &mut self.cpu.a,
+                                _ => unreachable!(),
+                            };
+                            match instr_code {
+                                1 => {
+                                    let zero = (*reg & mask) == 0;
+                                    set_flags!(self.cpu.f => zero 0 1 -);
+                                }
+                                2 => *reg &= !mask,
+                                3 => *reg |= mask,
+                                _ => unreachable!(),
+                            }
+                        }
                     }
 
                     _ => {
