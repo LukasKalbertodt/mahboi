@@ -7,7 +7,7 @@ use std::{
 use cursive::{
     Printer,
     direction::Direction,
-    event::{AnyCb, Event, EventResult},
+    event::{AnyCb, Event, MouseButton, EventResult, MouseEvent},
     theme::{Color, BaseColor},
     view::{View, Selector},
     // views::TextView,
@@ -168,8 +168,32 @@ impl View for AsmView {
         Vec2::new(width, self.lines.len())
     }
 
-    fn on_event(&mut self, _: Event) -> EventResult {
-        // TODO
+    fn on_event(&mut self, event: Event) -> EventResult {
+        match event {
+            Event::Mouse {
+                event: MouseEvent::Press(MouseButton::Left),
+                position,
+                offset,
+            } => {
+                // If the click was over our view
+                if let Some(rel_pos) = position.checked_sub(offset) {
+                    // If the left side of the line was clicked
+                    if rel_pos.x < 14 {
+                        let addr = self.lines[rel_pos.y].addr;
+                        if self.breakpoints.contains(addr) {
+                            self.breakpoints.remove(addr);
+                        } else {
+                            self.breakpoints.add(addr);
+                        }
+                        return EventResult::Consumed(None);
+                    }
+                }
+            }
+
+            // All other events are ignored
+            _ => {}
+        }
+
         EventResult::Ignored
     }
 
