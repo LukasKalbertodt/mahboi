@@ -463,7 +463,7 @@ impl TuiDebugger {
         let mut body = StyledString::new();
 
         let start = machine.cpu.sp.get();
-        let end = start.saturating_add(10);
+        let end = start.saturating_add(20);
 
         for addr in start..end {
             let addr = Word::new(addr);
@@ -564,7 +564,10 @@ impl TuiDebugger {
             .fixed_width(30);
 
         // Second right column
-        let stack_body = TextView::new("no data yet").with_id("stack_view");
+        let stack_body = TextView::new("no data yet")
+            .with_id("stack_view")
+            .scrollable()
+            .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
 
         // Setup Buttons
