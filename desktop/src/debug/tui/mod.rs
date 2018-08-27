@@ -550,10 +550,20 @@ impl TuiDebugger {
             .scrollable()
             .with_id("asm_view_scroll");
 
-        // Right panel
+        // First right column
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
+        let ppu_body = TextView::new("not implemented yet").center().with_id("ppu_data");
+        let ppu_view = Dialog::around(ppu_body).title("PPU");
+
+        let first_right_panel = LinearLayout::vertical()
+            .child(cpu_view)
+            .child(DummyView)
+            .child(ppu_view)
+            .fixed_width(30);
+
+        // Second right column
         let stack_body = TextView::new("no data yet").with_id("stack_view");
         let stack_view = Dialog::around(stack_body).title("Stack");
 
@@ -582,9 +592,7 @@ impl TuiDebugger {
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
-        let right_panel = LinearLayout::vertical()
-            .child(cpu_view)
-            .child(DummyView)
+        let second_right_panel = LinearLayout::vertical()
             .child(stack_view)
             .child(DummyView)
             .child(debug_buttons)
@@ -592,8 +600,10 @@ impl TuiDebugger {
 
         // Combine
         let view = LinearLayout::horizontal()
-            .child(asm_view).weight(5)
-            .child(right_panel).weight(1)
+            .child(asm_view)
+            .child(first_right_panel)
+            .child(DummyView)
+            .child(second_right_panel)
             .full_screen();
 
         // Add shortcuts for debug tab
