@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     env::Display,
     // log::*,
@@ -473,6 +475,17 @@ pub enum Phase {
     /// Also called "Mode 1": Time after the last line has been drawn and
     /// before the next frame begins.
     VBlank,
+}
+
+impl fmt::Display for Phase {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Phase::OamSearch => "OAM search",
+            Phase::PixelTransfer => "pixel transfer",
+            Phase::HBlank => "H-Blank",
+            Phase::VBlank => "V-Blank",
+        }.fmt(f)
+    }
 }
 
 
