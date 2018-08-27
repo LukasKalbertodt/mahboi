@@ -19,6 +19,7 @@ use mahboi::{
     primitives::Word,
 };
 use super::{
+    Breakpoints,
     util::DecodedInstr,
 };
 
@@ -40,15 +41,17 @@ pub struct AsmView {
     lines: Vec<Line>,
     instr_cache: BTreeMap<Word, DecodedInstr>,
     pc: Word,
+    breakpoints: Breakpoints,
 }
 
 impl AsmView {
     /// Creates an empty AsmView.
-    pub fn new() -> Self {
+    pub(crate) fn new(breakpoints: Breakpoints) -> Self {
         Self {
             lines: vec![],
             instr_cache: BTreeMap::new(),
             pc: Word::new(0),
+            breakpoints,
         }
     }
 
@@ -138,7 +141,16 @@ impl View for AsmView {
             if line.current {
                 printer.print((0, i), "PC ➤ ");
             }
-            let addr_offset = 5;
+            let breakpoint_offset = 5;
+
+            if self.breakpoints.contains(line.addr) {
+                printer.with_style(Color::Light(BaseColor::Red), |printer| {
+                    printer.print((breakpoint_offset, i), "⯃ ");
+                });
+            } else {
+                printer.print((breakpoint_offset, i), "  ");
+            }
+            let addr_offset = breakpoint_offset + 2;
 
             // Print address
             printer.with_style(Color::Light(BaseColor::Blue), |printer| {

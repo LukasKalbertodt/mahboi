@@ -705,7 +705,7 @@ impl TuiDebugger {
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
-        let asm_view = AsmView::new()
+        let asm_view = AsmView::new(self.breakpoints.clone())
             .with_id("asm_view")
             .scrollable()
             .with_id("asm_view_scroll");
