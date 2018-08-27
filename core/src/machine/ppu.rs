@@ -7,7 +7,7 @@ use super::interrupt::{InterruptController, Interrupt};
 
 
 /// Pixel processing unit.
-pub(crate) struct Ppu {
+pub struct Ppu {
     pub vram: Memory,
     pub oam: Memory,
 
@@ -220,6 +220,42 @@ impl Ppu {
             _ => unreachable!(),
         }
     }
+
+    /// Returns register FF40: LCDC
+    pub fn lcd_control(&self) -> Byte { self.lcd_control }
+
+    /// Returns register FF41: LCD status
+    pub fn status(&self) -> Byte { self.status }
+
+    /// Returns register FF42: y scroll position of background
+    pub fn scroll_y(&self) -> Byte { self.scroll_y }
+
+    /// Returns register FF43: x scroll position of background
+    pub fn scroll_x(&self) -> Byte { self.scroll_x }
+
+    /// Returns register FF44: LY. Stores the line we are currently drawing
+    /// (including v-blank lines). This value is always between 0 and 154
+    /// (exclusive).
+    pub fn current_line(&self) -> Byte { self.current_line }
+
+    /// Returns register FF45: LY compare. Is compared to `current_line` all
+    /// the time. If both values are equal, things happen.
+    pub fn lyc(&self) -> Byte { self.lyc }
+
+    //  Returns register FF47: Background palette data.
+    pub fn background_palette(&self) -> Byte { self.background_palette }
+
+    //  Returns register FF48: Sprite palette 0 data.
+    pub fn sprite_palette_0(&self) -> Byte { self.sprite_palette_0 }
+
+    //  Returns register FF49: Sprite palette 1 data.
+    pub fn sprite_palette_1(&self) -> Byte { self.sprite_palette_1 }
+
+    /// Returns register FF4A: Y window position
+    pub fn win_y(&self) -> Byte { self.win_y }
+
+    /// Returns register FF4B: X window position
+    pub fn win_x(&self) -> Byte { self.win_x }
 
     fn set_phase(&mut self, phase: Phase) {
         let v = match phase {
