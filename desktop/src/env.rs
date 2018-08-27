@@ -32,7 +32,7 @@ impl NativeWindow {
         };
 
         let win = Window::new(WINDOW_TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)?;
-        let buf = WinBuffer(vec![0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+        let buf = WinBuffer(vec![0xa0a0; SCREEN_WIDTH * SCREEN_HEIGHT]);
         info!("[desktop] Opened window");
 
         Ok(Self {
