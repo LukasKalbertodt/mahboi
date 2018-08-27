@@ -272,6 +272,14 @@ impl Machine {
             }}
         }
 
+        /// This is a convenience macro for all CALL-like instructions to reduce duplicate code.
+        macro_rules! call {
+            ($x:expr) => {{
+                self.push(self.cpu.pc);
+                self.cpu.pc = $x;
+            }}
+        }
+
         // Execute the fetched instruction
         match op_code.get() {
             // ========== LD ==========
@@ -531,38 +539,14 @@ impl Machine {
             opcode!("CP d8")   => cp!(arg_byte),
 
             // ========== RST ==========
-            opcode!("RST 00H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x00);
-            }
-            opcode!("RST 08H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x08);
-            }
-            opcode!("RST 10H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x10);
-            }
-            opcode!("RST 18H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x18);
-            }
-            opcode!("RST 20H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x20);
-            }
-            opcode!("RST 28H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x28);
-            }
-            opcode!("RST 30H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x30);
-            }
-            opcode!("RST 38H") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = Word::new(0x38);
-            }
+            opcode!("RST 00H") => call!(Word::new(0x00)),
+            opcode!("RST 08H") => call!(Word::new(0x08)),
+            opcode!("RST 10H") => call!(Word::new(0x10)),
+            opcode!("RST 18H") => call!(Word::new(0x18)),
+            opcode!("RST 20H") => call!(Word::new(0x20)),
+            opcode!("RST 28H") => call!(Word::new(0x28)),
+            opcode!("RST 30H") => call!(Word::new(0x30)),
+            opcode!("RST 38H") => call!(Word::new(0x38)),
 
             // ========== JR ==========
             opcode!("JR r8") => self.cpu.pc += arg_byte.get() as i8,
@@ -642,10 +626,7 @@ impl Machine {
             opcode!("PUSH AF") => self.push(self.cpu.af()),
 
             // ========== CALL/RET ==========
-            opcode!("CALL a16") => {
-                self.push(self.cpu.pc);
-                self.cpu.pc = arg_word;
-            }
+            opcode!("CALL a16") => call!(arg_word),
             opcode!("RET") => ret!(),
             opcode!("RET NZ") => {
                 if !self.cpu.zero() {
