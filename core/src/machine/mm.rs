@@ -52,7 +52,7 @@ impl Machine {
             0xFEA0..0xFF00 => {
                 // On DMG writes to this are ignored
                 // TODO: Add correct CGB behavior
-                trace!("Wrote to {:?} which is in not writable range: 0xFEA0..0xFF00!", addr);
+                trace!("Wrote to {} which is in not writable range: 0xFEA0..0xFF00!", addr);
             },
 
             // Register with flag for mounting/unmounting the BIOS (this is an IO register). To
