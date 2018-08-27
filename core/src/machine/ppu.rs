@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::{
     env::Display,
-    // log::*,
+    log::*,
     primitives::{Byte, Word, Memory, PixelPos, PixelColor},
 };
 use super::interrupt::{InterruptController, Interrupt};
@@ -104,7 +104,7 @@ impl Ppu {
     /// transfer, this returns garbage.
     pub(crate) fn load_vram_byte(&self, addr: Word) -> Byte {
         match self.phase() {
-            Phase::PixelTransfer => Byte::new(0xff),
+            Phase::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
             _ => self.vram[addr - 0x8000],
         }
     }
@@ -118,7 +118,7 @@ impl Ppu {
     /// transfer, this write is lost (does nothing).
     pub(crate) fn store_vram_byte(&mut self, addr: Word, byte: Byte) {
         match self.phase() {
-            Phase::PixelTransfer => {},
+            Phase::PixelTransfer if self.lcd_enabled() => {},
             _ => self.vram[addr - 0x8000] = byte,
         }
     }
@@ -161,10 +161,16 @@ impl Ppu {
         match addr.get() {
             0xFF40 => self.lcd_control,
             // Bit 7 is always 1
-            0xFF41 => self.status.map(|b| {
-                // TODO: bit 0, 1, 2 return 0 when LCD is off
-                // TODO: bit 0, 1, 2 have to be generated
-                b & 0b1000_0000
+            0xFF41 => self.status.map(|mut b| {
+                // TODO: Bit 2 has to be generated somewhere
+                // Bit 7 always returns 1
+                b |= 0b1000_0000;
+                if !self.lcd_enabled() {
+                    // Bit 0, 1 and 2 return 0 when LCD is off
+                    b &= 0b1111_1000;
+                }
+
+                b
             }),
             0xFF42 => self.scroll_y,
             0xFF43 => self.scroll_x,
@@ -186,20 +192,27 @@ impl Ppu {
     /// function panics!
     pub(crate) fn store_io_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
-            0xFF40 => self.lcd_control = byte,
+            0xFF40 => {
+                let was_enabled = self.lcd_enabled();
+                self.lcd_control = byte;
+                match (was_enabled, self.lcd_enabled()) {
+                    (false, true) => {
+                        info!("[ppu] LCD was enabled");
+                        self.set_phase(Phase::OamSearch);
+                        self.cycle_in_line = 0;
+                        // TODO: also reset other stuff?
+                    }
+                    (true, false) => info!("[ppu] LCD was disabled"),
+                    _ => {}
+                }
+            }
             0xFF41 => {
                 // Only bit 3 to 6 are writable
                 let v = self.status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
                 self.status = Byte::new(v);
             },
-            0xFF42 => {
-                // debug!("[ppu] scroll_y set to {}", byte);
-                self.scroll_y = byte;
-            }
-            0xFF43 => {
-                // debug!("[ppu] scroll_y set to {}", byte);
-                self.scroll_x = byte;
-            }
+            0xFF42 => self.scroll_y = byte,
+            0xFF43 => self.scroll_x = byte,
             0xFF44 => {}, // read only
             0xFF45 => self.lyc = byte,
             0xFF46 => {}, // TODO
@@ -221,6 +234,10 @@ impl Ppu {
             3 => Phase::PixelTransfer,
             _ => unreachable!(),
         }
+    }
+
+    pub fn lcd_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b1000_0000 != 0
     }
 
     /// Returns register FF40: LCDC
@@ -267,7 +284,7 @@ impl Ppu {
             Phase::PixelTransfer => 3,
         };
 
-        self.status = Byte::new((self.status.get() & 0b1111_1000) | v);
+        self.status = Byte::new((self.status.get() & 0b1111_1100) | v);
     }
 
     /// Executes one machine cycle (1 Mhz).
@@ -276,6 +293,11 @@ impl Ppu {
         display: &mut impl Display,
         interrupt_controller: &mut InterruptController,
     ) {
+        // If the whole LCD is disabled, the PPU does nothing
+        if !self.lcd_enabled() {
+            return;
+        }
+
         // Check if we're currently in V-Blank or not.
         if self.current_line.get() >= 144 {
             // ===== V-Blank =====
@@ -287,14 +309,21 @@ impl Ppu {
             // ===== Not in V-Blank =====
             match (self.cycle_in_line, self.current_column) {
                 (0..20, 0) => {
+                    if self.cycle_in_line == 0 {
+                        self.set_phase(Phase::OamSearch);
+                    }
                     // TODO: OAM Search
                 }
                 (20..144, col) if col < 160 => {
+                    if self.cycle_in_line == 20 {
+                        self.set_phase(Phase::PixelTransfer);
+                    }
                     self.pixel_transfer_step(display);
                 }
-                (43..144, _) => {
-                    // TODO: H-Blank
-                    // debug!("[ppu] hblank. current_line: {}", self.current_line);
+                (43..144, col) if self.phase() == Phase::HBlank && col == 160 => {
+                    // We don't have to do anything in H-Blank. This match arm
+                    // just exists to make sure we never reach an invalid state
+                    // (with the next arm)
                 }
                 (cycles, col) => {
                     // This state should never occur
@@ -328,6 +357,13 @@ impl Ppu {
         while self.fifo.len() > 8 && pixel_pushed < 4 {
             self.push_pixel(display);
             pixel_pushed += 1;
+
+            // We we are at the end of the line, stop everything and go to
+            // H-Blank.
+            if self.current_column == 160 {
+                self.set_phase(Phase::HBlank);
+                return;
+            }
         }
 
         // Fetch new data. We need two steps to perform one fetch. We just
@@ -354,20 +390,20 @@ impl Ppu {
 
             // Background map data is stored in: 0x9800 - 0x9BFF. We have to
             // lookup the index of our tile there.
-            let background_addr = Word::new(0x9800 + tile_y as u16 * 32 + tile_x as u16);
-            let tile_idx = self.load_vram_byte(background_addr);
+            let background_addr = Word::new(0x1800 + tile_y as u16 * 32 + tile_x as u16);
+            let tile_idx = self.vram[background_addr];
 
             // We calculate the start address of the tile we want to load from.
             // Each tile uses 16 bytes.
-            let tile_start = Word::new(0x8000 + tile_idx.get() as u16 * 16);
+            let tile_start = Word::new(tile_idx.get() as u16 * 16);
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
             let line_offset = tile_start + 2 * (pos_y % 8);
 
             // Load the two bytes and add all pixels to the FIFO.
-            let lo = self.load_vram_byte(line_offset).get();
-            let hi = self.load_vram_byte(line_offset + 1u8).get();
+            let lo = self.vram[line_offset].get();
+            let hi = self.vram[line_offset + 1u8].get();
             self.fifo.add_data(hi, lo, PixelSource::Background);
 
             // if self.current_line == 0 {
