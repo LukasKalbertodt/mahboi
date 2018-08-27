@@ -132,7 +132,7 @@ impl Ppu {
         match self.phase() {
             Phase::PixelTransfer => Byte::new(0xff),
             Phase::OamSearch => Byte::new(0xff),
-            _ => self.vram[addr - 0xFE00],
+            _ => self.oam[addr - 0xFE00],
         }
     }
 
@@ -147,7 +147,7 @@ impl Ppu {
         match self.phase() {
             Phase::PixelTransfer => {},
             Phase::OamSearch => {},
-            _ => self.vram[addr - 0xFE00] = byte,
+            _ => self.oam[addr - 0xFE00] = byte,
         }
     }
 
