@@ -215,7 +215,7 @@ impl Machine {
         macro_rules! rl {
             ($x:expr) => {{
                 let carry = $x.rotate_left_through_carry(self.cpu.carry());
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 carry);
             }}
         }
@@ -224,7 +224,7 @@ impl Machine {
         macro_rules! rr {
             ($x:expr) => {{
                 let carry = $x.rotate_right_through_carry(self.cpu.carry());
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 carry);
             }}
         }
@@ -233,7 +233,7 @@ impl Machine {
         macro_rules! sla {
             ($x:expr) => {{
                 let carry = $x.shift_left();
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 carry);
             }}
         }
@@ -242,7 +242,7 @@ impl Machine {
         macro_rules! srl {
             ($x:expr) => {{
                 let carry = $x.shift_right();
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 carry);
             }}
         }
@@ -251,7 +251,7 @@ impl Machine {
         macro_rules! sra {
             ($x:expr) => {{
                 let carry = $x.arithmetic_shift_right();
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 carry);
             }}
         }
@@ -260,7 +260,7 @@ impl Machine {
         macro_rules! swap {
             ($x:expr) => {{
                 $x = $x.swap_nybbles();
-                let zero = self.cpu.c == Byte::zero();
+                let zero = $x == Byte::zero();
                 set_flags!(self.cpu.f => zero 0 0 0);
             }}
         }
