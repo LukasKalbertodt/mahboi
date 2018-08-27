@@ -96,6 +96,17 @@ impl Log for TuiLogger {
 // ===== Debugger
 // ============================================================================
 
+// To handle events, we use `Cursive::step`. Sadly, this function
+// blocks to wait on an event before it returns. This isn't good. We
+// can force the `step()` method to return after one "TUI frame". By
+// setting this to 1000, we assure that `step()` waits for at most 1ms.
+// Still not perfect, but ok.
+const FPS_RUNNING: u32 = 1000;
+
+/// When the debugger is paused, the outer main loop doesn't need to run very
+/// often. We can lower the FPS to be nice to the CPU.
+const FPS_PAUSED: u32 = 4;
+
 /// A debugger that uses a terminal user interface. Used in `--debug` mode.
 pub(crate) struct TuiDebugger {
     /// Handle to the special TUI terminal
@@ -162,7 +173,7 @@ impl TuiDebugger {
         // can force the `step()` method to return after one "TUI frame". By
         // setting this to 1000, we assure that `step()` waits for at most 1ms.
         // Still not perfect, but ok.
-        siv.set_fps(1000);
+        siv.set_fps(FPS_RUNNING);
 
         // Setup own panic hook.
         //
@@ -326,6 +337,8 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (paused)"));
+
+        self.siv.set_fps(FPS_PAUSED);
     }
 
     /// Exit pause mode (continue execution)
@@ -338,6 +351,8 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (running)"));
+
+        self.siv.set_fps(FPS_RUNNING);
     }
 
     pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
