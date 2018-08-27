@@ -585,7 +585,7 @@ impl Machine {
 
             // ========== JP ==========
             opcode!("JP a16") => self.cpu.pc = arg_word,
-            opcode!("JP (HL)") => self.cpu.pc = self.cpu.hl(),
+            opcode!("JP HL") => self.cpu.pc = self.cpu.hl(),
             opcode!("JP Z, a16") => {
                 if self.cpu.zero() {
                     self.cpu.pc = arg_word;
