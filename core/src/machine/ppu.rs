@@ -202,7 +202,10 @@ impl Ppu {
                         self.cycle_in_line = 0;
                         // TODO: also reset other stuff?
                     }
-                    (true, false) => info!("[ppu] LCD was disabled"),
+                    (true, false) => {
+                        info!("[ppu] LCD was disabled");
+                        self.current_line = Byte::new(0);
+                    }
                     _ => {}
                 }
             }
