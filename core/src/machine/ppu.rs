@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::{
+    SCREEN_HEIGHT, SCREEN_WIDTH,
     env::Display,
     log::*,
     primitives::{Byte, Word, Memory, PixelPos, PixelColor},
@@ -302,9 +303,9 @@ impl Ppu {
         }
 
         // Check if we're currently in V-Blank or not.
-        if self.current_line.get() >= 144 {
+        if self.current_line.get() >= SCREEN_HEIGHT as u8 {
             // ===== V-Blank =====
-            if self.current_line == 144 && self.cycle_in_line == 0 {
+            if self.current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
                 self.set_phase(Phase::VBlank);
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
             }
@@ -317,13 +318,13 @@ impl Ppu {
                     }
                     // TODO: OAM Search
                 }
-                (20..144, col) if col < 160 => {
+                (20..114, col) if col < SCREEN_WIDTH as u8 => {
                     if self.cycle_in_line == 20 {
                         self.set_phase(Phase::PixelTransfer);
                     }
                     self.pixel_transfer_step(display);
                 }
-                (43..144, col) if self.phase() == Phase::HBlank && col == 160 => {
+                (43..114, col) if self.phase() == Phase::HBlank && col == SCREEN_WIDTH as u8 => {
                     // We don't have to do anything in H-Blank. This match arm
                     // just exists to make sure we never reach an invalid state
                     // (with the next arm)
@@ -361,9 +362,9 @@ impl Ppu {
             self.push_pixel(display);
             pixel_pushed += 1;
 
-            // We we are at the end of the line, stop everything and go to
+            // We are at the end of the line, stop everything and go to
             // H-Blank.
-            if self.current_column == 160 {
+            if self.current_column == SCREEN_WIDTH as u8 {
                 self.set_phase(Phase::HBlank);
                 return;
             }
