@@ -250,11 +250,7 @@ impl TuiDebugger {
 
         // Append all log messages that were pushed to the global buffer into
         // the corresponding log view.
-        self.siv.call_on_id("log_list", |list: &mut LogView| {
-            for log in LOG_MESSAGES.lock().unwrap().drain(..) {
-                list.add_row(log.level, log.msg);
-            }
-        });
+        self.siv.find_id::<LogView>("log_list").unwrap().update();
 
         // React to any events that might have happend
         while let Ok(c) = self.pending_events.try_recv() {
