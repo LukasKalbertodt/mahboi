@@ -19,15 +19,19 @@ pub(crate) enum InstrArg {
 
     /// An argument that stores a dynamic value. E.g. `LD B, d8`: the second
     /// argument is a dynamic one.
-    Dyn(String),
+    Dyn {
+        label: &'static str,
+        display: String,
+        raw: Vec<Byte>,
+    },
 }
 
 impl InstrArg {
-    /// Creates a new `InstrArg` from the argument name (from the mnemonic) and
+    /// Creates a new `InstrArg` from the argument label (from the mnemonic) and
     /// the argument bytes. The `data` slice can have length 0 for static
     /// arguments.
-    pub(crate) fn new(name: &'static str, data: &[Byte]) -> Self {
-        let s = match name {
+    pub(crate) fn new(label: &'static str, data: &[Byte]) -> Self {
+        let s = match label {
             "d8" => format!("{}", data[0]),
             "d16" => format!("{}", Word::from_bytes(data[0], data[1])),
             "(a8)" => format!("(0xFF00+{})", data[0]),
@@ -41,10 +45,14 @@ impl InstrArg {
                     format!("PC+0x{:02x}", i)
                 }
             }
-            _ => return InstrArg::Static(name),
+            _ => return InstrArg::Static(label),
         };
 
-        InstrArg::Dyn(s)
+        InstrArg::Dyn {
+            label,
+            display: s,
+            raw:data.to_vec(),
+        }
     }
 }
 
@@ -133,7 +141,7 @@ impl DecodedInstr {
         fn append_arg(arg: &InstrArg, styled_string: &mut StyledString) {
             let (s, color) = match arg {
                 InstrArg::Static(s) => (*s, Color::Light(BaseColor::White)),
-                InstrArg::Dyn(s) => (&**s, Color::Dark(BaseColor::Yellow)),
+                InstrArg::Dyn { display, .. } => (&**display, Color::Dark(BaseColor::Yellow)),
             };
 
             styled_string.append_styled(s, color);

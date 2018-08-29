@@ -10,7 +10,6 @@ use cursive::{
     event::{AnyCb, Event, MouseButton, EventResult, MouseEvent},
     theme::{Color, BaseColor},
     view::{View, Selector},
-    // views::TextView,
     vec::Vec2,
 };
 
@@ -20,7 +19,7 @@ use mahboi::{
 };
 use super::{
     Breakpoints,
-    util::DecodedInstr,
+    util::{DecodedInstr, InstrArg},
 };
 
 /// How many bytes around PC should be showed in the view?
@@ -35,6 +34,7 @@ struct Line {
     current: bool,
     addr: Word,
     instr: DecodedInstr,
+    comment: String,
 }
 
 pub struct AsmView {
@@ -110,7 +110,15 @@ impl AsmView {
                 .unwrap_or(DecodedInstr::Unknown(machine.load_byte(addr)));
 
             let instr_len = instr.len();
-            self.lines.push(Line { current, addr, instr });
+
+            let line = Line {
+                current,
+                addr,
+                comment: comment_for(&instr),
+                instr,
+            };
+            self.lines.push(line);
+
             addr += instr_len;
         }
     }
@@ -160,6 +168,15 @@ impl View for AsmView {
 
             // Print instruction
             line.instr.print(&printer.offset((instr_offset, i)));
+            let comment_offset = instr_offset + 28;
+
+            // If we have a comment, print it
+            if !line.comment.is_empty() {
+                printer.with_style(Color::Light(BaseColor::Black), |printer| {
+                    printer.print((comment_offset, i), ";");
+                    printer.print((comment_offset + 2, i), &line.comment);
+                });
+            }
         }
     }
 
@@ -204,4 +221,63 @@ impl View for AsmView {
     fn call_on_any<'a>(&mut self, _selector: &Selector, _cb: AnyCb<'a>) {
         // TODO
     }
+}
+
+/// Creates a comment string for the given instruction.
+///
+/// The comment can hold any potentially useful informtion.
+fn comment_for(instr: &DecodedInstr) -> String {
+    fn comment_sep(s: &mut String) {
+        if !s.is_empty() {
+            *s += ", ";
+        }
+    }
+
+    fn comment_for_arg(s: &mut String, arg: &InstrArg) {
+        if let InstrArg::Dyn { raw, label, .. } = arg {
+            let addr = match *label {
+                "(a8)" => Word::new(0xFF00) + raw[0],
+                "(a16)" | "d16" => Word::from_bytes(raw[0], raw[1]),
+                _ => return,
+            };
+
+            let comment = match addr.get() {
+                0xFF00 => "input",
+                0xFF01 => "serial transfer data",
+                0xFF02 => "serial transfer control",
+                0xFF04..=0xFF07 => "some timer register", // TODO
+                0xFF0F => "IF interrupt flag",
+                0xFF10..=0xFF3F => "probably some sound register", // TODO
+                0xFF40 => "LCD control",
+                0xFF41 => "LCD status",
+                0xFF42 => "bg scroll y",
+                0xFF43 => "bg scroll x",
+                0xFF44 => "LY (current line)",
+                0xFF45 => "LYC (line compare)",
+                0xFF46 => "OAM DMA",
+                0xFF47 => "background palette",
+                0xFF48 => "sprite0 palette",
+                0xFF49 => "sprite1 palette",
+                0xFF4A => "window scroll y",
+                0xFF4B => "window scroll x",
+                0xFFFF => "IE interrupt enable",
+                _ => "",
+            };
+
+            comment_sep(s);
+            *s += comment;
+        }
+    }
+
+    let mut out = String::new();
+    match instr {
+        DecodedInstr::OneArg { arg, .. } => comment_for_arg(&mut out, arg),
+        DecodedInstr::TwoArgs { arg0, arg1, .. } => {
+            comment_for_arg(&mut out, arg0);
+            comment_for_arg(&mut out, arg1);
+        }
+        _ => {}
+    };
+
+    out
 }
