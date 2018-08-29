@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 failure = "0.1.2"
 lazy_static = "1.1"
-log = "0.4"
+log = { version = "0.4", features = ["release_max_level_debug"] }
 mahboi = { path = "../core" }
 minifb = "0.10"
 structopt = "0.2"
