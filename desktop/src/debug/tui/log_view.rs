@@ -6,7 +6,6 @@ use cursive::{
     event::{AnyCb, Event, EventResult},
     theme::{ColorStyle, Color, ColorType, BaseColor},
     view::{View, Selector},
-    views::TextView,
     vec::Vec2,
 };
 use log::Level;
@@ -17,13 +16,14 @@ use super::LOG_MESSAGES;
 /// Determines how many log messages are drawn at the same time. Of course, not
 /// all messages are on the screen, because this log view is in a scroll view.
 /// However, showing a lot of entries makes the TUI very slow.
-const MAX_ENTRIES_IN_VIEW: usize = 100;
+const MAX_ENTRIES_IN_VIEW: usize = 1000;
 
 struct Entry {
     level: Level,
-    text: TextView,
+    // text: TextView,
+    text: String,
 
-    /// Cached height. Is 0 before `required_size` was called.
+    /// Cached height (number of `\n` + 1)
     height: usize,
 }
 
@@ -62,15 +62,10 @@ impl LogView {
 
             // Add new entries
             for record in &global_logs[self.last_global_len..] {
-                // Prepare view. We disable content wrap for log messages of
-                // level `Trace`, because calculating text wrap is costly.
-                let mut view = TextView::new(record.msg.clone());
-                view.set_content_wrap(record.level != log::Level::Trace);
-
                 self.entries.push_back(Entry {
                     level: record.level,
-                    text: view ,
-                    height: 0,
+                    text: record.msg.clone(),
+                    height: record.msg.lines().count(),
                 })
             }
 
@@ -99,25 +94,21 @@ impl View for LogView {
         let mut y_offset = 0;
         for entry in &self.entries {
             let color = level_to_color(entry.level);
-            printer.offset((0, y_offset)).with_color(color, |printer| {
+            printer.with_color(color, |printer| {
                 let lvl = format!("{:6} ", entry.level);
-                printer.print((0, 0), &lvl);
+                printer.print((0, y_offset), &lvl);
 
-                entry.text.draw(&printer.offset((7, 0)));
+                // entry.text.draw(&printer.offset((7, 0)));
+                for line in entry.text.lines() {
+                    printer.print((7, y_offset), line);
+                    y_offset += 1;
+                }
             });
-
-            y_offset += entry.height as i32;
         }
     }
 
     fn required_size(&mut self, constraint: Vec2) -> Vec2 {
-        let constraint_for_child = Vec2::new(constraint.x - 7, constraint.y);
-        let mut height = 0;
-        for entry in &mut self.entries {
-            entry.height = entry.text.required_size(constraint_for_child).y;
-            height += entry.height;
-        }
-
+        let height = self.entries.iter().map(|e| e.height).sum();
         Vec2::new(constraint.x, height)
     }
 
