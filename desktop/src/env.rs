@@ -32,7 +32,10 @@ impl NativeWindow {
         };
 
         let win = Window::new(WINDOW_TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)?;
-        let buf = WinBuffer(vec![0xa0a0; SCREEN_WIDTH * SCREEN_HEIGHT]);
+        let buf = WinBuffer {
+            data: vec![0xa0a0; SCREEN_WIDTH * SCREEN_HEIGHT],
+            buffer_up_to_date: false,
+        };
         info!("[desktop] Opened window");
 
         Ok(Self {
@@ -48,8 +51,13 @@ impl NativeWindow {
 
     /// Updates the window with the internal buffer and handles new events.
     pub(crate) fn update(&mut self) -> Result<(), Error> {
-        self.win.update_with_buffer(&self.buf.0)
-            .context("failed to update window buffer")?;
+        if !self.buf.buffer_up_to_date {
+            self.win.update_with_buffer(&self.buf.data)
+                .context("failed to update window buffer")?;
+            self.buf.buffer_up_to_date = true;
+        } else {
+            self.win.update();
+        }
 
         Ok(())
     }
@@ -64,7 +72,10 @@ impl NativeWindow {
     }
 }
 
-pub(crate) struct WinBuffer(Vec<u32>);
+pub(crate) struct WinBuffer {
+    data: Vec<u32>,
+    buffer_up_to_date: bool,
+}
 
 impl Peripherals for NativeWindow {
     type Display = WinBuffer;
@@ -89,7 +100,8 @@ impl Display for WinBuffer {
         let idx = pos.x() as usize + pos.y() as usize * 160;
         let [r, g, b] = color.to_srgb();
         let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
-        self.0[idx] = combined;
+        self.data[idx] = combined;
+        self.buffer_up_to_date = false;
     }
 }
 
