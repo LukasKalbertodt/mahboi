@@ -104,8 +104,10 @@ impl Log for TuiLogger {
 const FPS_RUNNING: u32 = 1000;
 
 /// When the debugger is paused, the outer main loop doesn't need to run very
-/// often. We can lower the FPS to be nice to the CPU.
-const FPS_PAUSED: u32 = 4;
+/// often. We can lower the FPS to be nice to the CPU. Remember that TUI inputs
+/// interrupt Cursive waiting and can result in a higher FPS than this. This is
+/// just for changes in the TUI that are not input triggered.
+const FPS_PAUSED: u32 = 2;
 
 /// A debugger that uses a terminal user interface. Used in `--debug` mode.
 pub(crate) struct TuiDebugger {
@@ -161,6 +163,10 @@ pub(crate) struct TuiDebugger {
     /// Sometimes the ASM view has to be scrolled to a specific position. This
     /// has to be done after `siv.step()`. That's why its stored here.
     scroll_asm_view: Option<usize>,
+
+    /// A simple counter which counts up every `update()` step. Used to call
+    /// `siv.step()` only every Nth time `update()` is called.
+    update_counter: u32,
 }
 
 impl TuiDebugger {
@@ -210,6 +216,7 @@ impl TuiDebugger {
             boot_rom_disabled: false,
             update_needed: true,
             scroll_asm_view: None,
+            update_counter: 0,
         };
 
         // Add all breakpoints specified by CLI
@@ -294,7 +301,11 @@ impl TuiDebugger {
         }
 
         // Receive events and update view.
-        self.siv.step();
+        self.update_counter += 1;
+        if self.update_counter == 4 {
+            self.update_counter = 0;
+            self.siv.step();
+        }
 
         // Perform certain steps after the TUI has been drawn (re-layouted)
         if let Some(pos) = self.scroll_asm_view {
