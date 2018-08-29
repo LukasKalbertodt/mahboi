@@ -5,12 +5,13 @@ use cursive::{
     direction::Direction,
     event::{AnyCb, Event, EventResult},
     theme::{ColorStyle, Color, ColorType, BaseColor},
-    view::{View, Selector},
+    view::{View, Selector, Scrollable, ScrollStrategy, Identifiable},
+    views::{RadioGroup, LinearLayout, Dialog},
     vec::Vec2,
 };
-use log::Level;
+use log::{Level, LevelFilter};
 
-use super::LOG_MESSAGES;
+use super::{LOG_MESSAGES, LogMessage};
 
 
 /// Determines how many log messages are drawn at the same time. Of course, not
@@ -27,30 +28,97 @@ struct Entry {
     height: usize,
 }
 
+impl Entry {
+    fn new(record: &LogMessage) -> Self {
+        Self {
+            level: record.level,
+            text: record.msg.clone(),
+            height: record.msg.lines().count(),
+        }
+    }
+}
+
 pub struct LogView {
     /// The entries we currently show in the view.
     entries: VecDeque<Entry>,
 
+    /// The radio group representing the dialog to filter log messages.
+    filter: RadioGroup<LevelFilter>,
+
     /// The length of the global `LOG_MESSAGES` when we last checked
     last_global_len: usize,
+
+    last_filter_level: LevelFilter,
 }
 
 impl LogView {
     /// Creates an empty LogView.
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> LinearLayout {
+        let mut radio_group = RadioGroup::new();
+        let log_level_box = LinearLayout::vertical()
+            .child(radio_group.button(LevelFilter::Trace, "Trace"))
+            .child(radio_group.button(LevelFilter::Debug, "Debug"))
+            .child(radio_group.button(LevelFilter::Info, "Info"))
+            .child(radio_group.button(LevelFilter::Warn, "Warn"))
+            .child(radio_group.button(LevelFilter::Error, "Error"));
+
+        let log_level_box = Dialog::around(log_level_box)
+            .title("Filter Logs");
+
+        let right_panel = LinearLayout::vertical()
+            .child(log_level_box);
+
+        // Create the list showing the log messages
+        let log_list = Self {
             entries: VecDeque::new(),
+            filter: radio_group,
             last_global_len: 0,
-        }
+            last_filter_level: LevelFilter::Trace,
+        };
+        let log_list = log_list
+            .with_id("log_list")
+            .scrollable()
+            .scroll_strategy(ScrollStrategy::StickToBottom);
+
+        LinearLayout::horizontal()
+            .child(log_list)
+            .child(right_panel)
     }
 
     /// Updates the view and pulls the newest messages from the global buffer.
     pub(crate) fn update(&mut self) {
         let global_logs = LOG_MESSAGES.lock().unwrap();
 
-        // If new messages were added,
+        // If the filter was changed, we need to update out whole buffer.
+        if self.last_filter_level != *self.filter.selection() {
+            let filter = *self.filter.selection();
+            self.entries.clear();
+
+            // Select the last `MAX_ENTRIES_IN_VIEW` many entries which satisfy
+            // the filter.
+            let records_rev = global_logs.iter()
+                .rev()
+                .filter(|e| e.level <= filter)
+                .take(MAX_ENTRIES_IN_VIEW);
+
+            // Add them to our buffer (`push_front` because the iterator is
+            // reversed).
+            for record in records_rev {
+                self.entries.push_front(Entry::new(record));
+            }
+
+            // Update cache
+            self.last_filter_level = filter;
+            self.last_global_len = global_logs.len();
+        }
+
+        // If new messages were added, we need to potentially add them.
         if global_logs.len() > self.last_global_len {
-            let num_new_entries = global_logs.len() - self.last_global_len;
+            // See how many of the new messages we actually need to display.
+            let filter = self.last_filter_level;
+            let new_entries = global_logs[self.last_global_len..].iter()
+                .filter(|e| e.level <= filter);
+            let num_new_entries = new_entries.clone().count();
 
             // If we would have too many entries, we will remove a few from the
             // list.
@@ -61,12 +129,8 @@ impl LogView {
             }
 
             // Add new entries
-            for record in &global_logs[self.last_global_len..] {
-                self.entries.push_back(Entry {
-                    level: record.level,
-                    text: record.msg.clone(),
-                    height: record.msg.lines().count(),
-                })
+            for record in new_entries {
+                self.entries.push_back(Entry::new(record));
             }
 
             self.last_global_len = global_logs.len();

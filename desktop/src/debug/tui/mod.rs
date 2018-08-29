@@ -12,7 +12,7 @@ use std::{
 use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor, Style},
-    view::{Boxable, Identifiable, Scrollable, ScrollStrategy},
+    view::{Boxable, Identifiable, Scrollable},
     views::{
         OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
         LinearLayout, Dialog, ScrollView, IdView,
@@ -452,11 +452,7 @@ impl TuiDebugger {
         self.siv.set_theme(theme);
 
         // Create view for log messages
-        let log_list = LogView::new()
-            .with_id("log_list")
-            .scrollable()
-            .scroll_strategy(ScrollStrategy::StickToBottom);
-
+        let log_tab = LogView::new();
 
         let main_title = TextView::new(Self::make_main_title("Mahboi Debugger"))
             // .effect(Effect::Bold)
@@ -465,7 +461,7 @@ impl TuiDebugger {
             .with_id("main_title");
 
         let tabs = TabView::new()
-            .tab("Event Log", log_list)
+            .tab("Event Log", log_tab)
             .tab("Debugger", self.debug_tab())
             .with_id("tab_view");
 
