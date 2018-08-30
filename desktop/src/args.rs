@@ -20,7 +20,7 @@ pub(crate) struct Args {
 
     #[structopt(
         long = "--debug",
-        help = "Start in debugging mode (a TUI debugger)",
+        help = "Start in debugging mode (a TUI debugger). Not usable on Windows!",
     )]
     pub(crate) debug: bool,
 

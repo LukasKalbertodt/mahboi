@@ -2,6 +2,8 @@ use crate::args::Args;
 
 pub(crate) use self::tui::TuiDebugger;
 
+
+#[cfg_attr(windows, path = "dummy_tui.rs")]
 mod tui;
 mod simple;
 
@@ -29,6 +31,7 @@ pub(crate) fn init_logger(args: &Args) {
 
 /// Returned from `TuiDebugger::update` to tell the main loop what to do.
 #[must_use]
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) enum Action {
     /// Quit the application
     Quit,

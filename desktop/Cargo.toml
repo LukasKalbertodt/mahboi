@@ -13,7 +13,9 @@ log = { version = "0.4", features = ["release_max_level_debug"] }
 mahboi = { path = "../core" }
 minifb = "0.10"
 structopt = "0.2"
-cursive = { git = "https://github.com/gyscos/Cursive", branch = "master" }
-ncurses = "5"
 unicode-width = "0.1.5"
 spin_sleep = "0.3"
+
+[target.'cfg(not(windows))'.dependencies]
+cursive = { git = "https://github.com/gyscos/Cursive", branch = "master" }
+ncurses = "5"
