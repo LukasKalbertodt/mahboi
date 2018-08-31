@@ -54,6 +54,13 @@ impl InstrArg {
             raw:data.to_vec(),
         }
     }
+
+    pub(crate) fn raw_data(&self) -> Option<Vec<Byte>> {
+        match self {
+            InstrArg::Static(..) => None,
+            InstrArg::Dyn { raw, .. } => Some(raw.clone()),
+        }
+    }
 }
 
 /// A decoded instruction
@@ -133,6 +140,32 @@ impl DecodedInstr {
         match self {
             DecodedInstr::Unknown(_) => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn instr(&self) -> Option<Instr> {
+        match self {
+            DecodedInstr::NoArgs { instr, .. } => Some(*instr),
+            DecodedInstr::OneArg { instr, .. } => Some(*instr),
+            DecodedInstr::TwoArgs { instr, .. } => Some(*instr),
+            DecodedInstr::Unknown(_) => None,
+        }
+    }
+
+    pub(crate) fn arg0(&self) -> Option<&InstrArg> {
+        match self {
+            DecodedInstr::OneArg { arg, .. } => Some(arg),
+            DecodedInstr::TwoArgs { arg0, .. } => Some(arg0),
+            DecodedInstr::NoArgs { .. } | DecodedInstr::Unknown(_) => None,
+        }
+    }
+
+    pub(crate) fn arg1(&self) -> Option<&InstrArg> {
+        match self {
+            DecodedInstr::TwoArgs { arg1, .. } => Some(arg1),
+            DecodedInstr::OneArg { .. }
+            | DecodedInstr::NoArgs { .. }
+            | DecodedInstr::Unknown(_) => None,
         }
     }
 
