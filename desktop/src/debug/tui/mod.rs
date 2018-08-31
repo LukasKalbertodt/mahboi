@@ -12,10 +12,10 @@ use std::{
 use cursive::{
     Cursive,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor, Style},
-    view::{Boxable, Identifiable},
+    view::{Boxable, Identifiable, Scrollable},
     views::{
         OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
-        LinearLayout, Dialog
+        LinearLayout, Dialog, ScrollView, IdView,
     },
     utils::markup::StyledString,
 };
@@ -26,8 +26,11 @@ use log::{Log, Record, Level, Metadata};
 use mahboi::{
     opcode,
     log::*,
-    machine::{Cpu, Machine},
-    primitives::Word,
+    machine::{
+        Cpu, Machine,
+        ppu::Ppu,
+    },
+    primitives::{Byte, Word},
 };
 use crate::args::Args;
 use super::{Action};
@@ -40,6 +43,7 @@ use self::{
 mod asm_view;
 mod tab_view;
 mod log_view;
+mod util;
 
 
 // ============================================================================
@@ -92,6 +96,19 @@ impl Log for TuiLogger {
 // ===== Debugger
 // ============================================================================
 
+// To handle events, we use `Cursive::step`. Sadly, this function
+// blocks to wait on an event before it returns. This isn't good. We
+// can force the `step()` method to return after one "TUI frame". By
+// setting this to 1000, we assure that `step()` waits for at most 1ms.
+// Still not perfect, but ok.
+const FPS_RUNNING: u32 = 1000;
+
+/// When the debugger is paused, the outer main loop doesn't need to run very
+/// often. We can lower the FPS to be nice to the CPU. Remember that TUI inputs
+/// interrupt Cursive waiting and can result in a higher FPS than this. This is
+/// just for changes in the TUI that are not input triggered.
+const FPS_PAUSED: u32 = 2;
+
 /// A debugger that uses a terminal user interface. Used in `--debug` mode.
 pub(crate) struct TuiDebugger {
     /// Handle to the special TUI terminal
@@ -134,6 +151,22 @@ pub(crate) struct TuiDebugger {
     /// Flag that is set when the user requested to run until the next RET
     /// instruction.
     pause_on_ret: bool,
+
+    /// To avoid updating all elements every frame, we track whether an update
+    /// is necessary. This flag is set to `true` whenever `should_pause()` is
+    /// called and reset whenever all views are updated.
+    update_needed: bool,
+
+    /// Was the boot ROM already disabled? This is used to do cache management.
+    boot_rom_disabled: bool,
+
+    /// Sometimes the ASM view has to be scrolled to a specific position. This
+    /// has to be done after `siv.step()`. That's why its stored here.
+    scroll_asm_view: Option<usize>,
+
+    /// A simple counter which counts up every `update()` step. Used to call
+    /// `siv.step()` only every Nth time `update()` is called.
+    update_counter: u32,
 }
 
 impl TuiDebugger {
@@ -146,7 +179,7 @@ impl TuiDebugger {
         // can force the `step()` method to return after one "TUI frame". By
         // setting this to 1000, we assure that `step()` waits for at most 1ms.
         // Still not perfect, but ok.
-        siv.set_fps(1000);
+        siv.set_fps(FPS_RUNNING);
 
         // Setup own panic hook.
         //
@@ -180,6 +213,10 @@ impl TuiDebugger {
             step_over: None,
             breakpoints: Breakpoints::new(),
             pause_on_ret: false,
+            boot_rom_disabled: false,
+            update_needed: true,
+            scroll_asm_view: None,
+            update_counter: 0,
         };
 
         // Add all breakpoints specified by CLI
@@ -213,19 +250,14 @@ impl TuiDebugger {
         }
 
         // If we're in pause mode, update elements in the debugging tab
-        if is_paused {
-            self.siv.find_id::<AsmView>("asm_view").unwrap().update(machine);
-            self.update_cpu_data(&machine.cpu);
-            self.update_stack_data(machine);
+        if is_paused && self.update_needed {
+            self.update_debugger(machine);
+            self.update_needed = false;
         }
 
         // Append all log messages that were pushed to the global buffer into
         // the corresponding log view.
-        self.siv.call_on_id("log_list", |list: &mut LogView| {
-            for log in LOG_MESSAGES.lock().unwrap().drain(..) {
-                list.add_row(log.level, log.msg);
-            }
-        });
+        self.siv.find_id::<LogView>("log_list").unwrap().update();
 
         // React to any events that might have happend
         while let Ok(c) = self.pending_events.try_recv() {
@@ -269,9 +301,32 @@ impl TuiDebugger {
         }
 
         // Receive events and update view.
-        self.siv.step();
+        self.update_counter += 1;
+        if self.update_counter == 4 {
+            self.update_counter = 0;
+            self.siv.step();
+        }
+
+        // Perform certain steps after the TUI has been drawn (re-layouted)
+        if let Some(pos) = self.scroll_asm_view {
+            self.siv.find_id::<ScrollView<IdView<AsmView>>>("asm_view_scroll")
+                .unwrap()
+                .set_offset((0, pos));
+            self.scroll_asm_view = None;
+        }
 
         Ok(Action::Nothing)
+    }
+
+    fn update_debugger(&mut self, machine: &Machine) {
+        let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
+        asm_view.update(machine);
+        let line = asm_view.get_active_line();
+        self.scroll_asm_view = Some(line.saturating_sub(10));
+
+        self.update_cpu_data(&machine.cpu);
+        self.update_stack_data(machine);
+        self.update_ppu_data(&machine.ppu);
     }
 
     /// Switch to pause mode.
@@ -289,6 +344,8 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (paused)"));
+
+        self.siv.set_fps(FPS_PAUSED);
     }
 
     /// Exit pause mode (continue execution)
@@ -301,13 +358,30 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (running)"));
+
+        self.siv.set_fps(FPS_RUNNING);
     }
 
     pub(crate) fn should_pause(&mut self, machine: &Machine) -> bool {
+        // Do internal updating unrelated to determining if the emulator should
+        // stop.
+        self.update_needed = true;
+        if machine.cpu.pc == 0x100 && !self.boot_rom_disabled {
+            self.boot_rom_disabled = true;
+
+            // The ASM view caches instructions and assumes the data in
+            // 0..0x4000 never changes... which is almost true. But if the boot
+            // ROM is disabled, we have to invalidate the cache for 0..0x100.
+            self.siv.find_id::<AsmView>("asm_view")
+                .unwrap()
+                .invalidate_cache(Word::new(0)..Word::new(0x100));
+
+        }
+
+        // If we are at the address we should step over, we will ignore the
+        // rest of this method and just *not* pause. But we will also reset the
+        // `step_over` value, to pause the next time.
         if let Some(addr) = self.step_over {
-            // If we are at the address we should step over, we will ignore the
-            // rest of this method and just *not* pause. But we will also reset
-            // the `step_over` value, to pause the next time.
             if addr == machine.cpu.pc {
                 self.step_over = None;
                 return false;
@@ -378,8 +452,7 @@ impl TuiDebugger {
         self.siv.set_theme(theme);
 
         // Create view for log messages
-        let log_list = LogView::new().with_id("log_list");
-
+        let log_tab = LogView::new();
 
         let main_title = TextView::new(Self::make_main_title("Mahboi Debugger"))
             // .effect(Effect::Bold)
@@ -388,7 +461,7 @@ impl TuiDebugger {
             .with_id("main_title");
 
         let tabs = TabView::new()
-            .tab("Event Log", log_list)
+            .tab("Event Log", log_tab)
             .tab("Debugger", self.debug_tab())
             .with_id("tab_view");
 
@@ -410,7 +483,7 @@ impl TuiDebugger {
         let mut body = StyledString::new();
 
         let start = machine.cpu.sp.get();
-        let end = start.saturating_add(10);
+        let end = start.saturating_add(20);
 
         for addr in start..end {
             let addr = Word::new(addr);
@@ -429,6 +502,149 @@ impl TuiDebugger {
         }
 
         self.siv.find_id::<TextView>("stack_view").unwrap().set_content(body);
+    }
+
+    fn update_ppu_data(&mut self, ppu: &Ppu) {
+        // TODO:
+        // - FF40 bit 0
+        // - FF41 bit 2-6
+
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        let mut body = StyledString::new();
+
+        // Phase/Status
+        if ppu.lcd_enabled() {
+            body.append_plain("==> Phase: ");
+            body.append_plain(ppu.phase().to_string());
+            body.append_plain("\n");
+        } else {
+            body.append_plain("  --- LCD disabled! ---\n");
+        }
+        body.append_plain("\n");
+
+        // Tile data memory range for BG and window
+        body.append_plain("BG tile data: ");
+        let addr = if (ppu.lcd_control().get() & 0b0001_0000) != 0 {
+            "8000-8FFF\n"
+        } else {
+            "8800-97FF\n"
+        };
+        body.append_styled(addr, reg_style);
+
+        // FF44 current line
+        body.append_plain("Current line: ");
+        body.append_styled(ppu.current_line().get().to_string(), reg_style);
+        body.append_plain("\n");
+
+        // FF45 line compare
+        body.append_plain("Line compare: ");
+        body.append_styled(ppu.lyc().get().to_string(), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Palette information =====
+        fn format_palette(b: Byte) -> String {
+            let b = b.get();
+
+            format!(
+                "{:02b} {:02b} {:02b} {:02b}\n",
+                (b >> 6) & 0b11,
+                (b >> 4) & 0b11,
+                (b >> 2) & 0b11,
+                (b >> 0) & 0b11,
+            )
+        }
+        body.append_plain("## Palettes: \n");
+
+        body.append_plain("- BG: ");
+        body.append_styled(format_palette(ppu.background_palette()), reg_style);
+        body.append_plain("- S0: ");
+        body.append_styled(format_palette(ppu.sprite_palette_0()), reg_style);
+        body.append_plain("- S1: ");
+        body.append_styled(format_palette(ppu.sprite_palette_1()), reg_style);
+
+        body.append_plain("\n");
+
+
+        // ===== Background information =====
+        body.append_plain("## Background: \n");
+
+        // Tile map memory region
+        body.append_plain("- tile map: ");
+        if (ppu.lcd_control().get() & 0b0000_1000) != 0 {
+            body.append_styled("9C00-9FFF", reg_style);
+        } else {
+            body.append_styled("9800-9BFF", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Scroll
+        body.append_plain("- X: ");
+        body.append_styled(format!("{: >3}", ppu.scroll_x().get()), reg_style);
+        body.append_plain(",  Y: ");
+        body.append_styled(format!("{: >3}", ppu.scroll_y().get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Window information =====
+        body.append_plain("## Window: \n");
+
+        // Enabled?
+        body.append_plain("- ");
+        if (ppu.lcd_control().get() & 0b0010_0000) != 0 {
+            body.append_styled("enabled", reg_style);
+        } else {
+            body.append_styled("disabled", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Tile map memory region
+        body.append_plain("- tile map: ");
+        if (ppu.lcd_control().get() & 0b0100_0000) != 0 {
+            body.append_styled("9C00-9FFF", reg_style);
+        } else {
+            body.append_styled("9800-9BFF", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Scroll position
+        body.append_plain("- X: ");
+        body.append_styled(format!("{: >3}", ppu.win_x().get()), reg_style);
+        body.append_plain(",  Y: ");
+        body.append_styled(format!("{: >3}", ppu.win_y().get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("\n");
+
+
+        // ===== Sprite information =====
+        body.append_plain("## Sprites: \n");
+
+        // Enabled?
+        body.append_plain("- ");
+        if (ppu.lcd_control().get() & 0b0000_0010) != 0 {
+            body.append_styled("enabled", reg_style);
+        } else {
+            body.append_styled("disabled", reg_style);
+        }
+        body.append_plain("\n");
+
+        // Size
+        body.append_plain("- Size: ");
+        if (ppu.lcd_control().get() & 0b0000_0100) != 0 {
+            body.append_styled("8x16", reg_style);
+        } else {
+            body.append_styled("8x8", reg_style);
+        }
+        body.append_plain("\n");
+
+
+        self.siv.find_id::<TextView>("ppu_data").unwrap().set_content(body);
     }
 
     fn update_cpu_data(&mut self, cpu: &Cpu) {
@@ -492,16 +708,30 @@ impl TuiDebugger {
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
-        let asm_view = AsmView::new()
+        let asm_view = AsmView::new(self.breakpoints.clone())
             .with_id("asm_view")
-            .full_screen();
+            .scrollable()
+            .with_id("asm_view_scroll");
 
-        // Right panel
+        // First right column
         let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
-        let stack_body = TextView::new("no data yet").with_id("stack_view");
+        let stack_body = TextView::new("no data yet")
+            .with_id("stack_view")
+            .scrollable()
+            .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
+
+        let first_right_panel = LinearLayout::vertical()
+            .child(cpu_view)
+            .child(DummyView)
+            .child(stack_view)
+            .fixed_width(30);
+
+        // Second right column
+        let ppu_body = TextView::new("not implemented yet").with_id("ppu_data");
+        let ppu_view = Dialog::around(ppu_body).title("PPU");
 
         // Setup Buttons
         let button_breakpoints = {
@@ -528,18 +758,18 @@ impl TuiDebugger {
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
-        let right_panel = LinearLayout::vertical()
-            .child(cpu_view)
-            .child(DummyView)
-            .child(stack_view)
+        let second_right_panel = LinearLayout::vertical()
+            .child(ppu_view)
             .child(DummyView)
             .child(debug_buttons)
             .fixed_width(30);
 
         // Combine
         let view = LinearLayout::horizontal()
-            .child(asm_view).weight(5)
-            .child(right_panel).weight(1)
+            .child(asm_view)
+            .child(first_right_panel)
+            .child(DummyView)
+            .child(second_right_panel)
             .full_screen();
 
         // Add shortcuts for debug tab

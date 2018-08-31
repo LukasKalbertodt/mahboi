@@ -136,14 +136,8 @@ fn run() -> Result<(), Error> {
 /// Initializes the global logger implementation and returns the TUI debugger,
 /// if we are in debugging mode.
 fn init_debugger(args: &Args) -> Result<Option<TuiDebugger>, Error> {
-    // Initialize global logger. The logger kind depends on the `--debug` flag.
-    debug::init_logger(args.debug);
-
-    #[cfg(debug_assertions)]
-    log::set_max_level(log::LevelFilter::Trace);
-
-    #[cfg(not(debug_assertions))]
-    log::set_max_level(log::LevelFilter::Error);
+    // Initialize global logger.
+    debug::init_logger(args);
 
     // Create the TUI debugger if we're in debug mode.
     if args.debug {

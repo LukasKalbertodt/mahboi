@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use log::LevelFilter;
 use minifb::Scale;
 use structopt::StructOpt;
 
@@ -19,7 +20,7 @@ pub(crate) struct Args {
 
     #[structopt(
         long = "--debug",
-        help = "Start in debugging mode (a TUI debugger)",
+        help = "Start in debugging mode (a TUI debugger). Not usable on Windows!",
     )]
     pub(crate) debug: bool,
 
@@ -55,6 +56,20 @@ pub(crate) struct Args {
             means double the speed, while `4` would mean 400% speed (= roughly 240FPS).",
     )]
     pub(crate) turbo_mode_factor: f64,
+
+    #[structopt(
+        long = "--log-level",
+        short = "-l",
+        parse(try_from_str = "parse_log_level"),
+        help = "Specifies which log messages to display and which to supress. The specified \
+            value will show all log messages with the same level or any higher level. So \
+            `-l warn` will print errors and warnings and `-l trace` will show all levels. You \
+            can also disable all log messages with `-l off`. Valid values: 'off', 'error', \
+            'warn', 'info', 'debug' and 'trace'. Note that `trace` messages are statically \
+            disabled in release builds and cannot be reenabled by this flag. [default: 'trace' \
+            in `--debug` mode, 'error' otherwise]",
+    )]
+    pub(crate) log_level: Option<LevelFilter>,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
@@ -78,4 +93,19 @@ fn parse_breakpoint(src: &str) -> Result<Word, String> {
                 leading `0x`!)",
             e,
         ))
+}
+
+fn parse_log_level(src: &str) -> Result<LevelFilter, &'static str> {
+    match src {
+        "off" => Ok(LevelFilter::Off),
+        "error" => Ok(LevelFilter::Error),
+        "warn" => Ok(LevelFilter::Warn),
+        "info" => Ok(LevelFilter::Info),
+        "debug" => Ok(LevelFilter::Debug),
+        "trace" => Ok(LevelFilter::Trace),
+        _ => Err(
+            "invalid log level (valid values: 'off', 'error', 'warn', 'info', 'debug' \
+                and 'trace'"
+        ),
+    }
 }

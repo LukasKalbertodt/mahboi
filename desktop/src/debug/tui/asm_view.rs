@@ -1,244 +1,216 @@
 use std::{
     cmp,
+    collections::BTreeMap,
+    ops::Range,
 };
 
 use cursive::{
     Printer,
     direction::Direction,
-    event::{AnyCb, Event, EventResult},
-    theme::{Color, BaseColor, Style, Effect},
+    event::{AnyCb, Event, MouseButton, EventResult, MouseEvent},
+    theme::{Color, BaseColor},
     view::{View, Selector},
-    // views::TextView,
     vec::Vec2,
 };
-use unicode_width::UnicodeWidthStr;
 
 use mahboi::{
-    instr::{INSTRUCTIONS, PREFIXED_INSTRUCTIONS},
     machine::Machine,
-    primitives::{Byte, Word},
+    primitives::Word,
+};
+use super::{
+    Breakpoints,
+    util::{DecodedInstr, InstrArg},
 };
 
+/// How many bytes around PC should be showed in the view?
+const CONTEXT_SIZE: u16 = 100;
 
-const CONTEXT_SIZE: u16 = 40;
-// const LONGEST_STR_LEN: u16 = 4;
+/// When `update()` is called, how many instructions should be added to the
+/// cache (starting from the current instruction).
+const CACHE_LOOKAHEAD: u16 = 200;
 
-#[derive(Clone)]
-enum Arg {
-    Static(&'static str),
-    Dyn(String),
-}
-
-impl Arg {
-    fn new(name: &'static str, data: &[Byte]) -> Self {
-        let s = match name {
-            "d8" => format!("{}", data[0]),
-            "d16" => format!("{}", Word::from_bytes(data[0], data[1])),
-            "(a8)" => format!("(0xFF00+{})", data[0]),
-            "a16" => format!("{}", Word::from_bytes(data[0], data[1])),
-            "(a16)" => format!("({})", Word::from_bytes(data[0], data[1])),
-            "r8" => {
-                let i = data[0].get() as i8;
-                if i < 0 {
-                    format!("PC-0x{:02x}", -(i as i16))
-                } else {
-                    format!("PC+0x{:02x}", i)
-                }
-            }
-            _ => return Arg::Static(name),
-        };
-
-        Arg::Dyn(s)
-    }
-}
-
-#[derive(Clone)]
-enum LineKind {
-    NoArgs(&'static str),
-    OneArg {
-        name: &'static str,
-        arg: Arg,
-    },
-    TwoArgs {
-        name: &'static str,
-        arg0: Arg,
-        arg1: Arg,
-    },
-    Byte(Byte),
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Line {
+    current: bool,
     addr: Word,
-    kind: LineKind,
+    instr: DecodedInstr,
+    comment: String,
 }
-
-// struct InstrCache {
-//     map: HashMap<u16, Instr>,
-// }
-
-// impl InstrCache {
-//     fn new() -> Self {
-//         Self {
-//             map: HashMap::new(),
-//         }
-//     }
-
-//     fn get_at(&self, addr: u16) -> Option<Instr> {
-//         let start_addrs = (0..LONGEST_STR_LEN)
-//             .rev()
-//             .filter_map(|offset| addr.checked_sub(offset))
-//             .map(|addr| self.map.get(addr))
-
-
-//     }
-// }
 
 pub struct AsmView {
     lines: Vec<Line>,
+    instr_cache: BTreeMap<Word, DecodedInstr>,
+    pc: Word,
+    breakpoints: Breakpoints,
 }
 
 impl AsmView {
     /// Creates an empty AsmView.
-    pub fn new() -> Self {
-        let default_line = Line {
-            addr: Word::new(0),
-            kind: LineKind::Byte(Byte::new(0)),
-        };
+    pub(crate) fn new(breakpoints: Breakpoints) -> Self {
         Self {
-            lines: vec![default_line; CONTEXT_SIZE as usize],
+            lines: vec![],
+            instr_cache: BTreeMap::new(),
+            pc: Word::new(0),
+            breakpoints,
         }
     }
 
-    pub fn update(&mut self, machine: &Machine) {
-        self.lines.clear();
+    pub(crate) fn invalidate_cache(&mut self, range: Range<Word>) {
+        let keys = self.instr_cache.range(range)
+            .map(|(addr, _)| *addr)
+            .collect::<Vec<_>>();
 
-        let mut pos = machine.cpu.pc;
-        let mut no_unknown_yet = true;
-        for _ in 0..CONTEXT_SIZE {
-            let opcode = machine.load_byte(pos);
-
-            // Fetch the correct instruction data
-            let (instr, arg_start) = if opcode.get() == 0xCB {
-                let opcode = machine.load_byte(pos + 1u16);
-                (Some(PREFIXED_INSTRUCTIONS[opcode]), pos + 2u16)
-            } else {
-                (INSTRUCTIONS[opcode], pos + 1u16)
-            };
-
-            let (kind, len) = match instr {
-                Some(instr) if no_unknown_yet => {
-                    // Prepare array of argument data
-                    let data = [
-                        machine.load_byte(arg_start),
-                        machine.load_byte(arg_start + 1u16),
-                    ];
-                    let data = &data[..instr.len as usize - 1];
-
-                    // Interpret the mnemonic string
-                    let parts = instr.mnemonic.split_whitespace().collect::<Vec<_>>();
-                    let kind = match &*parts {
-                        &[name] => LineKind::NoArgs(name),
-                        &[name, arg0] => LineKind::OneArg {
-                            name,
-                            arg: Arg::new(arg0, data),
-                        },
-                        &[name, arg0, arg1] => LineKind::TwoArgs {
-                            name,
-                            arg0: Arg::new(&arg0[..arg0.len() - 1], data),
-                            arg1: Arg::new(arg1, data),
-                        },
-                        _ => panic!("internal error: instructions with more than 2 args"),
-                    };
-
-                    (kind, instr.len)
-                }
-                _ => {
-                    no_unknown_yet = false;
-                    (LineKind::Byte(opcode), 1)
-                }
-            };
-
-            self.lines.push(Line {
-                addr: pos,
-                kind,
-            });
-
-            pos += len as u16;
+        for key in keys {
+            self.instr_cache.remove(&key);
         }
+    }
+
+    fn start_of_instr_at(&self, addr: Word) -> Option<Word> {
+        self.instr_cache
+            .range(addr..addr + 3u8)
+            .next()
+            .map(|(addr, _)| *addr)
+    }
+
+    pub fn update(&mut self, machine: &Machine) {
+        self.pc = machine.cpu.pc;
+
+        // Add new instructions to cache
+        let mut pos = machine.cpu.pc;
+        for _ in 0..CACHE_LOOKAHEAD {
+            let data = [
+                machine.load_byte(pos),
+                machine.load_byte(pos + 1u8),
+                machine.load_byte(pos + 2u8),
+            ];
+
+            let instr = DecodedInstr::decode(&data);
+
+            // If we encounter an unencodable instruction, we stop.
+            if instr.is_unknown() {
+                break;
+            }
+
+            let addr = pos;
+            pos += instr.len();
+
+            self.instr_cache.insert(addr, instr);
+        }
+
+        // Construct the lines we want to show.
+        self.lines.clear();
+        let curr_range = self.get_current_range();
+        let mut addr = curr_range.start;
+        while addr < curr_range.end {
+            // Print arrow to show where we are
+            let current = self.pc == addr;
+
+            let instr = self.instr_cache.get(&addr)
+                .cloned()
+                .unwrap_or(DecodedInstr::Unknown(machine.load_byte(addr)));
+
+            let instr_len = instr.len();
+
+            let line = Line {
+                current,
+                addr,
+                comment: comment_for(&instr),
+                instr,
+            };
+            self.lines.push(line);
+
+            addr += instr_len;
+        }
+    }
+
+    pub(crate) fn get_active_line(&self) -> usize {
+        self.lines.iter()
+            .position(|l| l.current)
+            .expect("internal asm_view error: no line is current")
+    }
+
+    fn get_current_range(&self) -> Range<Word> {
+        // Determine the bounds in which we show instructions. The start
+        // position is a bit tricky. It might be the case that it shows into
+        // the middle of an cached instruction. If that's the case, we slightly
+        // adjust the start value.
+        let start = self.pc.map(|w| w.saturating_sub(CONTEXT_SIZE));
+        let start = self.start_of_instr_at(start).unwrap_or(start);
+        let end = self.pc.map(|w| w.saturating_add(CONTEXT_SIZE));
+
+        start..end
     }
 }
 
 impl View for AsmView {
     fn draw(&self, printer: &Printer) {
-        fn print_arg(arg: &Arg, printer: &Printer) -> usize {
-            let (s, color) = match arg {
-                Arg::Static(s) => {
-                    (*s, Color::Light(BaseColor::White))
-                }
-                Arg::Dyn(s) => {
-                    (&**s, Color::Dark(BaseColor::Yellow))
-                }
-            };
-
-            printer.with_style(color, |printer| {
-                printer.print((0, 0), &s);
-            });
-            s.width()
-        }
-
-        // Styles for certain parts of the instructions.
-        let addr_style = Style::from(Color::Light(BaseColor::Blue));
-        let name_style = Style::from(Color::Light(BaseColor::White)).combine(Effect::Bold);
-
-
         for (i, line) in self.lines.iter().enumerate() {
-            // Print address
-            printer.with_style(addr_style, |printer| {
-                printer.print((0, i), &format!("{} │   ", line.addr));
-            });
-            let instr_offset = 11;
-            let arg_offset = instr_offset + 6;
+            // Print arrow to show where we are
+            if line.current {
+                printer.print((0, i), "PC ➤ ");
+            }
+            let breakpoint_offset = 5;
 
+            if self.breakpoints.contains(line.addr) {
+                printer.with_style(Color::Light(BaseColor::Red), |printer| {
+                    printer.print((breakpoint_offset, i), "⯃ ");
+                });
+            } else {
+                printer.print((breakpoint_offset, i), "  ");
+            }
+            let addr_offset = breakpoint_offset + 2;
+
+            // Print address
+            printer.with_style(Color::Light(BaseColor::Blue), |printer| {
+                printer.print((addr_offset, i), &format!("{} │   ", line.addr));
+            });
+            let instr_offset = addr_offset + 11;
 
             // Print instruction
-            match &line.kind {
-                LineKind::NoArgs(name) => {
-                    printer.with_style(name_style, |printer| {
-                        printer.print((instr_offset, i), name);
-                    });
-                }
-                LineKind::OneArg { name, arg } => {
-                    printer.with_style(name_style, |printer| {
-                        printer.print((instr_offset, i), name);
-                    });
-                    print_arg(&arg, &printer.offset((arg_offset, i)));
-                }
-                LineKind::TwoArgs { name, arg0, arg1 } => {
-                    printer.with_style(name_style, |printer| {
-                        printer.print((instr_offset, i), name);
-                    });
-                    let used = print_arg(&arg0, &printer.offset((arg_offset, i)));
-                    let arg1_offset = arg_offset + used;
-                    printer.print((arg1_offset, i), ", ");
-                    print_arg(&arg1, &printer.offset((arg1_offset + 2, i)));
-                }
-                LineKind::Byte(b) => {
-                    let s = format!("{}", b);
-                    printer.print((instr_offset, i), &s);
-                }
+            line.instr.print(&printer.offset((instr_offset, i)));
+            let comment_offset = instr_offset + 28;
+
+            // If we have a comment, print it
+            if !line.comment.is_empty() {
+                printer.with_style(Color::Light(BaseColor::Black), |printer| {
+                    printer.print((comment_offset, i), ";");
+                    printer.print((comment_offset + 2, i), &line.comment);
+                });
             }
         }
     }
 
     fn required_size(&mut self, constraint: Vec2) -> Vec2 {
-        let height = cmp::max(constraint.y, self.lines.len());
         let width = cmp::max(constraint.x, 40);
-        Vec2::new(width, height)
+        Vec2::new(width, self.lines.len())
     }
 
-    fn on_event(&mut self, _: Event) -> EventResult {
-        // TODO
+    fn on_event(&mut self, event: Event) -> EventResult {
+        match event {
+            Event::Mouse {
+                event: MouseEvent::Press(MouseButton::Left),
+                position,
+                offset,
+            } => {
+                // If the click was over our view
+                if let Some(rel_pos) = position.checked_sub(offset) {
+                    // If the left side of the line was clicked
+                    if rel_pos.x < 14 {
+                        let addr = self.lines[rel_pos.y].addr;
+                        if self.breakpoints.contains(addr) {
+                            self.breakpoints.remove(addr);
+                        } else {
+                            self.breakpoints.add(addr);
+                        }
+                        return EventResult::Consumed(None);
+                    }
+                }
+            }
+
+            // All other events are ignored
+            _ => {}
+        }
+
         EventResult::Ignored
     }
 
@@ -249,4 +221,63 @@ impl View for AsmView {
     fn call_on_any<'a>(&mut self, _selector: &Selector, _cb: AnyCb<'a>) {
         // TODO
     }
+}
+
+/// Creates a comment string for the given instruction.
+///
+/// The comment can hold any potentially useful informtion.
+fn comment_for(instr: &DecodedInstr) -> String {
+    fn comment_sep(s: &mut String) {
+        if !s.is_empty() {
+            *s += ", ";
+        }
+    }
+
+    fn comment_for_arg(s: &mut String, arg: &InstrArg) {
+        if let InstrArg::Dyn { raw, label, .. } = arg {
+            let addr = match *label {
+                "(a8)" => Word::new(0xFF00) + raw[0],
+                "(a16)" | "d16" => Word::from_bytes(raw[0], raw[1]),
+                _ => return,
+            };
+
+            let comment = match addr.get() {
+                0xFF00 => "input",
+                0xFF01 => "serial transfer data",
+                0xFF02 => "serial transfer control",
+                0xFF04..=0xFF07 => "some timer register", // TODO
+                0xFF0F => "IF interrupt flag",
+                0xFF10..=0xFF3F => "probably some sound register", // TODO
+                0xFF40 => "LCD control",
+                0xFF41 => "LCD status",
+                0xFF42 => "bg scroll y",
+                0xFF43 => "bg scroll x",
+                0xFF44 => "LY (current line)",
+                0xFF45 => "LYC (line compare)",
+                0xFF46 => "OAM DMA",
+                0xFF47 => "background palette",
+                0xFF48 => "sprite0 palette",
+                0xFF49 => "sprite1 palette",
+                0xFF4A => "window scroll y",
+                0xFF4B => "window scroll x",
+                0xFFFF => "IE interrupt enable",
+                _ => "",
+            };
+
+            comment_sep(s);
+            *s += comment;
+        }
+    }
+
+    let mut out = String::new();
+    match instr {
+        DecodedInstr::OneArg { arg, .. } => comment_for_arg(&mut out, arg),
+        DecodedInstr::TwoArgs { arg0, arg1, .. } => {
+            comment_for_arg(&mut out, arg0);
+            comment_for_arg(&mut out, arg1);
+        }
+        _ => {}
+    };
+
+    out
 }

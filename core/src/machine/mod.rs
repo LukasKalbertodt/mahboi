@@ -27,7 +27,7 @@ pub struct Machine {
     pub wram: Memory,
     pub io: Memory,
 
-    pub(crate) ppu: Ppu,
+    pub ppu: Ppu,
 
     pub hram: Memory,
 

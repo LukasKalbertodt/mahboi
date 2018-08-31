@@ -250,6 +250,10 @@ impl Word {
         self.0
     }
 
+    pub fn map(self, f: impl FnOnce(u16) -> u16) -> Self {
+        Self::new(f(self.0))
+    }
+
     /// Creates a word from the two given bytes.
     pub fn from_bytes(lsb: Byte, msb: Byte) -> Self {
         let val = ((msb.get() as u16) << 8) | lsb.get() as u16;
