@@ -161,8 +161,7 @@ impl Ppu {
     /// transfer and OAM search, this write is lost (does nothing).
     pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
         match self.phase() {
-            Phase::PixelTransfer => {},
-            Phase::OamSearch => {},
+            Phase::PixelTransfer | Phase::OamSearch if self.lcd_enabled() => {},
             _ => self.oam[addr - 0xFE00] = byte,
         }
     }

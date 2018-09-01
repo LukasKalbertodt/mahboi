@@ -12,7 +12,6 @@ use cursive::{
 };
 
 use mahboi::{
-    log::*,
     machine::Machine,
     primitives::{Byte, Word},
 };
@@ -50,7 +49,6 @@ impl MemView {
     pub(crate) fn update(&mut self, machine: &Machine, state_changed: bool) {
         // Check if we need to adjust our window
         let cursor_line = self.cursor.get() & 0xFFF0;
-        debug!("{} -- {}", cursor_line, self.first_line_addr);
         let needs_update = if cursor_line <= self.first_line_addr.get() {
             self.first_line_addr = Word::new(cursor_line.saturating_sub(0x10));
             true

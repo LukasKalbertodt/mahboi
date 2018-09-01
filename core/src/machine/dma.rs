@@ -11,7 +11,7 @@ impl Machine {
     pub(crate) fn dma_step(&mut self) {
         // OAM DMA
         if let Some(src_addr) = self.ppu.oam_dma_status {
-            if src_addr.into_bytes().1 < Byte::new(0xF1) {
+            if src_addr.into_bytes().0 < Byte::new(0xF1) {
                 let dst_addr = Word::new(src_addr.get() % 0x100 + 0xFE00);
                 let b = self.load_byte(src_addr);
                 self.store_byte(dst_addr, b);
