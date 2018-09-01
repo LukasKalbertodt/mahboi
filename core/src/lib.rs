@@ -75,6 +75,12 @@ impl Emulator {
                 self.machine.dma_step();
             }
 
+            // Handle input
+            self.machine.input_controller.handle_input(
+                peripherals.input(),
+                &mut self.machine.interrupt_controller,
+            );
+
             self.cycles_in_frame += cycles_spent as u64;
             self.machine.cycle_counter += cycles_spent;
             if self.cycles_in_frame >= CYCLES_PER_FRAME {

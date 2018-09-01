@@ -5,6 +5,7 @@ use crate::{
 use self::{
     ppu::Ppu,
     interrupt::{InterruptController, Interrupt},
+    input::InputController,
 };
 
 
@@ -16,6 +17,7 @@ mod mm;
 pub mod ppu;
 mod step;
 mod interrupt;
+pub mod input;
 
 
 pub struct Machine {
@@ -33,6 +35,7 @@ pub struct Machine {
     pub hram: Memory,
 
     pub(crate) interrupt_controller: InterruptController,
+    pub(crate) input_controller: InputController,
 
     pub cycle_counter: CycleCounter,
 
@@ -74,6 +77,7 @@ impl Machine {
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
+            input_controller: InputController::new(),
             cycle_counter: CycleCounter::zero(),
             enable_interrupts_next_step: false,
             halt: false,

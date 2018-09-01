@@ -30,6 +30,7 @@ impl Machine {
             // IF register
             0xFF0F => self.interrupt_controller.load_if(),
             0xFF40..0xFF4B => self.ppu.load_io_byte(addr),
+            0xFF00 => self.input_controller.load_register(),
             0xFF00..0xFF80 => self.io[addr - 0xFF00], // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80], // hram
             0xFFFF => self.interrupt_controller.interrupt_enable, // IE register
@@ -63,6 +64,7 @@ impl Machine {
             // IF register
             0xFF0F => self.interrupt_controller.store_if(byte),
             0xFF40..0xFF4B => self.ppu.store_io_byte(addr, byte),
+            0xFF00 => self.input_controller.store_register(byte),
             0xFF00..0xFF80 => self.io[addr - 0xFF00] = byte, // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80] = byte, // hram
             0xFFFF => self.interrupt_controller.interrupt_enable = byte, // IE register

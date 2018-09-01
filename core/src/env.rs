@@ -1,5 +1,6 @@
 use crate::{
     primitives::{PixelColor, PixelPos},
+    machine::input::Keys,
 };
 
 pub trait Peripherals {
@@ -21,5 +22,5 @@ pub trait Sound {
 }
 
 pub trait Input {
-
+    fn get_pressed_keys(&self) -> Keys;
 }
