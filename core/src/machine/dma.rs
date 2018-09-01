@@ -17,9 +17,12 @@ impl Machine {
                 self.store_byte(dst_addr, b);
             }
         }
-        if let Some(src_addr) = &mut self.ppu.oam_dma_status {
-            *src_addr += 1u8;
-        }
+
+        // Advance source address by one
+        self.ppu.oam_dma_status.as_mut().map(|src_addr| *src_addr += 1u8);
+
+        // The OAM DMA always copies from XX00 to XXF1. So if the lower byte is
+        // F2, we stop (by setting it to `None`).
         if self.ppu.oam_dma_status.map(|addr| addr.into_bytes().1) == Some(Byte::new(0xF2)) {
             self.ppu.oam_dma_status = None;
         }
