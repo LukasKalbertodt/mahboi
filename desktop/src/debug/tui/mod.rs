@@ -865,13 +865,36 @@ impl TuiDebugger {
 
     /// Gets executed when the "View memory" action button is pressed.
     fn open_memory_dialog(siv: &mut Cursive) {
+        let jump_to_edit = EditView::new()
+            .max_content_width(4)
+            .on_submit(move |s, input| {
+                // Try to parse the input as hex value
+                match u16::from_str_radix(&input, 16) {
+                    Ok(addr) => {
+                        // Set cursor
+                        let mut mem_view = s.find_id::<MemView>("mem_view").unwrap();
+                        mem_view.cursor = Word::new(addr);
+                    },
+                    Err(e) => {
+                        let msg = format!("invalid addr: {}", e);
+                        s.add_layer(Dialog::info(msg));
+                    }
+                }
+            })
+            .fixed_width(7);
+
+        let jump_to = LinearLayout::horizontal()
+            .child(TextView::new("Jump to:  "))
+            .child(jump_to_edit);
+
         let mem_view = MemView::new()
             .with_id("mem_view");
 
         // Combine all elements
         let body = LinearLayout::vertical()
             .child(mem_view)
-            .child(DummyView);
+            .child(DummyView)
+            .child(jump_to);
 
         // Put into `Dialog` and show dialog
         let dialog = Dialog::around(body)

@@ -30,7 +30,7 @@ pub struct MemView {
     data: Vec<Byte>,
 
     /// Position of the cursor
-    cursor: Word,
+    pub(crate) cursor: Word,
 }
 
 impl MemView {
@@ -52,7 +52,12 @@ impl MemView {
             self.first_line_addr = Word::new(cursor_line.saturating_sub(0x10));
             true
         } else if cursor_line >= self.first_line_addr.get() + 0xE0 {
-            self.first_line_addr = Word::new(cursor_line - 0xE0);
+            let offset = if cursor_line == 0xFFF0 {
+                0xF0
+            } else {
+                0xE0
+            };
+            self.first_line_addr = Word::new(cursor_line - offset);
             true
         } else {
             self.data.is_empty()
