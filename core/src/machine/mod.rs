@@ -11,6 +11,7 @@ use self::{
 #[macro_use]
 mod macros;
 
+mod dma;
 mod mm;
 pub mod ppu;
 mod step;

@@ -30,13 +30,13 @@ impl InstrArg {
     /// Creates a new `InstrArg` from the argument label (from the mnemonic) and
     /// the argument bytes. The `data` slice can have length 0 for static
     /// arguments.
-    pub(crate) fn new(label: &'static str, data: &[Byte]) -> Self {
+    pub(crate) fn new(label: &'static str, data: &[Byte]) -> Option<Self> {
         let s = match label {
-            "d8" => format!("{}", data[0]),
-            "d16" => format!("{}", Word::from_bytes(data[0], data[1])),
-            "(a8)" => format!("(0xFF00+{})", data[0]),
-            "a16" => format!("{}", Word::from_bytes(data[0], data[1])),
-            "(a16)" => format!("({})", Word::from_bytes(data[0], data[1])),
+            "d8" => format!("{}", data.get(0)?),
+            "d16" => format!("{}", Word::from_bytes(*data.get(0)?, *data.get(1)?)),
+            "(a8)" => format!("(0xFF00+{})", data.get(0)?),
+            "a16" => format!("{}", Word::from_bytes(*data.get(0)?, *data.get(1)?)),
+            "(a16)" => format!("({})", Word::from_bytes(*data.get(0)?, *data.get(1)?)),
             "r8" => {
                 let i = data[0].get() as i8;
                 if i < 0 {
@@ -45,13 +45,20 @@ impl InstrArg {
                     format!("PC+0x{:02x}", i)
                 }
             }
-            _ => return InstrArg::Static(label),
+            _ => return Some(InstrArg::Static(label)),
         };
 
-        InstrArg::Dyn {
+        Some(InstrArg::Dyn {
             label,
             display: s,
             raw:data.to_vec(),
+        })
+    }
+
+    pub(crate) fn raw_data(&self) -> Option<Vec<Byte>> {
+        match self {
+            InstrArg::Static(..) => None,
+            InstrArg::Dyn { raw, .. } => Some(raw.clone()),
         }
     }
 }
@@ -79,12 +86,17 @@ pub(crate) enum DecodedInstr {
 
 impl DecodedInstr {
     /// Decodes the given bytes into an instruction. The given byte slice has
-    /// to be 3 bytes or longer!
-    pub(crate) fn decode(bytes: &[Byte]) -> Self {
+    /// to be at least 1 byte long. If the slice is too short for the
+    /// instruction to be decoded, `None` is returned.
+    pub(crate) fn decode(bytes: &[Byte]) -> Option<Self> {
         let opcode = bytes[0];
 
         // Fetch the correct instruction data
         let (instr, arg_start) = if opcode.get() == 0xCB {
+            if bytes.len() == 1 {
+                return None;
+            }
+
             (Some(PREFIXED_INSTRUCTIONS[bytes[1]]), 2)
         } else {
             (INSTRUCTIONS[opcode], 1)
@@ -97,26 +109,28 @@ impl DecodedInstr {
 
                 // Interpret the mnemonic string
                 let parts = instr.mnemonic.split_whitespace().collect::<Vec<_>>();
-                match *parts {
+                let out = match *parts {
                     [name] => DecodedInstr::NoArgs {
                         name,
                         instr,
                     },
                     [name, arg0] => DecodedInstr::OneArg {
                         name,
-                        arg: InstrArg::new(arg0, arg_data),
+                        arg: InstrArg::new(arg0, arg_data)?,
                         instr,
                     },
                     [name, arg0, arg1] => DecodedInstr::TwoArgs {
                         name,
-                        arg0: InstrArg::new(&arg0[..arg0.len() - 1], arg_data),
-                        arg1: InstrArg::new(arg1, arg_data),
+                        arg0: InstrArg::new(&arg0[..arg0.len() - 1], arg_data)?,
+                        arg1: InstrArg::new(arg1, arg_data)?,
                         instr,
                     },
                     _ => panic!("internal error: instructions with more than 2 args"),
-                }
+                };
+
+                Some(out)
             }
-            _ => DecodedInstr::Unknown(opcode),
+            _ => Some(DecodedInstr::Unknown(opcode)),
         }
     }
 
@@ -133,6 +147,32 @@ impl DecodedInstr {
         match self {
             DecodedInstr::Unknown(_) => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn instr(&self) -> Option<Instr> {
+        match self {
+            DecodedInstr::NoArgs { instr, .. } => Some(*instr),
+            DecodedInstr::OneArg { instr, .. } => Some(*instr),
+            DecodedInstr::TwoArgs { instr, .. } => Some(*instr),
+            DecodedInstr::Unknown(_) => None,
+        }
+    }
+
+    pub(crate) fn arg0(&self) -> Option<&InstrArg> {
+        match self {
+            DecodedInstr::OneArg { arg, .. } => Some(arg),
+            DecodedInstr::TwoArgs { arg0, .. } => Some(arg0),
+            DecodedInstr::NoArgs { .. } | DecodedInstr::Unknown(_) => None,
+        }
+    }
+
+    pub(crate) fn arg1(&self) -> Option<&InstrArg> {
+        match self {
+            DecodedInstr::TwoArgs { arg1, .. } => Some(arg1),
+            DecodedInstr::OneArg { .. }
+            | DecodedInstr::NoArgs { .. }
+            | DecodedInstr::Unknown(_) => None,
         }
     }
 

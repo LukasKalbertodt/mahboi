@@ -37,12 +37,14 @@ use super::{Action};
 use self::{
     asm_view::AsmView,
     log_view::LogView,
+    mem_view::MemView,
     tab_view::TabView,
 };
 
 mod asm_view;
-mod tab_view;
 mod log_view;
+mod mem_view;
+mod tab_view;
 mod util;
 
 
@@ -250,9 +252,16 @@ impl TuiDebugger {
         }
 
         // If we're in pause mode, update elements in the debugging tab
-        if is_paused && self.update_needed {
-            self.update_debugger(machine);
-            self.update_needed = false;
+        if is_paused {
+            // If the memory dialog is opened, update it
+            if let Some(mut mem_view) = self.siv.find_id::<MemView>("mem_view") {
+                mem_view.update(machine, self.update_needed);
+            }
+
+            if self.update_needed {
+                self.update_debugger(machine);
+                self.update_needed = false;
+            }
         }
 
         // Append all log messages that were pushed to the global buffer into
@@ -741,6 +750,10 @@ impl TuiDebugger {
             })
         };
 
+        let mem_button = Button::new("View memory [m]", |s| {
+            Self::open_memory_dialog(s)
+        });
+
         // Buttons for the 'r', 's' and 'f' actions
         let tx = self.event_sink.clone();
         let run_button = Button::new("Continue [r]", move |_| tx.send('r').unwrap());
@@ -754,7 +767,8 @@ impl TuiDebugger {
             .child(button_breakpoints)
             .child(run_button)
             .child(step_button)
-            .child(fun_end_button);
+            .child(fun_end_button)
+            .child(mem_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
@@ -776,6 +790,7 @@ impl TuiDebugger {
         let breakpoints = self.breakpoints.clone();
         OnEventView::new(view)
             .on_event('b', move |s| Self::open_breakpoints_dialog(s, &breakpoints))
+            .on_event('m', |s| Self::open_memory_dialog(s))
     }
 
     /// Gets executed when the "Manage breakpoints" action button is pressed.
@@ -846,6 +861,47 @@ impl TuiDebugger {
         }
 
         out
+    }
+
+    /// Gets executed when the "View memory" action button is pressed.
+    fn open_memory_dialog(siv: &mut Cursive) {
+        let jump_to_edit = EditView::new()
+            .max_content_width(4)
+            .on_submit(move |s, input| {
+                // Try to parse the input as hex value
+                match u16::from_str_radix(&input, 16) {
+                    Ok(addr) => {
+                        // Set cursor
+                        let mut mem_view = s.find_id::<MemView>("mem_view").unwrap();
+                        mem_view.cursor = Word::new(addr);
+                    },
+                    Err(e) => {
+                        let msg = format!("invalid addr: {}", e);
+                        s.add_layer(Dialog::info(msg));
+                    }
+                }
+            })
+            .fixed_width(7);
+
+        let jump_to = LinearLayout::horizontal()
+            .child(TextView::new("Jump to:  "))
+            .child(jump_to_edit);
+
+        let mem_view = MemView::new()
+            .with_id("mem_view");
+
+        // Combine all elements
+        let body = LinearLayout::vertical()
+            .child(mem_view)
+            .child(DummyView)
+            .child(jump_to);
+
+        // Put into `Dialog` and show dialog
+        let dialog = Dialog::around(body)
+            .title("Memory")
+            .button("Ok", |s| { s.pop_layer(); });
+
+        siv.add_layer(dialog);
     }
 }
 

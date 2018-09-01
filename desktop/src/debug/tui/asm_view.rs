@@ -14,6 +14,8 @@ use cursive::{
 };
 
 use mahboi::{
+    opcode,
+    instr::Instr,
     machine::Machine,
     primitives::Word,
 };
@@ -84,7 +86,8 @@ impl AsmView {
                 machine.load_byte(pos + 2u8),
             ];
 
-            let instr = DecodedInstr::decode(&data);
+            // We can unwrap: `data` is always long enough
+            let instr = DecodedInstr::decode(&data).unwrap();
 
             // If we encounter an unencodable instruction, we stop.
             if instr.is_unknown() {
@@ -114,7 +117,7 @@ impl AsmView {
             let line = Line {
                 current,
                 addr,
-                comment: comment_for(&instr),
+                comment: comment_for(&instr, addr),
                 instr,
             };
             self.lines.push(line);
@@ -226,7 +229,7 @@ impl View for AsmView {
 /// Creates a comment string for the given instruction.
 ///
 /// The comment can hold any potentially useful informtion.
-fn comment_for(instr: &DecodedInstr) -> String {
+fn comment_for(instr: &DecodedInstr, addr: Word) -> String {
     fn comment_sep(s: &mut String) {
         if !s.is_empty() {
             *s += ", ";
@@ -278,6 +281,28 @@ fn comment_for(instr: &DecodedInstr) -> String {
         }
         _ => {}
     };
+
+    if let Some(Instr { opcode, .. }) = instr.instr() {
+        match opcode.get() {
+            // Show destination address
+            opcode!("JR r8")
+            | opcode!("JR NZ, r8")
+            | opcode!("JR NC, r8")
+            | opcode!("JR Z, r8")
+            | opcode!("JR C, r8") => {
+                let raw = instr.arg1()
+                    .unwrap_or(instr.arg0().unwrap())
+                    .raw_data()
+                    .unwrap();
+                let r8 = raw[0].get() as i8;
+
+                let dst = addr + r8 + 2u8;
+                out.push_str(&format!("jumps to {}", dst));
+            }
+
+            _ => {}
+        }
+    }
 
     out
 }
