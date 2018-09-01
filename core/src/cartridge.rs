@@ -44,16 +44,70 @@ impl CgbMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CartridgeType {
     RomOnly,
+    Mbc1,
+    Mbc1Ram,
+    Mbc1RamBattery,
+    Mbc2,
+    Mbc2Battery,
+    RomRam,
+    RomRamBattery,
+    Mmm01,
+    Mmm01Ram,
+    Mmm01RamBattery,
+    Mbc3TimerBattery,
+    Mbc3TimerRamBattery,
+    Mbc3,
+    Mbc3Ram,
+    Mbc3RamBattery,
+    Mbc5,
+    Mbc5Ram,
     Mbc5RamBattery,
+    Mbc5Rumble,
+    Mbc5RumbleRam,
+    Mbc5RumbleRamBattery,
+    Mbc6,
+    Mbc7SensorRumbleRamBattery,
+    PocketCamera,
+    BandaiTama5,
+    HuC3,
+    HuC1RamBattery,
 }
 
 impl CartridgeType {
     /// Parses the cartridge type from the given byte.
     pub fn from_byte(byte: u8) -> Self {
+        use self::CartridgeType::*;
+
         match byte {
-            0x00 => CartridgeType::RomOnly,
-            0x1B => CartridgeType::Mbc5RamBattery,
-            _ => panic!("The given cartridge type {:02x} is unimplemented!", byte)
+            0x00 => RomOnly,
+            0x01 => Mbc1,
+            0x02 => Mbc1Ram,
+            0x03 => Mbc1RamBattery,
+            0x05 => Mbc2,
+            0x06 => Mbc2Battery,
+            0x08 => RomRam,
+            0x09 => RomRamBattery,
+            0x0B => Mmm01,
+            0x0C => Mmm01Ram,
+            0x0D => Mmm01RamBattery,
+            0x0F => Mbc3TimerBattery,
+            0x10 => Mbc3TimerRamBattery,
+            0x11 => Mbc3,
+            0x12 => Mbc3Ram,
+            0x13 => Mbc3RamBattery,
+            0x19 => Mbc5,
+            0x1A => Mbc5Ram,
+            0x1B => Mbc5RamBattery,
+            0x1C => Mbc5Rumble,
+            0x1D => Mbc5RumbleRam,
+            0x1E => Mbc5RumbleRamBattery,
+            0x20 => Mbc6,
+            0x22 => Mbc7SensorRumbleRamBattery,
+            0xFC => PocketCamera,
+            0xFD => BandaiTama5,
+            0xFE => HuC3,
+            0xFF => HuC1RamBattery,
+            _ => panic!("Unsupported cartridge type {:02x}!", byte)
         }
     }
 }
