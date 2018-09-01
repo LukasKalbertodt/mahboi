@@ -17,7 +17,7 @@ mod mm;
 pub mod ppu;
 mod step;
 mod interrupt;
-mod input;
+pub mod input;
 
 
 pub struct Machine {

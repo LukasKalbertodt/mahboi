@@ -4,8 +4,9 @@ use minifb::{Key, WindowOptions, Window};
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
-    env::{self, Peripherals, Display},
+    env::{self, Peripherals, Display, Input},
     primitives::{PixelColor, PixelPos},
+    machine::input::{Keys, JoypadKey},
 };
 use crate::{
     args::Args,
@@ -72,6 +73,20 @@ impl NativeWindow {
     }
 }
 
+impl Input for NativeWindow {
+    fn get_pressed_keys(&self) -> Keys {
+        Keys::none()
+            .set_key(JoypadKey::Up, self.win.is_key_down(Key::W))
+            .set_key(JoypadKey::Left, self.win.is_key_down(Key::A))
+            .set_key(JoypadKey::Down, self.win.is_key_down(Key::S))
+            .set_key(JoypadKey::Right, self.win.is_key_down(Key::D))
+            .set_key(JoypadKey::A, self.win.is_key_down(Key::J))
+            .set_key(JoypadKey::B, self.win.is_key_down(Key::K))
+            .set_key(JoypadKey::Select, self.win.is_key_down(Key::N))
+            .set_key(JoypadKey::Start, self.win.is_key_down(Key::M))
+    }
+}
+
 pub(crate) struct WinBuffer {
     data: Vec<u32>,
     buffer_up_to_date: bool,
@@ -80,7 +95,7 @@ pub(crate) struct WinBuffer {
 impl Peripherals for NativeWindow {
     type Display = WinBuffer;
     type Sound = Sound;
-    type Input = Input;
+    type Input = Self;
 
     fn display(&mut self) -> &mut Self::Display {
         &mut self.buf
@@ -91,7 +106,7 @@ impl Peripherals for NativeWindow {
     }
 
     fn input(&mut self) -> &mut Self::Input {
-        unimplemented!()
+        self
     }
 }
 
@@ -107,14 +122,6 @@ impl Display for WinBuffer {
 
 
 // Dummy implementations
-
-pub(crate) struct Input {
-
-}
-
-impl env::Input for Input {
-
-}
 
 pub(crate) struct Sound {
 
