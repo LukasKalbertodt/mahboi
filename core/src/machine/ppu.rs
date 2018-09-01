@@ -32,6 +32,14 @@ pub struct Ppu {
     /// ...
     current_column: u8,
 
+    /// If an DMA is ongoing, this stores the address of the next source byte.
+    /// The DMA copies from 0xXX00 to 0xXXF1. The first cycle of the DMA
+    /// procedure is spent preparing. Starting with the second cycles, one byte
+    /// is copied per cycle. When the DMA is freshly triggered, the value in
+    /// this `Option` is 0xXXFF: one less than the real start address. That's
+    /// for the setup time.
+    pub(crate) oam_dma_status: Option<Word>,
+
     // ===== Registers ======
     /// FF40: LCDC
     lcd_control: Byte,
@@ -52,6 +60,9 @@ pub struct Ppu {
     /// FF45: LY compare. Is compared to `current_line` all the time. If both
     /// values are equal, things happen.
     lyc: Byte,
+
+    /// FF46: OAM DMA Transfer and start address register
+    oam_dma_start: Byte,
 
     // FF47: Background palette data.
     background_palette: Byte,
@@ -81,6 +92,7 @@ impl Ppu {
             fetch_started: false,
             fetch_offset: 0,
             current_column: 0,
+            oam_dma_status: None,
 
             lcd_control: Byte::zero(),
             status: Byte::zero(),
@@ -88,6 +100,7 @@ impl Ppu {
             scroll_x: Byte::zero(),
             current_line: Byte::zero(),
             lyc: Byte::zero(),
+            oam_dma_start: Byte::zero(),
             background_palette: Byte::zero(),
             sprite_palette_0: Byte::zero(),
             sprite_palette_1: Byte::zero(),
@@ -177,7 +190,7 @@ impl Ppu {
             0xFF43 => self.scroll_x,
             0xFF44 => self.current_line,
             0xFF45 => self.lyc,
-            0xFF46 => unimplemented!(), // TODO
+            0xFF46 => self.oam_dma_start,
             0xFF47 => self.background_palette,
             0xFF48 => self.sprite_palette_0,
             0xFF49 => self.sprite_palette_1,
@@ -219,7 +232,11 @@ impl Ppu {
             0xFF43 => self.scroll_x = byte,
             0xFF44 => {}, // read only
             0xFF45 => self.lyc = byte,
-            0xFF46 => {}, // TODO
+            0xFF46 => {
+                self.oam_dma_start = byte;
+                let src_addr = Word::new((byte.get() as u16) * 0x100 - 1);
+                self.oam_dma_status = Some(src_addr);
+            },
             0xFF47 => self.background_palette = byte,
             0xFF48 => self.sprite_palette_0 = byte,
             0xFF49 => self.sprite_palette_1 = byte,

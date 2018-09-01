@@ -72,6 +72,7 @@ impl Emulator {
                     peripherals.display(),
                     &mut self.machine.interrupt_controller,
                 );
+                self.machine.dma_step();
             }
 
             self.cycles_in_frame += cycles_spent as u64;
