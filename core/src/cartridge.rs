@@ -1,9 +1,13 @@
 //! Everything related to the cartridge and its header.
 
-use std::fmt;
+use std::{
+    fmt,
+    cmp::{PartialOrd, Ord, Ordering},
+};
 
 use crate::{
-    mbc::{Mbc, NoMbc},
+    log::*,
+    mbc::{Mbc, NoMbc, Mbc1},
     primitives::{Byte, Word},
 };
 
@@ -173,6 +177,18 @@ impl RomSize {
     }
 }
 
+impl Ord for RomSize {
+    fn cmp(&self, other: &RomSize) -> Ordering {
+        self.len().cmp(&other.len())
+    }
+}
+
+impl PartialOrd for RomSize {
+    fn partial_cmp(&self, other: &RomSize) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Size of a cartridge's RAM. Specified in KiB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RamSize {
@@ -242,6 +258,7 @@ impl Cartridge {
         let cartridge_type = CartridgeType::from_byte(bytes[0x0147]);
         let rom_size = RomSize::from_byte(bytes[0x0148]);
         let ram_size = RamSize::from_byte(bytes[0x0149]);
+        info!("{:?}, {:?}", cartridge_type, rom_size);
 
         // TODO checksum and nintendo logo check
 
@@ -287,7 +304,7 @@ impl Cartridge {
         move |data, rom_size, ram_size| {
             match ty {
                 CartridgeType::RomOnly => Box::new(NoMbc::new(data, rom_size, ram_size)),
-                CartridgeType::Mbc1 => unimplemented!(),
+                CartridgeType::Mbc1 => Box::new(Mbc1::new(data, rom_size, ram_size)),
                 CartridgeType::Mbc1Ram => unimplemented!(),
                 CartridgeType::Mbc1RamBattery => unimplemented!(),
                 CartridgeType::Mbc2 => unimplemented!(),
