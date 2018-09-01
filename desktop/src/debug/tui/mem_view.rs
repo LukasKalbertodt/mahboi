@@ -16,6 +16,9 @@ use mahboi::{
     machine::Machine,
     primitives::{Byte, Word},
 };
+use super::{
+    util::DecodedInstr,
+};
 
 
 const DATA_OFFSET: usize = 9;
@@ -128,6 +131,30 @@ impl View for MemView {
             printer.print((end, 1), "┐");
             printer.print((end, line), "┘");
         });
+
+        // Print the additional info area
+        let data_style = Color::Light(BaseColor::Magenta);
+        let info_offset = 16 + 3;
+        let val_offset = DATA_OFFSET + 10;
+        let idx = (self.cursor - self.first_line_addr).get() as usize;
+        let byte = self.data[idx];
+
+        // Binary representation
+        printer.print((DATA_OFFSET, info_offset), "binary:");
+        let s = format!("{:04b} {:04b}", byte.get() >> 4, byte.get() & 0x0F);
+        printer.with_style(data_style, |printer| {
+            printer.print((val_offset, info_offset), &s);
+        });
+
+        // Decode as instruction
+        printer.print((DATA_OFFSET, info_offset + 1), "instr:");
+        match DecodedInstr::decode(&self.data[idx..]) {
+            Some(ref instr) if !instr.is_unknown() => {
+                instr.print(&printer.offset((val_offset, info_offset + 1)));
+            }
+            _ => printer.print((val_offset, info_offset + 1), "none"),
+        }
+
     }
 
     fn required_size(&mut self, _constraint: Vec2) -> Vec2 {
@@ -135,8 +162,8 @@ impl View for MemView {
             // Width: offset + seperator + 16 * (byte + space) + seperator
             DATA_OFFSET + DATA_LEN + 2,
 
-            // Height: header + 16 lines + box border
-            2 + 16 + 1,
+            // Height: header + 16 lines + box border + info area
+            2 + 16 + 1 + 3,
         )
     }
 
@@ -145,15 +172,11 @@ impl View for MemView {
     fn on_event(&mut self, event: Event) -> EventResult {
         match event {
             Event::Key(Key::Left) => {
-                if self.cursor.get() % 16 != 0 {
-                    self.cursor -= 1u16;
-                }
+                self.cursor = self.cursor.map(|a| a.saturating_sub(1));
                 EventResult::Consumed(None)
             }
             Event::Key(Key::Right) => {
-                if self.cursor.get() % 16 != 15 {
-                    self.cursor += 1u16;
-                }
+                self.cursor = self.cursor.map(|a| a.saturating_add(1));
                 EventResult::Consumed(None)
             }
             Event::Key(Key::Up) => {

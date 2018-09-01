@@ -86,7 +86,8 @@ impl AsmView {
                 machine.load_byte(pos + 2u8),
             ];
 
-            let instr = DecodedInstr::decode(&data);
+            // We can unwrap: `data` is always long enough
+            let instr = DecodedInstr::decode(&data).unwrap();
 
             // If we encounter an unencodable instruction, we stop.
             if instr.is_unknown() {
