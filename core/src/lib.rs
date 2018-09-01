@@ -16,6 +16,7 @@ use crate::{
 #[macro_use]
 pub mod instr;
 
+pub mod mbc;
 pub mod log;
 pub mod primitives;
 pub mod env;
