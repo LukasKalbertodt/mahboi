@@ -221,6 +221,18 @@ impl RamSize {
     }
 }
 
+impl Ord for RamSize {
+    fn cmp(&self, other: &RamSize) -> Ordering {
+        self.len().cmp(&other.len())
+    }
+}
+
+impl PartialOrd for RamSize {
+    fn partial_cmp(&self, other: &RamSize) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// A loaded cartridge.
 ///
 /// This contains the full cartridge data and a number of fields for specific

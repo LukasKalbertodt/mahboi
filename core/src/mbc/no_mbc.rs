@@ -19,7 +19,7 @@ pub(crate) struct NoMbc {
 
 impl NoMbc {
     pub(crate) fn new(data: &[u8], rom_size: RomSize, ram_size: RamSize) -> Self {
-        assert!(ram_size != RamSize::Kb32, "More than 8KiB of RAM, but no MBC!");
+        assert!(ram_size <= RamSize::Kb8, "More than 8KiB of RAM, but no MBC!");
         assert!(rom_size == RomSize::NoBanking, "ROM banking, but no MBC!");
         assert!(
             rom_size.len() == data.len(),
