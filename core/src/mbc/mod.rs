@@ -1,3 +1,5 @@
+//! Memory bank controller trait and implementations.
+
 use crate::{
     primitives::{Byte, Word},
 };
@@ -13,8 +15,8 @@ mod mbc1;
 /// A memory bank controller.
 ///
 /// This part of the cartridge controls all writes and reads to and from ROM
-/// and RAM. Usually, some kind of banking strategy is used to store more than
-/// `0x8000` bytes on the cartridge.
+/// and external RAM. Usually, some kind of banking strategy is used to store
+/// more than `0x8000` bytes on the cartridge.
 pub(crate) trait Mbc {
     /// Loads one byte from the cartridge ROM. The `addr` has to be between `0`
     /// and `0x8000`.

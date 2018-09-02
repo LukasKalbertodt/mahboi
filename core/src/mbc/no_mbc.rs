@@ -4,6 +4,13 @@ use crate::{
 };
 use super::Mbc;
 
+/// No real MBC in the cartridge.
+///
+/// Some games are small enough to fit in `0x8000` bytes (e.g. Tetris). Those
+/// games don't need to use banking. With this implementation, writes to ROM
+/// are completely ignored.
+///
+/// These cartridges might have extern RAM, though (however, at most 8KiB).
 pub(crate) struct NoMbc {
     rom: Box<[Byte]>,
     ram: Box<[Byte]>,
@@ -31,6 +38,8 @@ impl NoMbc {
 
 impl Mbc for NoMbc {
     fn load_rom_byte(&self, addr: Word) -> Byte {
+        // Simply index our slice. In `new()`, we made sure that it's at least
+        // `0x8000` bytes long.
         self.rom[addr.get() as usize]
     }
 
@@ -39,16 +48,17 @@ impl Mbc for NoMbc {
     }
 
     fn load_ram_byte(&self, addr: Word) -> Byte {
+        // If a value outside of the usable RAM is requested, we return FF.
         let idx = addr.get() as usize;
         if idx < self.ram.len() {
             self.ram[idx]
         } else {
-            Byte::zero()
+            Byte::new(0xFF)
         }
     }
 
     fn store_ram_byte(&mut self, addr: Word, byte: Byte) {
-        // If some address outside of the RAM is referenced, nothing happens.
+        // Writes to areas outside of the usable RAM are lost.
         let idx = addr.get() as usize;
         if idx < self.ram.len() {
             self.ram[idx] = byte;
