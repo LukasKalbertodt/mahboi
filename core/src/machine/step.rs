@@ -641,8 +641,42 @@ impl Machine {
             opcode!("PUSH HL") => self.push(self.cpu.hl()),
             opcode!("PUSH AF") => self.push(self.cpu.af()),
 
-            // ========== CALL/RET ==========
+            // ========== CALL ==========
             opcode!("CALL a16") => call!(arg_word),
+            opcode!("CALL NZ, a16") => {
+                if !self.cpu.zero() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL Z, a16") => {
+                if self.cpu.zero() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL NC, a16") => {
+                if !self.cpu.carry() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL C, a16") => {
+                if self.cpu.carry() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+
+            // ========== RET ==========
             opcode!("RET") => ret!(),
             opcode!("RET NZ") => {
                 if !self.cpu.zero() {
