@@ -566,6 +566,22 @@ impl Machine {
                     action_taken = Some(false);
                 }
             }
+            opcode!("JR NC, r8") => {
+                if !self.cpu.carry() {
+                    self.cpu.pc += arg_byte.get() as i8;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JR C, r8") => {
+                if self.cpu.carry() {
+                    self.cpu.pc += arg_byte.get() as i8;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
 
             // ========== JP ==========
             opcode!("JP a16") => self.cpu.pc = arg_word,
