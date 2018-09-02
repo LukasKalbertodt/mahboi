@@ -314,35 +314,43 @@ impl Cartridge {
     /// given cartridge type.
     fn get_mbc_impl(ty: CartridgeType) -> impl FnOnce(&[u8], RomSize, RamSize) -> Box<dyn Mbc> {
         move |data, rom_size, ram_size| {
+            use self::CartridgeType as Ct;
+
             match ty {
-                CartridgeType::RomOnly => Box::new(NoMbc::new(data, rom_size, ram_size)),
-                CartridgeType::Mbc1 => Box::new(Mbc1::new(data, rom_size, ram_size)),
-                CartridgeType::Mbc1Ram => unimplemented!(),
-                CartridgeType::Mbc1RamBattery => unimplemented!(),
-                CartridgeType::Mbc2 => unimplemented!(),
-                CartridgeType::Mbc2Battery => unimplemented!(),
-                CartridgeType::RomRam => unimplemented!(),
-                CartridgeType::RomRamBattery => unimplemented!(),
-                CartridgeType::Mmm01 => unimplemented!(),
-                CartridgeType::Mmm01Ram => unimplemented!(),
-                CartridgeType::Mmm01RamBattery => unimplemented!(),
-                CartridgeType::Mbc3TimerBattery => unimplemented!(),
-                CartridgeType::Mbc3TimerRamBattery => unimplemented!(),
-                CartridgeType::Mbc3 => unimplemented!(),
-                CartridgeType::Mbc3Ram => unimplemented!(),
-                CartridgeType::Mbc3RamBattery => unimplemented!(),
-                CartridgeType::Mbc5 => unimplemented!(),
-                CartridgeType::Mbc5Ram => unimplemented!(),
-                CartridgeType::Mbc5RamBattery => unimplemented!(),
-                CartridgeType::Mbc5Rumble => unimplemented!(),
-                CartridgeType::Mbc5RumbleRam => unimplemented!(),
-                CartridgeType::Mbc5RumbleRamBattery => unimplemented!(),
-                CartridgeType::Mbc6 => unimplemented!(),
-                CartridgeType::Mbc7SensorRumbleRamBattery => unimplemented!(),
-                CartridgeType::PocketCamera => unimplemented!(),
-                CartridgeType::BandaiTama5 => unimplemented!(),
-                CartridgeType::HuC3 => unimplemented!(),
-                CartridgeType::HuC1RamBattery => unimplemented!(),
+                Ct::RomOnly => Box::new(NoMbc::new(data, rom_size, ram_size)),
+
+                Ct::Mbc1 | Ct::Mbc1Ram | Ct::Mbc1RamBattery => {
+                    if ty == Ct::Mbc1 {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    Box::new(Mbc1::new(data, rom_size, ram_size))
+                }
+
+                Ct::Mbc2 => unimplemented!(),
+                Ct::Mbc2Battery => unimplemented!(),
+                Ct::RomRam => unimplemented!(),
+                Ct::RomRamBattery => unimplemented!(),
+                Ct::Mmm01 => unimplemented!(),
+                Ct::Mmm01Ram => unimplemented!(),
+                Ct::Mmm01RamBattery => unimplemented!(),
+                Ct::Mbc3TimerBattery => unimplemented!(),
+                Ct::Mbc3TimerRamBattery => unimplemented!(),
+                Ct::Mbc3 => unimplemented!(),
+                Ct::Mbc3Ram => unimplemented!(),
+                Ct::Mbc3RamBattery => unimplemented!(),
+                Ct::Mbc5 => unimplemented!(),
+                Ct::Mbc5Ram => unimplemented!(),
+                Ct::Mbc5RamBattery => unimplemented!(),
+                Ct::Mbc5Rumble => unimplemented!(),
+                Ct::Mbc5RumbleRam => unimplemented!(),
+                Ct::Mbc5RumbleRamBattery => unimplemented!(),
+                Ct::Mbc6 => unimplemented!(),
+                Ct::Mbc7SensorRumbleRamBattery => unimplemented!(),
+                Ct::PocketCamera => unimplemented!(),
+                Ct::BandaiTama5 => unimplemented!(),
+                Ct::HuC3 => unimplemented!(),
+                Ct::HuC1RamBattery => unimplemented!(),
             }
         }
     }
