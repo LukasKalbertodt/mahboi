@@ -15,9 +15,9 @@ impl Machine {
             // ROM mounted switch
             0x0000..0x0100 if self.bios_mounted() => self.bios[addr],
 
-            0x0000..0x8000 => self.cartridge.load_byte(addr), // Cartridge
+            0x0000..0x8000 => self.cartridge.mbc.load_rom_byte(addr), // Cartridge
             0x8000..0xA000 => self.ppu.load_vram_byte(addr),
-            0xA000..0xC000 => self.cartridge.load_byte(addr), // exram
+            0xA000..0xC000 => self.cartridge.mbc.load_ram_byte(addr - 0xA000), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000], // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000], // wram echo
             0xFE00..0xFEA0 => self.ppu.load_oam_byte(addr), // oam
@@ -44,9 +44,9 @@ impl Machine {
             // ROM mounted switch
             0x0000..0x0100 if self.bios_mounted() => warn!("Wrote to BIOS ROM!"),
 
-            0x0000..0x8000 => self.cartridge.store_byte(addr, byte), // Cartridge
+            0x0000..0x8000 => self.cartridge.mbc.store_rom_byte(addr, byte), // Cartridge
             0x8000..0xA000 => self.ppu.store_vram_byte(addr, byte),
-            0xA000..0xC000 => self.cartridge.store_byte(addr, byte), // exram
+            0xA000..0xC000 => self.cartridge.mbc.store_ram_byte(addr - 0xA000, byte), // exram
             0xC000..0xE000 => self.wram[addr - 0xC000] = byte, // wram
             0xE000..0xFE00 => self.wram[addr - 0xE000] = byte, // wram echo
             0xFE00..0xFEA0 => self.ppu.store_oam_byte(addr, byte), // oam

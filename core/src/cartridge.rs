@@ -8,7 +8,6 @@ use std::{
 use crate::{
     log::*,
     mbc::{Mbc, NoMbc, Mbc1},
-    primitives::{Byte, Word},
 };
 
 
@@ -240,7 +239,7 @@ impl PartialOrd for RamSize {
 pub struct Cartridge {
     title: String,
     cgb_mode: CgbMode,
-    mbc: Box<dyn Mbc>,
+    pub(crate) mbc: Box<dyn Mbc>,
     rom_size: RomSize,
     ram_size: RamSize,
     cartridge_type: CartridgeType,
@@ -283,30 +282,6 @@ impl Cartridge {
             rom_size,
             ram_size,
             cartridge_type,
-        }
-    }
-
-    /// Load a [`Byte`] from the cartridge.
-    ///
-    /// The address has to be in the range `0x0000..0x8000` or
-    /// `0xA000..0xC000`!
-    pub fn load_byte(&self, addr: Word) -> Byte {
-        match addr.get() {
-            0x0000..0x8000 => self.mbc.load_rom_byte(addr),
-            0xA000..0xC000 => self.mbc.load_ram_byte(addr - 0xA000),
-            _ => unreachable!(),
-        }
-    }
-
-    /// Stores a [`Byte`] to the cartridge.
-    ///
-    /// The address has to be in the range `0x0000..0x8000` or
-    /// `0xA000..0xC000`!
-    pub fn store_byte(&mut self, addr: Word, byte: Byte) {
-        match addr.get() {
-            0x0000..0x8000 => self.mbc.store_rom_byte(addr, byte),
-            0xA000..0xC000 => self.mbc.store_ram_byte(addr - 0xA000, byte),
-            _ => unreachable!(),
         }
     }
 
