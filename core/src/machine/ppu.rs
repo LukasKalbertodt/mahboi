@@ -370,36 +370,39 @@ impl Ppu {
     }
 
     /// Returns the start address of the tile data for the background/window
-    /// tiles. This can either be `0x8000` or `0x8800`, depending on bit 4 in
-    /// the LCD control register. The memory area is always `0x1000` bytes
-    /// long.
+    /// tiles relative to the start of VRAM. This can either be `0x8000` or
+    /// `0x8800` (or rather `0x0000`/`0x0800` relative to VRAM), depending on
+    /// bit 4 in the LCD control register. The memory area is always `0x1000`
+    /// bytes long.
     pub fn bg_tile_data_start(&self) -> Word {
         if self.lcd_control.get() & 0b0001_0000 == 0 {
-            Word::new(0x8800)
+            Word::new(0x0800)
         } else {
-            Word::new(0x8000)
+            Word::new(0x0000)
         }
     }
 
-    /// Returns the start address of the tile map for the background. This can
-    /// either be `0x9800` or `0x9C00`, depending on bit 3 of the LCD control
-    /// register. The memory area is always `0x400` bytes long.
+    /// Returns the start address of the tile map for the background relative
+    /// to the start of VRAM. This can either be `0x9800` or `0x9C00` (or
+    /// rather `0x1800`/`0x1C00` relative to VRAM), depending on bit 3 of the
+    /// LCD control register. The memory area is always `0x400` bytes long.
     pub fn bg_tile_map_start(&self) -> Word {
         if self.lcd_control.get() & 0b0000_1000 == 0 {
-            Word::new(0x9800)
+            Word::new(0x1800)
         } else {
-            Word::new(0x9C00)
+            Word::new(0x1C00)
         }
     }
 
-    /// Returns the start address of the tile map for the window. This can
-    /// either be `0x9800` or `0x9C00`, depending on bit 6 of the LCD control
-    /// register. The memory area is always `0x400` bytes long.
+    /// Returns the start address of the tile map for the window relative to
+    /// the start of VRAM. This can either be `0x9800` or `0x9C00` (or rather
+    /// `0x1800`/`0x1C00` relative to VRAM), depending on bit 6 of the LCD
+    /// control register. The memory area is always `0x400` bytes long.
     pub fn window_tile_map_start(&self) -> Word {
         if self.lcd_control.get() & 0b0100_0000 == 0 {
-            Word::new(0x9800)
+            Word::new(0x1800)
         } else {
-            Word::new(0x9C00)
+            Word::new(0x1C00)
         }
     }
 
@@ -442,16 +445,16 @@ impl Ppu {
             let tile_x = pos_x / 8;
             let tile_y = pos_y / 8;
 
-            // Background map data is stored in: 0x9800 - 0x9BFF. We have to
-            // lookup the index of our tile there.
-            let map_offset = self.bg_tile_map_start() - 0x8000;
+            // Background map data is stored in: `0x9800 - 0x9BFF` or `0x9C00 -
+            // 0x9FFF`. We have to lookup the index of our tile in that memory.
+            let map_offset = self.bg_tile_map_start();
             let background_addr = map_offset + (tile_y as u16 * 32 + tile_x as u16);
             let tile_idx = self.vram[background_addr];
 
             // We calculate the start address of the tile we want to load from.
             // This depends on the addressing mode used for the
             // background/window tiles.
-            let tile_start = if self.bg_tile_data_start() == 0x8000 {
+            let tile_start = if self.bg_tile_data_start() == 0 {
                 // We start at the very beginning of the VRAM. Each tile needs
                 // 16 byte.
                 Word::new(tile_idx.get() as u16 * 16)
