@@ -705,7 +705,7 @@ impl TuiDebugger {
         body.append_plain("Z: ");
         body.append_styled((cpu.zero() as u8).to_string(), reg_style);
         body.append_plain("  N: ");
-        body.append_styled((cpu.substract() as u8).to_string(), reg_style);
+        body.append_styled((cpu.subtract() as u8).to_string(), reg_style);
         body.append_plain("  H: ");
         body.append_styled((cpu.half_carry() as u8).to_string(), reg_style);
         body.append_plain("  C: ");

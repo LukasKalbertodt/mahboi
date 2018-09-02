@@ -742,6 +742,55 @@ impl Machine {
                 let carry = !self.cpu.carry();
                 set_flags!(self.cpu.f => - 0 0 carry);
             }
+            opcode!("DAA") => {
+                // The DAA instruction adjusts the contents of the accumulator
+                // depending on which arithmetic instruction was executed
+                // before. If SUB or SBC was executed before, the `subtract`
+                // flag is set to 1, and if ADD or ADC was used, it is set to
+                // 0.
+                //
+                // This instruction assumes that both operands of the previous
+                // operation were already in BCD form.
+                //
+                // This implementation is based on information from these
+                // sources:
+                // - https://forums.nesdev.com/viewtopic.php?f=20&t=15944
+                // - https://ehaskins.com/2018-01-30%20Z80%20DAA/
+
+                // The carry flag is only set in one specific case.
+                let mut carry = false;
+
+                if self.cpu.subtract() {
+                    // Subtraction: we will subtract 0, 6, 0x60 or 0x66 from
+                    // the accumulator. We can determine this for each digit
+                    // seperately.
+                    if self.cpu.carry() {
+                        self.cpu.a -= 0x60;
+                    }
+
+                    if self.cpu.half_carry() {
+                        self.cpu.a -= 0x6;
+                    }
+                } else {
+                    // Addition: we will add 0, 6, 0x60 or 0x66 to the
+                    // accumulator. We can determine this for each digit
+                    // seperately.
+                    let a_lo = self.cpu.a.get() & 0x0F;
+                    let a_hi = self.cpu.a.get() >> 4;
+
+                    if self.cpu.half_carry() || a_lo > 0x9 {
+                        self.cpu.a += 0x6;
+                    }
+
+                    if self.cpu.carry() || a_hi > 0x9 {
+                        self.cpu.a += 0x60;
+                        carry = true;
+                    }
+                }
+
+                let zero = self.cpu.a == 0;
+                set_flags!(self.cpu.f => zero - 0 carry);
+            }
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,

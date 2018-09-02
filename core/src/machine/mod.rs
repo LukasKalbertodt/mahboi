@@ -246,7 +246,7 @@ impl Cpu {
         (self.f.get() & 0b1000_0000) != 0
     }
 
-    pub fn substract(&self) -> bool {
+    pub fn subtract(&self) -> bool {
         (self.f.get() & 0b0100_0000) != 0
     }
 
