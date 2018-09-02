@@ -735,6 +735,13 @@ impl Machine {
             }
 
             // ========== miscellaneous ==========
+            opcode!("SCF") => {
+                set_flags!(self.cpu.f => - 0 0 1);
+            }
+            opcode!("CCF") => {
+                let carry = !self.cpu.carry();
+                set_flags!(self.cpu.f => - 0 0 carry);
+            }
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
