@@ -369,6 +369,18 @@ impl Ppu {
         }
     }
 
+    /// Returns the start address of the tile data for the background/window
+    /// tiles. This can either be `0x8000` or `0x8800`, depending on bit 4 in
+    /// the LCD control register. The memory area is always `0x1000` bytes
+    /// long.
+    pub fn bg_tile_data_start(&self) -> Word {
+        if self.lcd_control.get() & 0b0001_0000 == 0 {
+            Word::new(0x8800)
+        } else {
+            Word::new(0x8000)
+        }
+    }
+
     /// Performs one step of the pixel transfer phase. This involves fetching
     /// new tile data and emitting the pixels.
     fn pixel_transfer_step(&mut self, display: &mut impl Display) {
@@ -414,8 +426,19 @@ impl Ppu {
             let tile_idx = self.vram[background_addr];
 
             // We calculate the start address of the tile we want to load from.
-            // Each tile uses 16 bytes.
-            let tile_start = Word::new(tile_idx.get() as u16 * 16);
+            // This depends on the addressing mode used for the
+            // background/window tiles.
+            let tile_start = if self.bg_tile_data_start() == 0x8000 {
+                // We start at the very beginning of the VRAM. Each tile needs
+                // 16 byte.
+                Word::new(tile_idx.get() as u16 * 16)
+            } else {
+                // In 8800 addressing mode, things are more complicated: we use
+                // `0x9000` as base address and the `tile_idx` is now used as
+                // signed index.
+                let offset = ((tile_idx.get() as i8) as i16) * 16;
+                Word::new((0x1000 + offset) as u16)
+            };
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
