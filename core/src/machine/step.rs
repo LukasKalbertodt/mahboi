@@ -716,11 +716,25 @@ impl Machine {
                 self.interrupt_controller.ime = true;
             }
 
-            // ========== miscellaneous ==========
+            // ========== Non-prefix rotate instructions ==========
             opcode!("RLA") => {
                 let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
                 set_flags!(self.cpu.f => 0 0 0 carry);
             }
+            opcode!("RRA") => {
+                let carry = self.cpu.a.rotate_right_through_carry(self.cpu.carry());
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+            opcode!("RLCA") => {
+                let carry = self.cpu.a.rotate_left();
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+            opcode!("RRCA") => {
+                let carry = self.cpu.a.rotate_right();
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+
+            // ========== miscellaneous ==========
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
