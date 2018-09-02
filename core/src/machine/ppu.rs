@@ -381,6 +381,28 @@ impl Ppu {
         }
     }
 
+    /// Returns the start address of the tile map for the background. This can
+    /// either be `0x9800` or `0x9C00`, depending on bit 3 of the LCD control
+    /// register. The memory area is always `0x400` bytes long.
+    pub fn bg_tile_map_start(&self) -> Word {
+        if self.lcd_control.get() & 0b0000_1000 == 0 {
+            Word::new(0x9800)
+        } else {
+            Word::new(0x9C00)
+        }
+    }
+
+    /// Returns the start address of the tile map for the window. This can
+    /// either be `0x9800` or `0x9C00`, depending on bit 6 of the LCD control
+    /// register. The memory area is always `0x400` bytes long.
+    pub fn window_tile_map_start(&self) -> Word {
+        if self.lcd_control.get() & 0b0100_0000 == 0 {
+            Word::new(0x9800)
+        } else {
+            Word::new(0x9C00)
+        }
+    }
+
     /// Performs one step of the pixel transfer phase. This involves fetching
     /// new tile data and emitting the pixels.
     fn pixel_transfer_step(&mut self, display: &mut impl Display) {
@@ -422,7 +444,8 @@ impl Ppu {
 
             // Background map data is stored in: 0x9800 - 0x9BFF. We have to
             // lookup the index of our tile there.
-            let background_addr = Word::new(0x1800 + tile_y as u16 * 32 + tile_x as u16);
+            let map_offset = self.bg_tile_map_start() - 0x8000;
+            let background_addr = map_offset + (tile_y as u16 * 32 + tile_x as u16);
             let tile_idx = self.vram[background_addr];
 
             // We calculate the start address of the tile we want to load from.
