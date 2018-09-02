@@ -293,7 +293,7 @@ impl Cartridge {
     pub fn load_byte(&self, addr: Word) -> Byte {
         match addr.get() {
             0x0000..0x8000 => self.mbc.load_rom_byte(addr),
-            0xA000..0xC000 => self.mbc.load_ram_byte(addr),
+            0xA000..0xC000 => self.mbc.load_ram_byte(addr - 0xA000),
             _ => unreachable!(),
         }
     }
@@ -305,7 +305,7 @@ impl Cartridge {
     pub fn store_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             0x0000..0x8000 => self.mbc.store_rom_byte(addr, byte),
-            0xA000..0xC000 => self.mbc.store_ram_byte(addr, byte),
+            0xA000..0xC000 => self.mbc.store_ram_byte(addr - 0xA000, byte),
             _ => unreachable!(),
         }
     }
