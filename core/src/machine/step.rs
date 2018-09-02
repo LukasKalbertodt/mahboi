@@ -367,10 +367,19 @@ impl Machine {
             opcode!("LD DE, d16") => self.cpu.set_de(arg_word),
             opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
             opcode!("LD SP, d16") => self.cpu.sp = arg_word,
+            opcode!("LD SP, HL") => self.cpu.sp = self.cpu.hl(),
+            opcode!("LD HL, SP+r8") => {
+                let src = self.cpu.sp + arg_byte.get() as i8;
+                self.cpu.set_hl(self.load_word(src));
+            }
+            opcode!("LD (a16), SP") => self.store_word(arg_word, self.cpu.sp),
 
             opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
+            }
+            opcode!("LD A, (C)") => {
+                self.cpu.a = self.load_byte(Word::new(0xFF00) + self.cpu.c);
             }
             opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
