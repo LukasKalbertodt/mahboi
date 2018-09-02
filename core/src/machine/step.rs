@@ -470,6 +470,10 @@ impl Machine {
             opcode!("ADD HL, HL") => add_hl!(self.cpu.hl()),
             opcode!("ADD HL, SP") => add_hl!(self.cpu.sp),
 
+            opcode!("ADD SP, r8") => {
+                self.cpu.sp += arg_byte.get() as i8;
+            }
+
             // ========== ADC ==========
             opcode!("ADC A, B")     => adc!(self.cpu.b),
             opcode!("ADC A, C")     => adc!(self.cpu.c),
