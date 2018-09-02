@@ -369,7 +369,9 @@ impl Machine {
             opcode!("LD SP, d16") => self.cpu.sp = arg_word,
             opcode!("LD SP, HL") => self.cpu.sp = self.cpu.hl(),
             opcode!("LD HL, SP+r8") => {
-                let src = self.cpu.sp + arg_byte.get() as i8;
+                let mut src = self.cpu.sp;
+                let (carry, half_carry) = src.add_i8_with_carries(arg_byte.get() as i8);
+                set_flags!(self.cpu.f => 0 0 half_carry carry);
                 self.cpu.set_hl(self.load_word(src));
             }
             opcode!("LD (a16), SP") => self.store_word(arg_word, self.cpu.sp),
@@ -471,7 +473,8 @@ impl Machine {
             opcode!("ADD HL, SP") => add_hl!(self.cpu.sp),
 
             opcode!("ADD SP, r8") => {
-                self.cpu.sp += arg_byte.get() as i8;
+                let (carry, half_carry) = self.cpu.sp.add_i8_with_carries(arg_byte.get() as i8);
+                set_flags!(self.cpu.f => 0 0 half_carry carry);
             }
 
             // ========== ADC ==========
