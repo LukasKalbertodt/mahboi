@@ -562,6 +562,11 @@ mod test {
         assert_eq!(run(0xFFFE,      3), (0x0001, true,  true));
         assert_eq!(run(0xFFFE,     -3), (0xFFFB, false, false));
         assert_eq!(run(0x01FF,   -128), (0x017F, false, false));
+        assert_eq!(run(0x00FF,      1), (0x0100, false, true));
+        assert_eq!(run(0x0081,   0x7F), (0x0100, false, true));
+        assert_eq!(run(0x0081,  -0x80), (0x0001, false, false));
+        assert_eq!(run(0xFFFF,      1), (0x0000, true,  true));
+        assert_eq!(run(0x0000,     -1), (0xFFFF, true,  true));
     }
 }
 
