@@ -98,7 +98,7 @@ impl Mbc for Mbc1 {
     fn store_rom_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             // RAM enable
-            0x0000..0x2000 => self.ram_enabled = byte.get() & 0x0F == 0x0F,
+            0x0000..0x2000 => self.ram_enabled = byte.get() & 0x0F == 0x0A,
 
             // Lower 5 bits of ROM bank number
             0x2000..0x4000 => {
