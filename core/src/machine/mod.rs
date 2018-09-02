@@ -281,6 +281,7 @@ impl Cpu {
             // seperately.
             if self.carry() {
                 self.a -= 0x60;
+                carry = true;
             }
 
             if self.half_carry() {
@@ -297,7 +298,7 @@ impl Cpu {
                 self.a += 0x6;
             }
 
-            if self.carry() || a_hi > 0x9 {
+            if self.carry() || (a_hi > 0x9 && a_lo < 0xA) || (a_hi > 0x8 && a_lo > 0x9) {
                 self.a += 0x60;
                 carry = true;
             }
