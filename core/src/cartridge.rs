@@ -1,8 +1,14 @@
 //! Everything related to the cartridge and its header.
 
-use std::fmt;
+use std::{
+    fmt,
+    cmp::{PartialOrd, Ord, Ordering},
+};
 
-use crate::primitives::{Byte, Word};
+use crate::{
+    log::*,
+    mbc::{Mbc, NoMbc, Mbc1},
+};
 
 
 /// Specifies how this ROM works with the CGB. Stored at `0x0143`.
@@ -44,16 +50,70 @@ impl CgbMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CartridgeType {
     RomOnly,
+    Mbc1,
+    Mbc1Ram,
+    Mbc1RamBattery,
+    Mbc2,
+    Mbc2Battery,
+    RomRam,
+    RomRamBattery,
+    Mmm01,
+    Mmm01Ram,
+    Mmm01RamBattery,
+    Mbc3TimerBattery,
+    Mbc3TimerRamBattery,
+    Mbc3,
+    Mbc3Ram,
+    Mbc3RamBattery,
+    Mbc5,
+    Mbc5Ram,
     Mbc5RamBattery,
+    Mbc5Rumble,
+    Mbc5RumbleRam,
+    Mbc5RumbleRamBattery,
+    Mbc6,
+    Mbc7SensorRumbleRamBattery,
+    PocketCamera,
+    BandaiTama5,
+    HuC3,
+    HuC1RamBattery,
 }
 
 impl CartridgeType {
     /// Parses the cartridge type from the given byte.
     pub fn from_byte(byte: u8) -> Self {
+        use self::CartridgeType::*;
+
         match byte {
-            0x00 => CartridgeType::RomOnly,
-            0x1B => CartridgeType::Mbc5RamBattery,
-            _ => panic!("The given cartridge type {:02x} is unimplemented!", byte)
+            0x00 => RomOnly,
+            0x01 => Mbc1,
+            0x02 => Mbc1Ram,
+            0x03 => Mbc1RamBattery,
+            0x05 => Mbc2,
+            0x06 => Mbc2Battery,
+            0x08 => RomRam,
+            0x09 => RomRamBattery,
+            0x0B => Mmm01,
+            0x0C => Mmm01Ram,
+            0x0D => Mmm01RamBattery,
+            0x0F => Mbc3TimerBattery,
+            0x10 => Mbc3TimerRamBattery,
+            0x11 => Mbc3,
+            0x12 => Mbc3Ram,
+            0x13 => Mbc3RamBattery,
+            0x19 => Mbc5,
+            0x1A => Mbc5Ram,
+            0x1B => Mbc5RamBattery,
+            0x1C => Mbc5Rumble,
+            0x1D => Mbc5RumbleRam,
+            0x1E => Mbc5RumbleRamBattery,
+            0x20 => Mbc6,
+            0x22 => Mbc7SensorRumbleRamBattery,
+            0xFC => PocketCamera,
+            0xFD => BandaiTama5,
+            0xFE => HuC3,
+            0xFF => HuC1RamBattery,
+            _ => panic!("Unsupported cartridge type {:02x}!", byte)
         }
     }
 }
@@ -69,6 +129,7 @@ pub enum RomSize {
     Banks64,
     Banks128,
     Banks256,
+    Banks512,
     Banks72,
     Banks80,
     Banks96,
@@ -86,11 +147,44 @@ impl RomSize {
             0x05 => RomSize::Banks64,
             0x06 => RomSize::Banks128,
             0x07 => RomSize::Banks256,
+            0x08 => RomSize::Banks512,
             0x52 => RomSize::Banks72,
             0x53 => RomSize::Banks80,
             0x54 => RomSize::Banks96,
             _ => panic!("Invalid ROM size in cartridge: {:02x}!", byte)
         }
+    }
+
+    /// Returns the number of bytes of the ROM.
+    pub fn len(&self) -> usize {
+        const BANK_SIZE: usize = 16 * 1024;
+
+        match self {
+            RomSize::NoBanking => 2 * BANK_SIZE,
+            RomSize::Banks4 => 4 * BANK_SIZE,
+            RomSize::Banks8 => 8 * BANK_SIZE,
+            RomSize::Banks16 => 16 * BANK_SIZE,
+            RomSize::Banks32 => 32 * BANK_SIZE,
+            RomSize::Banks64 => 64 * BANK_SIZE,
+            RomSize::Banks128 => 128 * BANK_SIZE,
+            RomSize::Banks256 => 256 * BANK_SIZE,
+            RomSize::Banks512 => 512 * BANK_SIZE,
+            RomSize::Banks72 => 72 * BANK_SIZE,
+            RomSize::Banks80 => 80 * BANK_SIZE,
+            RomSize::Banks96 => 96 * BANK_SIZE,
+        }
+    }
+}
+
+impl Ord for RomSize {
+    fn cmp(&self, other: &RomSize) -> Ordering {
+        self.len().cmp(&other.len())
+    }
+}
+
+impl PartialOrd for RomSize {
+    fn partial_cmp(&self, other: &RomSize) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -114,6 +208,28 @@ impl RamSize {
             _ => panic!("Invalid RAM size in cartridge: {:02x}!", byte)
         }
     }
+
+    /// Returns the number of bytes of the RAM.
+    pub fn len(&self) -> usize {
+        match self {
+            RamSize::None => 0,
+            RamSize::Kb2 => 2 * 1024,
+            RamSize::Kb8 => 8 * 1024,
+            RamSize::Kb32 => 32 * 1024,
+        }
+    }
+}
+
+impl Ord for RamSize {
+    fn cmp(&self, other: &RamSize) -> Ordering {
+        self.len().cmp(&other.len())
+    }
+}
+
+impl PartialOrd for RamSize {
+    fn partial_cmp(&self, other: &RamSize) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// A loaded cartridge.
@@ -121,12 +237,12 @@ impl RamSize {
 /// This contains the full cartridge data and a number of fields for specific
 /// header values.
 pub struct Cartridge {
-    rom: Box<[Byte]>,
     title: String,
     cgb_mode: CgbMode,
-    cartridge_type: CartridgeType,
+    pub(crate) mbc: Box<dyn Mbc>,
     rom_size: RomSize,
     ram_size: RamSize,
+    cartridge_type: CartridgeType,
 }
 
 impl Cartridge {
@@ -153,26 +269,64 @@ impl Cartridge {
         let cartridge_type = CartridgeType::from_byte(bytes[0x0147]);
         let rom_size = RomSize::from_byte(bytes[0x0148]);
         let ram_size = RamSize::from_byte(bytes[0x0149]);
+        info!("{:?}, {:?}", cartridge_type, rom_size);
 
         // TODO checksum and nintendo logo check
 
-        // Copy ROM data
-        let copy: Vec<_> = bytes.iter().cloned().map(Byte::new).collect();
+        let mbc = Self::get_mbc_impl(cartridge_type)(bytes, rom_size, ram_size);
+
         Self {
-            rom: copy.into_boxed_slice(),
             title: title.into_owned(),
             cgb_mode,
-            cartridge_type,
+            mbc,
             rom_size,
             ram_size,
+            cartridge_type,
         }
     }
 
-    /// Load a [`Byte`] from the cartridge.
-    pub fn load_byte(&self, addr: Word) -> Byte {
-        match self.cartridge_type {
-            CartridgeType::RomOnly => self.rom[addr.get() as usize],
-            _ => unimplemented!(),
+    /// Returns a function that creates the MBC implementation matching the
+    /// given cartridge type.
+    fn get_mbc_impl(ty: CartridgeType) -> impl FnOnce(&[u8], RomSize, RamSize) -> Box<dyn Mbc> {
+        move |data, rom_size, ram_size| {
+            use self::CartridgeType as Ct;
+
+            match ty {
+                Ct::RomOnly => Box::new(NoMbc::new(data, rom_size, ram_size)),
+
+                Ct::Mbc1 | Ct::Mbc1Ram | Ct::Mbc1RamBattery => {
+                    if ty == Ct::Mbc1 {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    Box::new(Mbc1::new(data, rom_size, ram_size))
+                }
+
+                Ct::Mbc2 => unimplemented!(),
+                Ct::Mbc2Battery => unimplemented!(),
+                Ct::RomRam => unimplemented!(),
+                Ct::RomRamBattery => unimplemented!(),
+                Ct::Mmm01 => unimplemented!(),
+                Ct::Mmm01Ram => unimplemented!(),
+                Ct::Mmm01RamBattery => unimplemented!(),
+                Ct::Mbc3TimerBattery => unimplemented!(),
+                Ct::Mbc3TimerRamBattery => unimplemented!(),
+                Ct::Mbc3 => unimplemented!(),
+                Ct::Mbc3Ram => unimplemented!(),
+                Ct::Mbc3RamBattery => unimplemented!(),
+                Ct::Mbc5 => unimplemented!(),
+                Ct::Mbc5Ram => unimplemented!(),
+                Ct::Mbc5RamBattery => unimplemented!(),
+                Ct::Mbc5Rumble => unimplemented!(),
+                Ct::Mbc5RumbleRam => unimplemented!(),
+                Ct::Mbc5RumbleRamBattery => unimplemented!(),
+                Ct::Mbc6 => unimplemented!(),
+                Ct::Mbc7SensorRumbleRamBattery => unimplemented!(),
+                Ct::PocketCamera => unimplemented!(),
+                Ct::BandaiTama5 => unimplemented!(),
+                Ct::HuC3 => unimplemented!(),
+                Ct::HuC1RamBattery => unimplemented!(),
+            }
         }
     }
 }
@@ -181,7 +335,6 @@ impl Cartridge {
 impl fmt::Debug for Cartridge {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Cartridge")
-            .field("length", &self.rom.len())
             .field("title", &self.title)
             .field("cgb_mode", &self.cgb_mode)
             .field("cartridge_type", &self.cartridge_type)

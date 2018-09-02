@@ -3,7 +3,7 @@
 
 use std::{
     fs,
-    panic::{catch_unwind, AssertUnwindSafe},
+    panic::{self, AssertUnwindSafe},
 };
 
 use failure::{Error, ResultExt};
@@ -66,7 +66,7 @@ fn run() -> Result<(), Error> {
 
         // Run the emulator if we're not in pause mode.
         if !is_paused {
-            let res = catch_unwind(AssertUnwindSafe(|| {
+            let res = panic::catch_unwind(AssertUnwindSafe(|| {
                 emulator.execute_frame(&mut window, |machine| {
                     // If we have a TUI debugger, we ask it when to pause.
                     // Otherwise, we never stop.
@@ -80,8 +80,17 @@ fn run() -> Result<(), Error> {
 
             // React to abnormal disruptions
             match res {
-                Err(_) => {
-                    warn!("Emulator panicked!");
+                Err(e) => {
+                    if let Some(s) = e.downcast_ref::<&str>() {
+                        warn!("Emulator panicked: {}", s);
+                    } else {
+                        warn!("Emulator panicked!");
+                    };
+
+                    if !args.debug {
+                        panic::resume_unwind(e);
+                    }
+
                     is_paused = true;
                 }
                 Ok(disruption) => {
