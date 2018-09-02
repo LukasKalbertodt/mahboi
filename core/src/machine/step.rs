@@ -367,10 +367,21 @@ impl Machine {
             opcode!("LD DE, d16") => self.cpu.set_de(arg_word),
             opcode!("LD HL, d16") => self.cpu.set_hl(arg_word),
             opcode!("LD SP, d16") => self.cpu.sp = arg_word,
+            opcode!("LD SP, HL") => self.cpu.sp = self.cpu.hl(),
+            opcode!("LD HL, SP+r8") => {
+                let mut src = self.cpu.sp;
+                let (carry, half_carry) = src.add_i8_with_carries(arg_byte.get() as i8);
+                set_flags!(self.cpu.f => 0 0 half_carry carry);
+                self.cpu.set_hl(self.load_word(src));
+            }
+            opcode!("LD (a16), SP") => self.store_word(arg_word, self.cpu.sp),
 
             opcode!("LD (C), A") => {
                 let dst = Word::new(0xFF00) + self.cpu.c;
                 self.store_byte(dst, self.cpu.a);
+            }
+            opcode!("LD A, (C)") => {
+                self.cpu.a = self.load_byte(Word::new(0xFF00) + self.cpu.c);
             }
             opcode!("LDH (a8), A") => {
                 let dst = Word::new(0xFF00) + arg_byte;
@@ -460,6 +471,11 @@ impl Machine {
             opcode!("ADD HL, DE") => add_hl!(self.cpu.de()),
             opcode!("ADD HL, HL") => add_hl!(self.cpu.hl()),
             opcode!("ADD HL, SP") => add_hl!(self.cpu.sp),
+
+            opcode!("ADD SP, r8") => {
+                let (carry, half_carry) = self.cpu.sp.add_i8_with_carries(arg_byte.get() as i8);
+                set_flags!(self.cpu.f => 0 0 half_carry carry);
+            }
 
             // ========== ADC ==========
             opcode!("ADC A, B")     => adc!(self.cpu.b),
@@ -566,6 +582,22 @@ impl Machine {
                     action_taken = Some(false);
                 }
             }
+            opcode!("JR NC, r8") => {
+                if !self.cpu.carry() {
+                    self.cpu.pc += arg_byte.get() as i8;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("JR C, r8") => {
+                if self.cpu.carry() {
+                    self.cpu.pc += arg_byte.get() as i8;
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
 
             // ========== JP ==========
             opcode!("JP a16") => self.cpu.pc = arg_word,
@@ -625,8 +657,42 @@ impl Machine {
             opcode!("PUSH HL") => self.push(self.cpu.hl()),
             opcode!("PUSH AF") => self.push(self.cpu.af()),
 
-            // ========== CALL/RET ==========
+            // ========== CALL ==========
             opcode!("CALL a16") => call!(arg_word),
+            opcode!("CALL NZ, a16") => {
+                if !self.cpu.zero() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL Z, a16") => {
+                if self.cpu.zero() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL NC, a16") => {
+                if !self.cpu.carry() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+            opcode!("CALL C, a16") => {
+                if self.cpu.carry() {
+                    call!(arg_word);
+                    action_taken = Some(true);
+                } else {
+                    action_taken = Some(false);
+                }
+            }
+
+            // ========== RET ==========
             opcode!("RET") => ret!(),
             opcode!("RET NZ") => {
                 if !self.cpu.zero() {
@@ -666,10 +732,36 @@ impl Machine {
                 self.interrupt_controller.ime = true;
             }
 
-            // ========== miscellaneous ==========
+            // ========== Non-prefix rotate instructions ==========
             opcode!("RLA") => {
                 let carry = self.cpu.a.rotate_left_through_carry(self.cpu.carry());
                 set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+            opcode!("RRA") => {
+                let carry = self.cpu.a.rotate_right_through_carry(self.cpu.carry());
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+            opcode!("RLCA") => {
+                let carry = self.cpu.a.rotate_left();
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+            opcode!("RRCA") => {
+                let carry = self.cpu.a.rotate_right();
+                set_flags!(self.cpu.f => 0 0 0 carry);
+            }
+
+            // ========== miscellaneous ==========
+            opcode!("SCF") => {
+                set_flags!(self.cpu.f => - 0 0 1);
+            }
+            opcode!("CCF") => {
+                let carry = !self.cpu.carry();
+                set_flags!(self.cpu.f => - 0 0 carry);
+            }
+            opcode!("DAA") => {
+                let carry = self.cpu.daa();
+                let zero = self.cpu.a == 0;
+                set_flags!(self.cpu.f => zero - 0 carry);
             }
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,

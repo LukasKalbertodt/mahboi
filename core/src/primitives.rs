@@ -282,6 +282,27 @@ impl Word {
 
         (carry, half_carry)
     }
+
+    /// Adds the given `i8` to this [`Word`] and returns a tuple containing information
+    /// about carry and half carry bits: `(carry, half_carry)`.
+    pub fn add_i8_with_carries(&mut self, rhs: i8) -> (bool, bool) {
+        let half_carry;
+        let carry;
+
+        if rhs < 0 {
+            // RHS is negative. We make it positive (through `i16` to avoid
+            // -128 problem) and then check for the carries via `checked_sub`.
+            carry = self.get().checked_sub(-(rhs as i16) as u16).is_none();
+            half_carry = ((self.get() & 0xFF) as u8).checked_sub(-(rhs as i16) as u8).is_none();
+        } else {
+            // RHS is positive: we check for carries via `checked_add`.
+            carry = self.get().checked_add(rhs as u16).is_none();
+            half_carry = ((self.get() & 0xFF) as u8).checked_add(rhs as u8).is_none();
+        };
+        *self += rhs;
+
+        (carry, half_carry)
+    }
 }
 
 impl Add for Word {
@@ -524,6 +545,28 @@ mod test {
         assert_eq!(run(0xffff, 0x0001), (true,  true));
         assert_eq!(run(0x7fff, 0x0001), (false, true));
         assert_eq!(run(0x8000, 0x8000), (true,  false));
+    }
+
+    #[test]
+    fn test_word_plus_i8() {
+        fn run(lhs: u16, rhs: i8) -> (u16, bool, bool) {
+            let mut w = Word::new(lhs);
+            let (carry, half_carry) = w.add_i8_with_carries(rhs);
+            (w.get(), carry, half_carry)
+        }
+
+        assert_eq!(run(0x0000,      0), (0x0000, false, false));
+        assert_eq!(run(0x0000,      2), (0x0002, false, false));
+        assert_eq!(run(0x0000,     -2), (0xFFFE, true,  true));
+        assert_eq!(run(0x0002,     -2), (0x0000, false, false));
+        assert_eq!(run(0xFFFE,      3), (0x0001, true,  true));
+        assert_eq!(run(0xFFFE,     -3), (0xFFFB, false, false));
+        assert_eq!(run(0x01FF,   -128), (0x017F, false, false));
+        assert_eq!(run(0x00FF,      1), (0x0100, false, true));
+        assert_eq!(run(0x0081,   0x7F), (0x0100, false, true));
+        assert_eq!(run(0x0081,  -0x80), (0x0001, false, false));
+        assert_eq!(run(0xFFFF,      1), (0x0000, true,  true));
+        assert_eq!(run(0x0000,     -1), (0xFFFF, true,  true));
     }
 }
 
