@@ -82,6 +82,8 @@ impl Emulator {
                 &mut self.machine.interrupt_controller,
             );
 
+            self.machine.sound_controller.step(peripherals.sound());
+
             self.cycles_in_frame += cycles_spent as u64;
             self.machine.cycle_counter += cycles_spent;
             if self.cycles_in_frame >= CYCLES_PER_FRAME {

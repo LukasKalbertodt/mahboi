@@ -7,6 +7,7 @@ authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+cpal = "0.8.2"
 failure = "0.1.2"
 lazy_static = "1.1"
 log = { version = "0.4", features = ["release_max_level_debug"] }

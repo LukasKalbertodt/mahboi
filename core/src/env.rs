@@ -18,8 +18,10 @@ pub trait Display {
 }
 
 pub trait Sound {
-
+    fn accept_sample(&mut self, sample: Sample);
 }
+
+pub struct Sample(pub f32);
 
 pub trait Input {
     fn get_pressed_keys(&self) -> Keys;

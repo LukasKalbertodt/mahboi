@@ -6,6 +6,7 @@ use self::{
     ppu::Ppu,
     interrupt::{InterruptController, Interrupt},
     input::InputController,
+    sound::SoundController,
 };
 
 
@@ -18,6 +19,7 @@ pub mod ppu;
 mod step;
 mod interrupt;
 pub mod input;
+mod sound;
 
 
 pub struct Machine {
@@ -36,6 +38,7 @@ pub struct Machine {
 
     pub(crate) interrupt_controller: InterruptController,
     pub(crate) input_controller: InputController,
+    pub(crate) sound_controller: SoundController,
 
     pub cycle_counter: CycleCounter,
 
@@ -78,6 +81,7 @@ impl Machine {
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
             input_controller: InputController::new(),
+            sound_controller: SoundController::new(),
             cycle_counter: CycleCounter::zero(),
             enable_interrupts_next_step: false,
             halt: false,

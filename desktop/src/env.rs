@@ -1,10 +1,21 @@
+use std::{
+    thread,
+    sync::mpsc::{channel, Receiver, Sender},
+};
+
+use cpal::{
+    default_output_device,
+    EventLoop,
+    StreamData,
+    UnknownTypeOutputBuffer,
+};
 use failure::{Error, ResultExt};
 use minifb::{Key, WindowOptions, Window};
 
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
-    env::{self, Peripherals, Display, Input},
+    env::{self, Peripherals, Display, Sample, Input},
     primitives::{PixelColor, PixelPos},
     machine::input::{Keys, JoypadKey},
 };
@@ -20,6 +31,7 @@ const WINDOW_TITLE: &str = "Mahboi";
 pub(crate) struct NativeWindow {
     win: Window,
     buf: WinBuffer,
+    sound: Sound,
 }
 
 impl NativeWindow {
@@ -37,11 +49,13 @@ impl NativeWindow {
             data: vec![0xa0a0; SCREEN_WIDTH * SCREEN_HEIGHT],
             buffer_up_to_date: false,
         };
+        let sound = Sound::new();
         info!("[desktop] Opened window");
 
         Ok(Self {
             win,
             buf,
+            sound,
         })
     }
 
@@ -102,7 +116,7 @@ impl Peripherals for NativeWindow {
     }
 
     fn sound(&mut self) -> &mut Self::Sound {
-        unimplemented!()
+        &mut self.sound
     }
 
     fn input(&mut self) -> &mut Self::Input {
@@ -124,9 +138,48 @@ impl Display for WinBuffer {
 // Dummy implementations
 
 pub(crate) struct Sound {
+    sender: Sender<Sample>,
+}
 
+impl Sound {
+    fn new() -> Self {
+        let (sender, receiver) = channel();
+        thread::spawn(|| Self::run(receiver));
+
+        Self {
+            sender,
+        }
+    }
+
+    fn run(mut receiver: Receiver<Sample>) {
+        let device = default_output_device().expect("Failed to get default output device");
+        let format = device.default_output_format().expect("Failed to get default output format");
+        let event_loop = EventLoop::new();
+        let stream_id = event_loop.build_output_stream(&device, &format).unwrap();
+        event_loop.play_stream(stream_id.clone());
+
+        let receiver = &mut receiver;
+        event_loop.run(move |_, data| {
+            println!("can u get pregante");
+            match data {
+                StreamData::Output { buffer: UnknownTypeOutputBuffer::F32(mut buffer) } => {
+                    for dest_sample in buffer.chunks_mut(format.channels as usize) {
+                        if let Ok(src_sample) = receiver.recv() {
+                            let value = src_sample.0;
+                            for out in dest_sample.iter_mut() {
+                                *out = value;
+                            }
+                        }
+                    }
+                },
+                _ => (),
+            }
+        })
+    }
 }
 
 impl env::Sound for Sound {
-
+    fn accept_sample(&mut self, sample: Sample) {
+        self.sender.send(sample).expect("sound thread died");
+    }
 }
