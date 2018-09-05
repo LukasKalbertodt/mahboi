@@ -37,7 +37,7 @@ pub struct PpuRegisters {
     /// - 4: V-Blank interrupt (1=enabled)
     /// - 3: H-Blank interrupt (1=enabled)
     /// - 2: coincidence flag (0=LYC!=LY, 1:LYC==LY). Read only.
-    /// - 1 & 0: current PPU mode. Modes 0 -- 3, see [`Phase`] for more
+    /// - 1 & 0: current PPU mode. Modes 0 -- 3, see [`Mode`] for more
     ///   information.
     pub status: Byte,
 
@@ -149,16 +149,22 @@ impl PpuRegisters {
         self.lcd_control.get() & 0b0000_0100 != 0
     }
 
-    /// Returns in what phase the PPU currently is (as determined by bit 1 & 0
-    /// from the LCD stat register).
-    pub fn phase(&self) -> Phase {
+    /// Returns the mode of the PPU (as determined by bits 1 & 0 from the LCD
+    /// stat register). See [`Mode`] for more information.
+    pub fn mode(&self) -> Mode {
         match self.status.get() & 0b11 {
-            0 => Phase::HBlank,
-            1 => Phase::VBlank,
-            2 => Phase::OamSearch,
-            3 => Phase::PixelTransfer,
+            0 => Mode::HBlank,
+            1 => Mode::VBlank,
+            2 => Mode::OamSearch,
+            3 => Mode::PixelTransfer,
             _ => unreachable!(),
         }
+    }
+
+    /// Sets the given mode (updates bits 1 & 0 in the LCD stat register).
+    fn set_mode(&mut self, mode: Mode) {
+        let v = mode as u8;
+        self.status = self.status.map(|b| (b & 0b1111_1100) | v);
     }
 }
 
@@ -274,8 +280,8 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this returns garbage.
     pub(crate) fn load_vram_byte(&self, addr: Word) -> Byte {
-        match self.regs().phase() {
-            Phase::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
+        match self.regs().mode() {
+            Mode::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
             _ => self.vram[addr - 0x8000],
         }
     }
@@ -288,8 +294,8 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this write is lost (does nothing).
     pub(crate) fn store_vram_byte(&mut self, addr: Word, byte: Byte) {
-        match self.regs().phase() {
-            Phase::PixelTransfer if self.lcd_enabled() => {},
+        match self.regs().mode() {
+            Mode::PixelTransfer if self.lcd_enabled() => {},
             _ => self.vram[addr - 0x8000] = byte,
         }
     }
@@ -302,9 +308,9 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this returns garbage.
     pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
-        match self.regs().phase() {
-            Phase::PixelTransfer => Byte::new(0xff),
-            Phase::OamSearch => Byte::new(0xff),
+        match self.regs().mode() {
+            Mode::PixelTransfer => Byte::new(0xff),
+            Mode::OamSearch => Byte::new(0xff),
             _ => self.oam[addr - 0xFE00],
         }
     }
@@ -317,8 +323,8 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this write is lost (does nothing).
     pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
-        match self.regs().phase() {
-            Phase::PixelTransfer | Phase::OamSearch if self.lcd_enabled() => {},
+        match self.regs().mode() {
+            Mode::PixelTransfer | Mode::OamSearch if self.lcd_enabled() => {},
             _ => self.oam[addr - 0xFE00] = byte,
         }
     }
@@ -368,7 +374,7 @@ impl Ppu {
                 match (was_enabled, self.lcd_enabled()) {
                     (false, true) => {
                         info!("[ppu] LCD was enabled");
-                        self.set_phase(Phase::OamSearch);
+                        self.registers.set_mode(Mode::OamSearch);
                         self.cycle_in_line = 0;
                         // TODO: also reset other stuff?
                     }
@@ -411,17 +417,6 @@ impl Ppu {
         &self.registers
     }
 
-    fn set_phase(&mut self, phase: Phase) {
-        let v = match phase {
-            Phase::HBlank => 0,
-            Phase::VBlank => 1,
-            Phase::OamSearch => 2,
-            Phase::PixelTransfer => 3,
-        };
-
-        self.registers.status = Byte::new((self.regs().status.get() & 0b1111_1100) | v);
-    }
-
     /// Executes one machine cycle (1 Mhz).
     pub(crate) fn step(
         &mut self,
@@ -437,7 +432,7 @@ impl Ppu {
         if self.regs().current_line.get() >= SCREEN_HEIGHT as u8 {
             // ===== V-Blank =====
             if self.regs().current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
-                self.set_phase(Phase::VBlank);
+                self.registers.set_mode(Mode::VBlank);
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
             }
         } else {
@@ -445,18 +440,18 @@ impl Ppu {
             match (self.cycle_in_line, self.current_column) {
                 (0..20, 0) => {
                     if self.cycle_in_line == 0 {
-                        self.set_phase(Phase::OamSearch);
+                        self.registers.set_mode(Mode::OamSearch);
                     }
                     // TODO: OAM Search
                 }
                 (20..114, col) if col < SCREEN_WIDTH as u8 => {
                     if self.cycle_in_line == 20 {
-                        self.set_phase(Phase::PixelTransfer);
+                        self.registers.set_mode(Mode::PixelTransfer);
                     }
                     self.pixel_transfer_step(display);
                 }
                 (43..114, col)
-                    if self.regs().phase() == Phase::HBlank && col == SCREEN_WIDTH as u8
+                    if self.regs().mode() == Mode::HBlank && col == SCREEN_WIDTH as u8
                 => {
                     // We don't have to do anything in H-Blank. This match arm
                     // just exists to make sure we never reach an invalid state
@@ -535,7 +530,7 @@ impl Ppu {
             // We are at the end of the line, stop everything and go to
             // H-Blank.
             if self.current_column == SCREEN_WIDTH as u8 {
-                self.set_phase(Phase::HBlank);
+                self.registers.set_mode(Mode::HBlank);
                 return;
             }
         }
@@ -652,7 +647,7 @@ impl Ppu {
     }
 }
 
-/// Specifies which phase the PPU is in.
+/// Specifies which mode the PPU is in.
 ///
 /// Breakdown of one frame:
 ///
@@ -682,30 +677,30 @@ impl Ppu {
 /// - V-Blank: 10 * one line = 1140
 /// - One frame: one line * 154 = 17_556
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Phase {
+pub enum Mode {
     /// Also called "Mode 2": PPU determines which sprites are visible on the
     /// current line.
-    OamSearch,
+    OamSearch = 2,
 
     /// Also called "Mode 3": Pixels are transferred to the LCD screen.
-    PixelTransfer,
+    PixelTransfer = 3,
 
     /// Also called "Mode 0": Time after pixel transfer when the PPU is waiting
     /// to start a new line.
-    HBlank,
+    HBlank = 0,
 
     /// Also called "Mode 1": Time after the last line has been drawn and
     /// before the next frame begins.
-    VBlank,
+    VBlank = 1,
 }
 
-impl fmt::Display for Phase {
+impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Phase::OamSearch => "OAM search",
-            Phase::PixelTransfer => "pixel transfer",
-            Phase::HBlank => "H-Blank",
-            Phase::VBlank => "V-Blank",
+            Mode::OamSearch => "OAM search",
+            Mode::PixelTransfer => "pixel transfer",
+            Mode::HBlank => "H-Blank",
+            Mode::VBlank => "V-Blank",
         }.fmt(f)
     }
 }

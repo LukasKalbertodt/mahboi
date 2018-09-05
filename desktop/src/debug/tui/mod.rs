@@ -527,7 +527,7 @@ impl TuiDebugger {
         // Phase/Status
         if regs.is_lcd_enabled() {
             body.append_plain("==> Phase: ");
-            body.append_plain(regs.phase().to_string());
+            body.append_plain(regs.mode().to_string());
             body.append_plain("\n");
         } else {
             body.append_plain("  --- LCD disabled! ---\n");
