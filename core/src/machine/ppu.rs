@@ -181,10 +181,20 @@ pub enum TileMapArea {
 }
 
 impl TileMapArea {
+    /// Returns the memory range (absolute addresses).
     pub fn absolute(&self) -> Range<Word> {
         match self {
             TileMapArea::Low  => Word::new(0x9800)..Word::new(0x9C00),
             TileMapArea::High => Word::new(0x9C00)..Word::new(0xA000),
+        }
+    }
+
+    /// Returns the start of this memory area, relative to the beginning of
+    /// VRAM.
+    fn start(&self) -> Word {
+        match self {
+            TileMapArea::Low  => Word::new(0x1800),
+            TileMapArea::High => Word::new(0x1C00),
         }
     }
 }
@@ -206,10 +216,34 @@ pub enum TileDataArea {
 }
 
 impl TileDataArea {
+    /// Returns the memory range (absolute addresses).
     pub fn absolute(&self) -> Range<Word> {
         match self {
             TileDataArea::Low  => Word::new(0x8000)..Word::new(0x9000),
             TileDataArea::High => Word::new(0x9000)..Word::new(0x9800),
+        }
+    }
+
+    /// Returns the address (relative to the beginning of VRAM) of the tile
+    /// with the given index.
+    ///
+    /// This implements the difference between the two addressing modes. If
+    /// `self` is `High`, the given byte is used as signed offset from `0x9000`
+    /// as base pointer.
+    fn index(&self, idx: Byte) -> Word {
+        match self {
+            TileDataArea::Low => {
+                // Simple indexing: we start at the very beginning of the VRAM
+                // and each tile needs 16 byte.
+                Word::new(idx.get() as u16 * 16)
+            }
+            TileDataArea::High => {
+                // In 8800 addressing mode, things are more complicated: we use
+                // `0x9000` as base address and the `idx` is now used as signed
+                // index.
+                let offset = ((idx.get() as i8) as i16) * 16;
+                Word::new((0x1000 + offset) as u16)
+            }
         }
     }
 }
@@ -284,7 +318,7 @@ impl Ppu {
     /// transfer, this returns garbage.
     pub(crate) fn load_vram_byte(&self, addr: Word) -> Byte {
         match self.regs().mode() {
-            Mode::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
+            Mode::PixelTransfer if self.regs().is_lcd_enabled() => Byte::new(0xff),
             _ => self.vram[addr - 0x8000],
         }
     }
@@ -298,7 +332,7 @@ impl Ppu {
     /// transfer, this write is lost (does nothing).
     pub(crate) fn store_vram_byte(&mut self, addr: Word, byte: Byte) {
         match self.regs().mode() {
-            Mode::PixelTransfer if self.lcd_enabled() => {},
+            Mode::PixelTransfer if self.regs().is_lcd_enabled() => {},
             _ => self.vram[addr - 0x8000] = byte,
         }
     }
@@ -312,7 +346,8 @@ impl Ppu {
     /// transfer and OAM search, this returns garbage.
     pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
         match self.regs().mode() {
-            Mode::PixelTransfer | Mode::OamSearch if self.lcd_enabled() => Byte::new(0xff),
+            Mode::PixelTransfer | Mode::OamSearch
+                if self.regs().is_lcd_enabled() => Byte::new(0xff),
             _ => self.oam[addr - 0xFE00],
         }
     }
@@ -326,7 +361,7 @@ impl Ppu {
     /// transfer and OAM search, this write is lost (does nothing).
     pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
         match self.regs().mode() {
-            Mode::PixelTransfer | Mode::OamSearch if self.lcd_enabled() => {},
+            Mode::PixelTransfer | Mode::OamSearch if self.regs().is_lcd_enabled() => {},
             _ => self.oam[addr - 0xFE00] = byte,
         }
     }
@@ -343,7 +378,7 @@ impl Ppu {
                 // TODO: Bit 2 has to be generated somewhere
                 // Bit 7 always returns 1
                 b |= 0b1000_0000;
-                if !self.lcd_enabled() {
+                if !self.regs().is_lcd_enabled() {
                     // Bit 0, 1 and 2 return 0 when LCD is off
                     b &= 0b1111_1000;
                 }
@@ -371,9 +406,9 @@ impl Ppu {
     pub(crate) fn store_io_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             0xFF40 => {
-                let was_enabled = self.lcd_enabled();
+                let was_enabled = self.regs().is_lcd_enabled();
                 self.registers.lcd_control = byte;
-                match (was_enabled, self.lcd_enabled()) {
+                match (was_enabled, self.regs().is_lcd_enabled()) {
                     (false, true) => {
                         info!("[ppu] LCD was enabled");
                         self.registers.set_mode(Mode::OamSearch);
@@ -410,10 +445,6 @@ impl Ppu {
         }
     }
 
-    pub fn lcd_enabled(&self) -> bool {
-        self.regs().lcd_control.get() & 0b1000_0000 != 0
-    }
-
     /// Returns an immutable reference to all public registers.
     pub fn regs(&self) -> &PpuRegisters {
         &self.registers
@@ -426,7 +457,7 @@ impl Ppu {
         interrupt_controller: &mut InterruptController,
     ) {
         // If the whole LCD is disabled, the PPU does nothing
-        if !self.lcd_enabled() {
+        if !self.regs().is_lcd_enabled() {
             return;
         }
 
@@ -483,43 +514,6 @@ impl Ppu {
         }
     }
 
-    /// Returns the start address of the tile data for the background/window
-    /// tiles relative to the start of VRAM. This can either be `0x8000` or
-    /// `0x8800` (or rather `0x0000`/`0x0800` relative to VRAM), depending on
-    /// bit 4 in the LCD control register. The memory area is always `0x1000`
-    /// bytes long.
-    pub fn bg_tile_data_start(&self) -> Word {
-        if self.regs().lcd_control.get() & 0b0001_0000 == 0 {
-            Word::new(0x0800)
-        } else {
-            Word::new(0x0000)
-        }
-    }
-
-    /// Returns the start address of the tile map for the background relative
-    /// to the start of VRAM. This can either be `0x9800` or `0x9C00` (or
-    /// rather `0x1800`/`0x1C00` relative to VRAM), depending on bit 3 of the
-    /// LCD control register. The memory area is always `0x400` bytes long.
-    pub fn bg_tile_map_start(&self) -> Word {
-        if self.regs().lcd_control.get() & 0b0000_1000 == 0 {
-            Word::new(0x1800)
-        } else {
-            Word::new(0x1C00)
-        }
-    }
-
-    /// Returns the start address of the tile map for the window relative to
-    /// the start of VRAM. This can either be `0x9800` or `0x9C00` (or rather
-    /// `0x1800`/`0x1C00` relative to VRAM), depending on bit 6 of the LCD
-    /// control register. The memory area is always `0x400` bytes long.
-    pub fn window_tile_map_start(&self) -> Word {
-        if self.regs().lcd_control.get() & 0b0100_0000 == 0 {
-            Word::new(0x1800)
-        } else {
-            Word::new(0x1C00)
-        }
-    }
-
     /// Performs one step of the pixel transfer phase. This involves fetching
     /// new tile data and emitting the pixels.
     fn pixel_transfer_step(&mut self, display: &mut impl Display) {
@@ -561,24 +555,14 @@ impl Ppu {
 
             // Background map data is stored in: `0x9800 - 0x9BFF` or `0x9C00 -
             // 0x9FFF`. We have to lookup the index of our tile in that memory.
-            let map_offset = self.bg_tile_map_start();
+            let map_offset = self.regs().bg_tile_map_address().start();
             let background_addr = map_offset + (tile_y as u16 * 32 + tile_x as u16);
             let tile_idx = self.vram[background_addr];
 
             // We calculate the start address of the tile we want to load from.
             // This depends on the addressing mode used for the
             // background/window tiles.
-            let tile_start = if self.bg_tile_data_start() == 0 {
-                // We start at the very beginning of the VRAM. Each tile needs
-                // 16 byte.
-                Word::new(tile_idx.get() as u16 * 16)
-            } else {
-                // In 8800 addressing mode, things are more complicated: we use
-                // `0x9000` as base address and the `tile_idx` is now used as
-                // signed index.
-                let offset = ((tile_idx.get() as i8) as i16) * 16;
-                Word::new((0x1000 + offset) as u16)
-            };
+            let tile_start = self.regs().bg_window_tile_data_address().index(tile_idx);
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
