@@ -312,8 +312,7 @@ impl Ppu {
     /// transfer and OAM search, this returns garbage.
     pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
         match self.regs().mode() {
-            Mode::PixelTransfer => Byte::new(0xff),
-            Mode::OamSearch => Byte::new(0xff),
+            Mode::PixelTransfer | Mode::OamSearch if self.lcd_enabled() => Byte::new(0xff),
             _ => self.oam[addr - 0xFE00],
         }
     }
