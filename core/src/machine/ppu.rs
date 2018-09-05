@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::Range,
+};
 
 use crate::{
     SCREEN_HEIGHT, SCREEN_WIDTH,
@@ -8,6 +11,206 @@ use crate::{
 };
 use super::interrupt::{InterruptController, Interrupt};
 
+
+
+/// The (public) registers inside of the PPU.
+pub struct PpuRegisters {
+    /// `0xFF40`: LCD control. All bits can be written.
+    ///
+    /// Each bit is used for a different purpose:
+    /// - 7: LCD display enable (0=Off, 1=On)
+    /// - 6: window tile map select (0=9800-9BFF, 1=9C00-9FFF)
+    /// - 5: window display enable (0=Off, 1=On)
+    /// - 4: background and window tile data select (0=8800-97FF, 1=8000-8FFF)
+    /// - 3: background tile map select (0=9800-9BFF, 1=9C00-9FFF)
+    /// - 2: sprite size (0=8x8, 1=8x16)
+    /// - 1: sprite display enable (0=Off, 1=On)
+    /// - 0: different meaning depending on Gameboy model
+    pub lcd_control: Byte,
+
+    /// `0xFF41`: LCD/PPU status. Bits 3, 4, 5 and 6 can be written.
+    ///
+    /// Purpose of each bit:
+    /// - 7: always 1, writes are ignored.
+    /// - 6: LYC=LY coincidence interrupt (1=enabled)
+    /// - 5: OAM search interrupt (1=enabled)
+    /// - 4: V-Blank interrupt (1=enabled)
+    /// - 3: H-Blank interrupt (1=enabled)
+    /// - 2: coincidence flag (0=LYC!=LY, 1:LYC==LY). Read only.
+    /// - 1 & 0: current PPU mode. Modes 0 -- 3, see [`Phase`] for more
+    ///   information.
+    pub status: Byte,
+
+    /// `0xFF42`: y scroll position of background.
+    pub scroll_bg_y: Byte,
+
+    /// `0xFF43`: x scroll position of background.
+    pub scroll_bg_x: Byte,
+
+    /// `0xFF44`: LY. Stores the line we are currently drawing (including
+    /// V-blank lines). This value is always between 0 and 154 (exclusive).
+    pub current_line: Byte,
+
+    /// `0xFF45`: LY compare. Is compared to `current_line` all the time. If
+    /// both values are equal, things happen (see `status` register).
+    pub lyc: Byte,
+
+    /// `0xFF46`: OAM DMA transfer start address register. This value times
+    /// `0x100` is the start address from which OAM data is read during the the
+    /// DMA transfer. Writing to this triggers DMA.
+    pub oam_dma_start: Byte,
+
+    /// `0xFF47`: background palette data.
+    pub background_palette: Byte,
+
+    /// `0xFF48`: sprite palette 0 data.
+    pub sprite_palette_0: Byte,
+
+    /// `0xFF49`: sprite palette 1 data.
+    pub sprite_palette_1: Byte,
+
+    /// `0xFF4A`: Y window position
+    pub scroll_win_y: Byte,
+
+    /// `0xFF4B`: X window position
+    pub scroll_win_x: Byte,
+}
+
+impl PpuRegisters {
+    fn new() -> Self {
+        Self {
+            lcd_control: Byte::zero(),
+            status: Byte::zero(),
+            scroll_bg_y: Byte::zero(),
+            scroll_bg_x: Byte::zero(),
+            current_line: Byte::zero(),
+            lyc: Byte::zero(),
+            oam_dma_start: Byte::zero(),
+            background_palette: Byte::zero(),
+            sprite_palette_0: Byte::zero(),
+            sprite_palette_1: Byte::zero(),
+            scroll_win_y: Byte::zero(),
+            scroll_win_x: Byte::zero(),
+        }
+    }
+
+    /// Returns bit 7 of the LCD control register which determines if the LCD
+    /// is enabled.
+    pub fn is_lcd_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b1000_0000 != 0
+    }
+
+    /// Returns bit 5 of the LCD control register which determines if the
+    /// window layer is enabled.
+    pub fn is_window_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0010_0000 != 0
+    }
+
+    /// Returns bit 1 of the LCD control register which determines if sprite
+    /// rendering is enabled.
+    pub fn are_sprites_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0000_0010 != 0
+    }
+
+    /// Returns the memory area of the tile map for the window layer (as
+    /// determined by LCD control bit 6).
+    pub fn window_tile_map_address(&self) -> TileMapArea {
+        if self.lcd_control.get() & 0b0100_0000 == 0 {
+            TileMapArea::Low
+        } else {
+            TileMapArea::High
+        }
+    }
+
+    /// Returns the memory area of the tile map for the background layer (as
+    /// determined by LCD control bit 3).
+    pub fn bg_tile_map_address(&self) -> TileMapArea {
+        if self.lcd_control.get() & 0b0000_1000 == 0 {
+            TileMapArea::Low
+        } else {
+            TileMapArea::High
+        }
+    }
+
+    /// Returns the memory area of the tile data for the background and window
+    /// layer (as determined by LCD control bit 4).
+    pub fn bg_window_tile_data_address(&self) -> TileDataArea {
+        // Yes, 0 means the higher address range.
+        if self.lcd_control.get() & 0b0001_0000 == 0 {
+            TileDataArea::High
+        } else {
+            TileDataArea::Low
+        }
+    }
+
+    /// Returns if large sprites (8x16) are enabled (instead of 8x8 sprites).
+    /// This is determined by bit 2 of the LCD control register.
+    pub fn large_sprites_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0000_0100 != 0
+    }
+
+    /// Returns in what phase the PPU currently is (as determined by bit 1 & 0
+    /// from the LCD stat register).
+    pub fn phase(&self) -> Phase {
+        match self.status.get() & 0b11 {
+            0 => Phase::HBlank,
+            1 => Phase::VBlank,
+            2 => Phase::OamSearch,
+            3 => Phase::PixelTransfer,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// The memory area in VRAM where a tile map is stored (the index into the tile
+/// data array).
+pub enum TileMapArea {
+    /// Stored in `0x9800` - `0x9BFF`.
+    Low,
+    /// Stored in `0x9C00` - `0x9FFF`.
+    High,
+}
+
+impl TileMapArea {
+    pub fn absolute(&self) -> Range<Word> {
+        match self {
+            TileMapArea::Low  => Word::new(0x9800)..Word::new(0x9C00),
+            TileMapArea::High => Word::new(0x9C00)..Word::new(0xA000),
+        }
+    }
+}
+
+impl fmt::Display for TileMapArea {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let range = self.absolute();
+        write!(f, "{:04x}-{:04x}", range.start.get(), range.end.get() - 1)
+    }
+}
+
+/// The memory area in VRAM where tile data is stored (the actual pixel data
+/// for the 8x8 tiles).
+pub enum TileDataArea {
+    /// Stored in `0x8000` - `0x8FFF`.
+    Low,
+    /// Stored in `0x8800` - `0x97FF`.
+    High,
+}
+
+impl TileDataArea {
+    pub fn absolute(&self) -> Range<Word> {
+        match self {
+            TileDataArea::Low  => Word::new(0x8000)..Word::new(0x9000),
+            TileDataArea::High => Word::new(0x9000)..Word::new(0x9800),
+        }
+    }
+}
+
+impl fmt::Display for TileDataArea {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let range = self.absolute();
+        write!(f, "{:04x}-{:04x}", range.start.get(), range.end.get() - 1)
+    }
+}
 
 /// Pixel processing unit.
 pub struct Ppu {
@@ -40,45 +243,11 @@ pub struct Ppu {
     /// for the setup time.
     pub(crate) oam_dma_status: Option<Word>,
 
-    // ===== Registers ======
-    /// FF40: LCDC
-    lcd_control: Byte,
-
-    /// FF41: LCD status
-    status: Byte,
-
-    /// FF42: y scroll position of background
-    scroll_y: Byte,
-
-    /// FF43: x scroll position of background
-    scroll_x: Byte,
-
-    /// FF44: LY. Stores the line we are currently drawing (including v-blank
-    /// lines). This value is always between 0 and 154 (exclusive).
-    current_line: Byte,
-
-    /// FF45: LY compare. Is compared to `current_line` all the time. If both
-    /// values are equal, things happen.
-    lyc: Byte,
-
-    /// FF46: OAM DMA Transfer and start address register
-    oam_dma_start: Byte,
-
-    // FF47: Background palette data.
-    background_palette: Byte,
-
-    // FF48: Sprite palette 0 data.
-    sprite_palette_0: Byte,
-
-    // FF49: Sprite palette 1 data.
-    sprite_palette_1: Byte,
-
-    /// FF4A: Y window position
-    win_y: Byte,
-
-    /// FF4B: X window position
-    win_x: Byte,
+    /// All registers. If you want to read registers, use the `regs()` method
+    /// instead. That way, we can avoid accidental mutation of any registers.
+    registers: PpuRegisters,
 }
+
 
 impl Ppu {
     pub(crate) fn new() -> Self {
@@ -93,19 +262,7 @@ impl Ppu {
             fetch_offset: 0,
             current_column: 0,
             oam_dma_status: None,
-
-            lcd_control: Byte::zero(),
-            status: Byte::zero(),
-            scroll_y: Byte::zero(),
-            scroll_x: Byte::zero(),
-            current_line: Byte::zero(),
-            lyc: Byte::zero(),
-            oam_dma_start: Byte::zero(),
-            background_palette: Byte::zero(),
-            sprite_palette_0: Byte::zero(),
-            sprite_palette_1: Byte::zero(),
-            win_y: Byte::zero(),
-            win_x: Byte::zero(),
+            registers: PpuRegisters::new(),
         }
     }
 
@@ -117,7 +274,7 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this returns garbage.
     pub(crate) fn load_vram_byte(&self, addr: Word) -> Byte {
-        match self.phase() {
+        match self.regs().phase() {
             Phase::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
             _ => self.vram[addr - 0x8000],
         }
@@ -131,7 +288,7 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this write is lost (does nothing).
     pub(crate) fn store_vram_byte(&mut self, addr: Word, byte: Byte) {
-        match self.phase() {
+        match self.regs().phase() {
             Phase::PixelTransfer if self.lcd_enabled() => {},
             _ => self.vram[addr - 0x8000] = byte,
         }
@@ -145,7 +302,7 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this returns garbage.
     pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
-        match self.phase() {
+        match self.regs().phase() {
             Phase::PixelTransfer => Byte::new(0xff),
             Phase::OamSearch => Byte::new(0xff),
             _ => self.oam[addr - 0xFE00],
@@ -160,7 +317,7 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this write is lost (does nothing).
     pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
-        match self.phase() {
+        match self.regs().phase() {
             Phase::PixelTransfer | Phase::OamSearch if self.lcd_enabled() => {},
             _ => self.oam[addr - 0xFE00] = byte,
         }
@@ -172,9 +329,9 @@ impl Ppu {
     /// function panics!
     pub(crate) fn load_io_byte(&self, addr: Word) -> Byte {
         match addr.get() {
-            0xFF40 => self.lcd_control,
+            0xFF40 => self.regs().lcd_control,
             // Bit 7 is always 1
-            0xFF41 => self.status.map(|mut b| {
+            0xFF41 => self.regs().status.map(|mut b| {
                 // TODO: Bit 2 has to be generated somewhere
                 // Bit 7 always returns 1
                 b |= 0b1000_0000;
@@ -185,16 +342,16 @@ impl Ppu {
 
                 b
             }),
-            0xFF42 => self.scroll_y,
-            0xFF43 => self.scroll_x,
-            0xFF44 => self.current_line,
-            0xFF45 => self.lyc,
-            0xFF46 => self.oam_dma_start,
-            0xFF47 => self.background_palette,
-            0xFF48 => self.sprite_palette_0,
-            0xFF49 => self.sprite_palette_1,
-            0xFF4A => self.win_y,
-            0xFF4B => self.win_x,
+            0xFF42 => self.regs().scroll_bg_y,
+            0xFF43 => self.regs().scroll_bg_x,
+            0xFF44 => self.regs().current_line,
+            0xFF45 => self.regs().lyc,
+            0xFF46 => self.regs().oam_dma_start,
+            0xFF47 => self.regs().background_palette,
+            0xFF48 => self.regs().sprite_palette_0,
+            0xFF49 => self.regs().sprite_palette_1,
+            0xFF4A => self.regs().scroll_win_y,
+            0xFF4B => self.regs().scroll_win_x,
             _ => panic!("called `Ppu::load_io_byte` with invalid address"),
         }
     }
@@ -207,7 +364,7 @@ impl Ppu {
         match addr.get() {
             0xFF40 => {
                 let was_enabled = self.lcd_enabled();
-                self.lcd_control = byte;
+                self.registers.lcd_control = byte;
                 match (was_enabled, self.lcd_enabled()) {
                     (false, true) => {
                         info!("[ppu] LCD was enabled");
@@ -217,84 +374,42 @@ impl Ppu {
                     }
                     (true, false) => {
                         info!("[ppu] LCD was disabled");
-                        self.current_line = Byte::new(0);
+                        self.registers.current_line = Byte::new(0);
                     }
                     _ => {}
                 }
             }
             0xFF41 => {
                 // Only bit 3 to 6 are writable
-                let v = self.status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
-                self.status = Byte::new(v);
+                let v = self.regs().status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
+                self.registers.status = Byte::new(v);
             },
-            0xFF42 => self.scroll_y = byte,
-            0xFF43 => self.scroll_x = byte,
+            0xFF42 => self.registers.scroll_bg_y = byte,
+            0xFF43 => self.registers.scroll_bg_x = byte,
             0xFF44 => {}, // read only
-            0xFF45 => self.lyc = byte,
+            0xFF45 => self.registers.lyc = byte,
             0xFF46 => {
-                self.oam_dma_start = byte;
+                self.registers.oam_dma_start = byte;
                 let src_addr = Word::new((byte.get() as u16) * 0x100 - 1);
                 self.oam_dma_status = Some(src_addr);
             },
-            0xFF47 => self.background_palette = byte,
-            0xFF48 => self.sprite_palette_0 = byte,
-            0xFF49 => self.sprite_palette_1 = byte,
-            0xFF4A => self.win_y = byte,
-            0xFF4B => self.win_x = byte,
+            0xFF47 => self.registers.background_palette = byte,
+            0xFF48 => self.registers.sprite_palette_0 = byte,
+            0xFF49 => self.registers.sprite_palette_1 = byte,
+            0xFF4A => self.registers.scroll_win_y = byte,
+            0xFF4B => self.registers.scroll_win_x = byte,
             _ => panic!("called `Ppu::store_io_byte` with invalid address"),
         }
     }
 
-    /// Returns in what phase the PPU currently is.
-    pub fn phase(&self) -> Phase {
-        match self.status.get() & 0b11 {
-            0 => Phase::HBlank,
-            1 => Phase::VBlank,
-            2 => Phase::OamSearch,
-            3 => Phase::PixelTransfer,
-            _ => unreachable!(),
-        }
-    }
-
     pub fn lcd_enabled(&self) -> bool {
-        self.lcd_control.get() & 0b1000_0000 != 0
+        self.regs().lcd_control.get() & 0b1000_0000 != 0
     }
 
-    /// Returns register FF40: LCDC
-    pub fn lcd_control(&self) -> Byte { self.lcd_control }
-
-    /// Returns register FF41: LCD status
-    pub fn status(&self) -> Byte { self.status }
-
-    /// Returns register FF42: y scroll position of background
-    pub fn scroll_y(&self) -> Byte { self.scroll_y }
-
-    /// Returns register FF43: x scroll position of background
-    pub fn scroll_x(&self) -> Byte { self.scroll_x }
-
-    /// Returns register FF44: LY. Stores the line we are currently drawing
-    /// (including v-blank lines). This value is always between 0 and 154
-    /// (exclusive).
-    pub fn current_line(&self) -> Byte { self.current_line }
-
-    /// Returns register FF45: LY compare. Is compared to `current_line` all
-    /// the time. If both values are equal, things happen.
-    pub fn lyc(&self) -> Byte { self.lyc }
-
-    //  Returns register FF47: Background palette data.
-    pub fn background_palette(&self) -> Byte { self.background_palette }
-
-    //  Returns register FF48: Sprite palette 0 data.
-    pub fn sprite_palette_0(&self) -> Byte { self.sprite_palette_0 }
-
-    //  Returns register FF49: Sprite palette 1 data.
-    pub fn sprite_palette_1(&self) -> Byte { self.sprite_palette_1 }
-
-    /// Returns register FF4A: Y window position
-    pub fn win_y(&self) -> Byte { self.win_y }
-
-    /// Returns register FF4B: X window position
-    pub fn win_x(&self) -> Byte { self.win_x }
+    /// Returns an immutable reference to all public registers.
+    pub fn regs(&self) -> &PpuRegisters {
+        &self.registers
+    }
 
     fn set_phase(&mut self, phase: Phase) {
         let v = match phase {
@@ -304,7 +419,7 @@ impl Ppu {
             Phase::PixelTransfer => 3,
         };
 
-        self.status = Byte::new((self.status.get() & 0b1111_1100) | v);
+        self.registers.status = Byte::new((self.regs().status.get() & 0b1111_1100) | v);
     }
 
     /// Executes one machine cycle (1 Mhz).
@@ -319,9 +434,9 @@ impl Ppu {
         }
 
         // Check if we're currently in V-Blank or not.
-        if self.current_line.get() >= SCREEN_HEIGHT as u8 {
+        if self.regs().current_line.get() >= SCREEN_HEIGHT as u8 {
             // ===== V-Blank =====
-            if self.current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
+            if self.regs().current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
                 self.set_phase(Phase::VBlank);
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
             }
@@ -340,7 +455,9 @@ impl Ppu {
                     }
                     self.pixel_transfer_step(display);
                 }
-                (43..114, col) if self.phase() == Phase::HBlank && col == SCREEN_WIDTH as u8 => {
+                (43..114, col)
+                    if self.regs().phase() == Phase::HBlank && col == SCREEN_WIDTH as u8
+                => {
                     // We don't have to do anything in H-Blank. This match arm
                     // just exists to make sure we never reach an invalid state
                     // (with the next arm)
@@ -356,15 +473,15 @@ impl Ppu {
         self.cycle_in_line += 1;
         if self.cycle_in_line == 114 {
             // Bump the line and reset a bunch of values.
-            self.current_line += 1;
+            self.registers.current_line += 1;
             self.cycle_in_line = 0;
             self.current_column = 0;
             self.fetch_offset = 0;
             self.fifo.clear();
 
             // Reset line if we reached the last one.
-            if self.current_line == 154 {
-                self.current_line = Byte::new(0);
+            if self.regs().current_line == 154 {
+                self.registers.current_line = Byte::new(0);
             }
         }
     }
@@ -375,7 +492,7 @@ impl Ppu {
     /// bit 4 in the LCD control register. The memory area is always `0x1000`
     /// bytes long.
     pub fn bg_tile_data_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0001_0000 == 0 {
+        if self.regs().lcd_control.get() & 0b0001_0000 == 0 {
             Word::new(0x0800)
         } else {
             Word::new(0x0000)
@@ -387,7 +504,7 @@ impl Ppu {
     /// rather `0x1800`/`0x1C00` relative to VRAM), depending on bit 3 of the
     /// LCD control register. The memory area is always `0x400` bytes long.
     pub fn bg_tile_map_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0000_1000 == 0 {
+        if self.regs().lcd_control.get() & 0b0000_1000 == 0 {
             Word::new(0x1800)
         } else {
             Word::new(0x1C00)
@@ -399,7 +516,7 @@ impl Ppu {
     /// `0x1800`/`0x1C00` relative to VRAM), depending on bit 6 of the LCD
     /// control register. The memory area is always `0x400` bytes long.
     pub fn window_tile_map_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0100_0000 == 0 {
+        if self.regs().lcd_control.get() & 0b0100_0000 == 0 {
             Word::new(0x1800)
         } else {
             Word::new(0x1C00)
@@ -437,8 +554,8 @@ impl Ppu {
 
             // The position of the first pixel we want to fetch in the
             // background map.
-            let pos_x = (self.scroll_x + self.fetch_offset).get();
-            let pos_y = (self.scroll_y + self.current_line).get();
+            let pos_x = (self.regs().scroll_bg_x + self.fetch_offset).get();
+            let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
 
             // Dividing by 8 and rounding down to get the position in the 32*32
             // tile grid.
@@ -478,13 +595,13 @@ impl Ppu {
             // if self.current_line == 0 {
             //     debug!(
             //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, \
-            //             scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}, bg_addr: {}, \
+            //             scroll_bg_x: {}, scroll_bg_y: {}, tile_x: {}, tile_y: {}, bg_addr: {}, \
             //             tile_id: {}, tile_start: {}, line_offset: {}, new FIFO len: {}",
             //         self.current_column,
             //         pos_x,
             //         pos_y,
-            //         self.scroll_x,
-            //         self.scroll_y,
+            //         self.scroll_bg_x,
+            //         self.scroll_bg_y,
             //         tile_x,
             //         tile_y,
             //         background_addr,
@@ -519,16 +636,16 @@ impl Ppu {
 
         // Determine the correct palette
         let palette = match source {
-            PixelSource::Background => self.background_palette,
-            PixelSource::Sprite0 => self.sprite_palette_0,
-            PixelSource::Sprite1 => self.sprite_palette_1,
+            PixelSource::Background => self.regs().background_palette,
+            PixelSource::Sprite0 => self.regs().sprite_palette_0,
+            PixelSource::Sprite1 => self.regs().sprite_palette_1,
         };
 
         // Convert to real color
         let color = pattern_to_color(pattern, palette);
 
         // Write to display
-        let pos = PixelPos::new(self.current_column, self.current_line.get());
+        let pos = PixelPos::new(self.current_column, self.regs().current_line.get());
         display.set_pixel(pos, color);
 
         self.current_column += 1;

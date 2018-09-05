@@ -522,10 +522,12 @@ impl TuiDebugger {
 
         let mut body = StyledString::new();
 
+        let regs = ppu.regs();
+
         // Phase/Status
-        if ppu.lcd_enabled() {
+        if regs.is_lcd_enabled() {
             body.append_plain("==> Phase: ");
-            body.append_plain(ppu.phase().to_string());
+            body.append_plain(regs.phase().to_string());
             body.append_plain("\n");
         } else {
             body.append_plain("  --- LCD disabled! ---\n");
@@ -534,21 +536,17 @@ impl TuiDebugger {
 
         // Tile data memory range for BG and window
         body.append_plain("BG tile data: ");
-        let addr = if (ppu.lcd_control().get() & 0b0001_0000) != 0 {
-            "8000-8FFF\n"
-        } else {
-            "8800-97FF\n"
-        };
-        body.append_styled(addr, reg_style);
+        body.append_styled(regs.bg_window_tile_data_address().to_string(), reg_style);
+        body.append_plain("\n");
 
         // FF44 current line
         body.append_plain("Current line: ");
-        body.append_styled(ppu.current_line().get().to_string(), reg_style);
+        body.append_styled(regs.current_line.get().to_string(), reg_style);
         body.append_plain("\n");
 
         // FF45 line compare
         body.append_plain("Line compare: ");
-        body.append_styled(ppu.lyc().get().to_string(), reg_style);
+        body.append_styled(regs.lyc.get().to_string(), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -569,11 +567,11 @@ impl TuiDebugger {
         body.append_plain("## Palettes: \n");
 
         body.append_plain("- BG: ");
-        body.append_styled(format_palette(ppu.background_palette()), reg_style);
+        body.append_styled(format_palette(regs.background_palette), reg_style);
         body.append_plain("- S0: ");
-        body.append_styled(format_palette(ppu.sprite_palette_0()), reg_style);
+        body.append_styled(format_palette(regs.sprite_palette_0), reg_style);
         body.append_plain("- S1: ");
-        body.append_styled(format_palette(ppu.sprite_palette_1()), reg_style);
+        body.append_styled(format_palette(regs.sprite_palette_1), reg_style);
 
         body.append_plain("\n");
 
@@ -583,18 +581,14 @@ impl TuiDebugger {
 
         // Tile map memory region
         body.append_plain("- tile map: ");
-        if (ppu.lcd_control().get() & 0b0000_1000) != 0 {
-            body.append_styled("9C00-9FFF", reg_style);
-        } else {
-            body.append_styled("9800-9BFF", reg_style);
-        }
+        body.append_styled(regs.bg_tile_map_address().to_string(), reg_style);
         body.append_plain("\n");
 
         // Scroll
         body.append_plain("- X: ");
-        body.append_styled(format!("{: >3}", ppu.scroll_x().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_bg_x.get()), reg_style);
         body.append_plain(",  Y: ");
-        body.append_styled(format!("{: >3}", ppu.scroll_y().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_bg_y.get()), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -605,27 +599,20 @@ impl TuiDebugger {
 
         // Enabled?
         body.append_plain("- ");
-        if (ppu.lcd_control().get() & 0b0010_0000) != 0 {
-            body.append_styled("enabled", reg_style);
-        } else {
-            body.append_styled("disabled", reg_style);
-        }
+        let win_status = if regs.is_window_enabled() { "enabled" } else { "disabled" };
+        body.append_styled(win_status, reg_style);
         body.append_plain("\n");
 
         // Tile map memory region
         body.append_plain("- tile map: ");
-        if (ppu.lcd_control().get() & 0b0100_0000) != 0 {
-            body.append_styled("9C00-9FFF", reg_style);
-        } else {
-            body.append_styled("9800-9BFF", reg_style);
-        }
+        body.append_styled(regs.window_tile_map_address().to_string(), reg_style);
         body.append_plain("\n");
 
         // Scroll position
         body.append_plain("- X: ");
-        body.append_styled(format!("{: >3}", ppu.win_x().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_win_x.get()), reg_style);
         body.append_plain(",  Y: ");
-        body.append_styled(format!("{: >3}", ppu.win_y().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_win_y.get()), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -636,20 +623,14 @@ impl TuiDebugger {
 
         // Enabled?
         body.append_plain("- ");
-        if (ppu.lcd_control().get() & 0b0000_0010) != 0 {
-            body.append_styled("enabled", reg_style);
-        } else {
-            body.append_styled("disabled", reg_style);
-        }
+        let sprite_status = if regs.are_sprites_enabled() { "enabled" } else { "disabled" };
+        body.append_styled(sprite_status, reg_style);
         body.append_plain("\n");
 
         // Size
         body.append_plain("- Size: ");
-        if (ppu.lcd_control().get() & 0b0000_0100) != 0 {
-            body.append_styled("8x16", reg_style);
-        } else {
-            body.append_styled("8x8", reg_style);
-        }
+        let sprite_size = if regs.large_sprites_enabled() { "8x16" } else { "8x8" };
+        body.append_styled(sprite_size, reg_style);
         body.append_plain("\n");
 
 
