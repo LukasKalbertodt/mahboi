@@ -1,3 +1,5 @@
+//! Everything related to the pixel processing unit (PPU).
+
 use std::{
     fmt,
     ops::Range,
@@ -36,9 +38,9 @@ pub struct PpuRegisters {
     /// - 5: OAM search interrupt (1=enabled)
     /// - 4: V-Blank interrupt (1=enabled)
     /// - 3: H-Blank interrupt (1=enabled)
-    /// - 2: coincidence flag (0=LYC!=LY, 1:LYC==LY). Read only.
+    /// - 2: coincidence flag (0=LYC!=LY, 1=LYC==LY). Read only.
     /// - 1 & 0: current PPU mode. Modes 0 -- 3, see [`Mode`] for more
-    ///   information.
+    ///   information. Read only.
     pub status: Byte,
 
     /// `0xFF42`: y scroll position of background.
@@ -49,6 +51,7 @@ pub struct PpuRegisters {
 
     /// `0xFF44`: LY. Stores the line we are currently drawing (including
     /// V-blank lines). This value is always between 0 and 154 (exclusive).
+    /// Read only.
     pub current_line: Byte,
 
     /// `0xFF45`: LY compare. Is compared to `current_line` all the time. If
@@ -670,26 +673,27 @@ impl Ppu {
 /// ```
 ///
 /// All cycles are machine-cycles (1 Mhz = 1_048_576). Pixel transfer can vary
-/// in length for different lines.
+/// in length for different lines. This is due to window and sprites
+/// interrupting the normal process of fetching data.
 ///
-/// Some length:
-/// - One line: 20 + 43 + 51 = 114
-/// - V-Blank: 10 * one line = 1140
-/// - One frame: one line * 154 = 17_556
+/// Duration of some things:
+/// - One line: 20 + 43 + 51 = 114 cycles
+/// - V-Blank: 10 * one line = 1140 cycles
+/// - One frame: one line * 154 = 17_556 cycles
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Also called "Mode 2": PPU determines which sprites are visible on the
     /// current line.
     OamSearch = 2,
 
-    /// Also called "Mode 3": Pixels are transferred to the LCD screen.
+    /// Also called "Mode 3": pixels are transferred to the LCD screen.
     PixelTransfer = 3,
 
-    /// Also called "Mode 0": Time after pixel transfer when the PPU is waiting
+    /// Also called "Mode 0": time after pixel transfer when the PPU is waiting
     /// to start a new line.
     HBlank = 0,
 
-    /// Also called "Mode 1": Time after the last line has been drawn and
+    /// Also called "Mode 1": time after the last line has been drawn and
     /// before the next frame begins.
     VBlank = 1,
 }
