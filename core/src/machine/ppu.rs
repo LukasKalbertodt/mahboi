@@ -805,6 +805,9 @@ impl PixelFifo {
 
     /// Clears all data from the FIFO (sets length to 0).
     fn clear(&mut self) {
+        self.colors_hi = 0;
+        self.colors_lo = 0;
+        self.sources = 0;
         self.len = 0;
     }
 
@@ -885,5 +888,43 @@ mod tests {
         assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
         assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
         assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+    }
+
+    #[test]
+    fn fifo_clear() {
+        // The same as in `fifo_simple`
+        let mut fifo = PixelFifo::new();
+        assert_eq!(fifo.len(), 0);
+
+        let color_hi = 0b00_11_00_11u8;
+        let color_lo = 0b01_01_10_10u8;
+        fifo.add_data(color_hi, color_lo, PixelSource::Background);
+        assert_eq!(fifo.len(), 8);
+
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+
+        // Now we clear the FIFO and only fill it with zeroes.
+        fifo.clear();
+        assert_eq!(fifo.len(), 0);
+
+        fifo.add_data(0, 0, PixelSource::Background);
+        fifo.add_data(0, 0, PixelSource::Background);
+        assert_eq!(fifo.len(), 16);
+
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
     }
 }
