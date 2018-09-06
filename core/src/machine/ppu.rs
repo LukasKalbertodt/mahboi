@@ -547,6 +547,7 @@ impl Ppu {
         // the user, so we can do this right before starting the pixel
         // transfer.
         self.fifo.clear();
+        self.fetch_started = false;
 
         // We calculate the x coordinate of the tile we need to fetch first.
         // This can simply be increased by 1 after each fetch.
@@ -558,8 +559,7 @@ impl Ppu {
         // here.
         self.num_throw_away_pixels = self.regs().scroll_bg_x.get() % 8;
 
-        // We store the pixel exact y position of our current line relative to
-        // the background.
+        // Calculate the Y position and the offset within one tile.
         let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
         self.line_in_tile_offset = (pos_y % 8) * 2;
 
@@ -581,6 +581,33 @@ impl Ppu {
             // Check if the next pixel should be discarded or not.
             if self.num_throw_away_pixels == 0 {
                 self.push_pixel(display);
+
+                // We just bumped our `current_column`. Now we check if we
+                // reached the start of the window.
+                let window_trigger = self.regs().is_window_enabled()
+                    && self.regs().scroll_win_x.get() >= 7
+                    && self.current_column == self.regs().scroll_win_x.get() - 7;
+                if window_trigger {
+                    // We need to basically reset the whole state.
+                    self.fifo.clear();
+                    self.fetch_started = false;
+
+                    // The following is nearly the same as in
+                    // `prepare_pixel_transfer`.
+                    self.fetch_tile_x = 0;
+
+                    // Calculate the Y position and the offset within one tile.
+                    let pos_y = (self.regs().scroll_win_y + self.regs().current_line).get();
+                    self.line_in_tile_offset = (pos_y % 8) * 2;
+
+                    // Here we precompute the address offset to the first tile
+                    // of the current line in the tile map. This means that we
+                    // can easily compute the address of the real tile later as
+                    // `fetch_map_line_offset + fetch_tile_x`.
+                    let tile_y = pos_y / 8;
+                    let map_offset = self.regs().window_tile_map_address().start();
+                    self.fetch_map_line_offset = map_offset + 32 * tile_y as u16;
+                }
             } else {
                 let _ = self.fifo.emit();
                 self.num_throw_away_pixels -= 1;
