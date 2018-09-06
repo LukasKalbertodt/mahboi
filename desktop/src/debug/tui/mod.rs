@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
     sync::{
         Mutex,
+        atomic::{AtomicBool, Ordering},
         mpsc::{channel, Receiver, Sender},
     },
 };
@@ -57,9 +58,14 @@ mod util;
 // there and the TUI interface regularly checks for new messages and shows them
 // in the TUI.
 
+/// The global logger.
+static LOGGER: TuiLogger = TuiLogger {
+    discard_trace: AtomicBool::new(true),
+};
+
 /// Initializes the logger that works in tandem with the TUI debugger.
 pub(crate) fn init_logger() {
-    log::set_logger(&TuiLogger)
+    log::set_logger(&LOGGER)
         .expect("called init(), but a logger is already set!");
 }
 
@@ -73,15 +79,19 @@ struct LogMessage {
     msg: String,
 }
 
-struct TuiLogger;
+struct TuiLogger {
+    discard_trace: AtomicBool,
+}
 
 impl Log for TuiLogger {
-    fn enabled(&self, _: &Metadata) -> bool {
-        true
+    fn enabled(&self, meta: &Metadata) -> bool {
+        !(self.discard_trace.load(Ordering::SeqCst) && meta.level() == Level::Trace)
     }
 
     fn log(&self, record: &Record) {
-        if record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false) {
+        let enabled = self.enabled(record.metadata())
+            && record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false);
+        if enabled {
             // Just push them into the global list.
             LOG_MESSAGES.lock().unwrap().push(LogMessage {
                 level: record.level(),
@@ -289,6 +299,11 @@ impl TuiDebugger {
         // Append all log messages that were pushed to the global buffer into
         // the corresponding log view.
         self.siv.find_id::<LogView>("log_list").unwrap().update();
+        let discard = self.siv.find_id::<LogView>("log_list")
+            .unwrap()
+            .ignore_trace_logs(&mut self.siv)
+            && !self.pause_mode;
+        LOGGER.discard_trace.store(discard, Ordering::SeqCst);
 
         // React to any events that might have happend
         while let Ok(c) = self.pending_events.try_recv() {
@@ -367,9 +382,11 @@ impl TuiDebugger {
 
     /// Switch to pause mode.
     fn pause(&mut self) {
-        trace!("[debugger] enter pause mode");
+        debug!("[debugger] enter pause mode");
 
         self.pause_mode = true;
+
+        LOGGER.discard_trace.store(false, Ordering::SeqCst);
 
         // Execution just got paused => select the debugging tab
         self.siv.find_id::<TabView>("tab_view")
@@ -386,9 +403,14 @@ impl TuiDebugger {
 
     /// Exit pause mode (continue execution)
     fn resume(&mut self) {
-        trace!("[debugger] continue execution (exit pause mode)");
+        debug!("[debugger] continue execution (exit pause mode)");
 
         self.pause_mode = false;
+
+        let discard = self.siv.find_id::<LogView>("log_list")
+            .unwrap()
+            .ignore_trace_logs(&mut self.siv);
+        LOGGER.discard_trace.store(discard, Ordering::SeqCst);
 
         // Update the title
         self.siv.find_id::<TextView>("main_title")
@@ -426,7 +448,7 @@ impl TuiDebugger {
                 let stop = machine.ppu.regs().current_line == line
                     && machine.ppu.regs().mode() == Mode::OamSearch;
                 if stop {
-                    trace!("[debugger] paused in line {}", line);
+                    debug!("[debugger] paused in line {}", line);
                     self.pause_in_line = None;
                     return true;
                 }
@@ -450,7 +472,7 @@ impl TuiDebugger {
 
         // We the current instruction is one of our breakpoints, we also pause.
         if self.breakpoints.contains(machine.cpu.pc) {
-            trace!("[debugger] paused at breakpoint {}", machine.cpu.pc);
+            debug!("[debugger] paused at breakpoint {}", machine.cpu.pc);
             return true;
         }
 
