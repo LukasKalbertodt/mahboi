@@ -195,6 +195,16 @@ impl PpuRegisters {
         let v = mode as u8;
         self.status = self.status.map(|b| (b & 0b1111_1100) | v);
     }
+
+    fn set_coincidence_flag(&mut self, v: bool) {
+        self.status = self.status.map(|b| {
+            if v {
+                b | 0b0000_0100
+            } else {
+                b & 0b1111_1011
+            }
+        });
+    }
 }
 
 /// The memory area in VRAM where a tile map is stored (the index into the tile
@@ -520,6 +530,10 @@ impl Ppu {
             if self.regs().current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
                 self.registers.set_mode(Mode::VBlank);
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
+
+                if self.regs().vblank_interrupt() {
+                    interrupt_controller.request_interrupt(Interrupt::Vblank);
+                }
             }
         } else {
             // ===== Not in V-Blank =====
@@ -527,6 +541,30 @@ impl Ppu {
                 (0..20, 0) => {
                     if self.cycle_in_line == 0 {
                         self.registers.set_mode(Mode::OamSearch);
+
+                        // Potentially trigger LCD stat interrupt. TODO: this
+                        // might be only correct for line 0. This might happen
+                        // one cycle earlier for lines 1--143. Check cycle
+                        // accurate gameboy docs later.
+                        if self.regs().oam_search_interrupt() {
+                            interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                        }
+
+                        // Check if we just started the line with the same
+                        // number as LYC.
+                        if self.regs().current_line == self.regs().lyc {
+                            self.registers.set_coincidence_flag(true);
+
+                            // Potentially trigger interrupt. TODO: this might
+                            // be only correct for line 0. This might happen
+                            // one cycle earlier for lines 1--143. Check cycle
+                            // accurate gameboy docs later.
+                            if self.regs().coincidence_interrupt() {
+                                interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                            }
+                        } else {
+                            self.registers.set_coincidence_flag(false);
+                        }
                     }
                     // TODO: OAM Search
                 }
@@ -535,7 +573,7 @@ impl Ppu {
                         self.registers.set_mode(Mode::PixelTransfer);
                         self.prepare_pixel_transfer();
                     }
-                    self.pixel_transfer_step(display);
+                    self.pixel_transfer_step(display, interrupt_controller);
                 }
                 (43..114, col)
                     if self.regs().mode() == Mode::HBlank && col == SCREEN_WIDTH as u8
@@ -600,7 +638,11 @@ impl Ppu {
 
     /// Performs one step of the pixel transfer phase. This involves fetching
     /// new tile data and emitting the pixels.
-    fn pixel_transfer_step(&mut self, display: &mut impl Display) {
+    fn pixel_transfer_step(
+        &mut self,
+        display: &mut impl Display,
+        interrupt_controller: &mut InterruptController,
+    ) {
         // Push out up to four new pixels if we have enough data in the FIFO.
         let mut pixel_pushed = 0;
         while self.fifo.len() > 8 && pixel_pushed < 4 {
@@ -645,6 +687,13 @@ impl Ppu {
             // H-Blank.
             if self.current_column == SCREEN_WIDTH as u8 {
                 self.registers.set_mode(Mode::HBlank);
+
+                // Trigger H-Blank interrupt if enabled.
+                if self.regs().hblank_interrupt() {
+                    interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                    debug!("triggered");
+                }
+
                 return;
             }
         }
