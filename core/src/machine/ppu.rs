@@ -292,6 +292,12 @@ pub struct Ppu {
     /// independently.
     fetch_map_line_offset: Word,
 
+    /// Sometimes, we need to throw away some pixels from the pixel FIFO. We
+    /// calculate the number of pixels we need to throw away at the beginning
+    /// of each line. And store it. During the line this is always decreased to
+    /// 0.
+    num_throw_away_pixels: u8,
+
     /// ...
     current_column: u8,
 
@@ -322,6 +328,8 @@ impl Ppu {
             fetch_tile_x: 0,
             line_in_tile_offset: 0,
             fetch_map_line_offset: Word::zero(),
+            num_throw_away_pixels: 0,
+
             current_column: 0,
             oam_dma_status: None,
             registers: PpuRegisters::new(),
@@ -544,6 +552,12 @@ impl Ppu {
         // This can simply be increased by 1 after each fetch.
         self.fetch_tile_x = self.regs().scroll_bg_x.get() / 8;
 
+        // Since we always fetch full 8 pixel tiles but can scroll pixel
+        // perfect, we might have to discard a few pixels we load into the
+        // FIFO. We can calculate the number of pixels we have to throw away
+        // here.
+        self.num_throw_away_pixels = self.regs().scroll_bg_x.get() % 8;
+
         // We store the pixel exact y position of our current line relative to
         // the background.
         let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
@@ -564,7 +578,14 @@ impl Ppu {
         // Push out up to four new pixels if we have enough data in the FIFO.
         let mut pixel_pushed = 0;
         while self.fifo.len() > 8 && pixel_pushed < 4 {
-            self.push_pixel(display);
+            // Check if the next pixel should be discarded or not.
+            if self.num_throw_away_pixels == 0 {
+                self.push_pixel(display);
+            } else {
+                let _ = self.fifo.emit();
+                self.num_throw_away_pixels -= 1;
+            }
+
             pixel_pushed += 1;
 
             // We are at the end of the line, stop everything and go to
