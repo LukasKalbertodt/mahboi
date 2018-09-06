@@ -266,14 +266,31 @@ pub struct Ppu {
 
 
     // ===== State of the pixel transfer operation ======
+    // All of the following fields are state of the pixel transfer state
+    // machine. Outside of pixel transfer, these fields' values are useless.
+
     fifo: PixelFifo,
 
     /// Stores whether or not an fetch operation has already been started. This
     /// boolean usually flips every cycle during pixel transfer.
     fetch_started: bool,
 
-    /// The first pixel of the next 8 pixel the fetcher need to fetch.
-    fetch_offset: u8,
+    /// This is the x position of the next tile to fetch. This is in tile space
+    /// (0--31) and not pixel space (0--256)!
+    fetch_tile_x: u8,
+
+    /// This stores the offset of the line of interest in the current tile. A
+    /// tile has 8 lines, each stored in two bytes. So this value is the line
+    /// number in the tile times two.
+    line_in_tile_offset: u8,
+
+    /// This is the address to the first tile in the tile map of the current
+    /// line (relative to the beginning of VRAM). This means that
+    /// `fetch_map_line_offset + fetch_tile_x` is the address of the next tile
+    /// index in the tile map we need to fetch. We store those separated
+    /// because the x value needs to be able to overflow and wrap around
+    /// independently.
+    fetch_map_line_offset: Word,
 
     /// ...
     current_column: u8,
@@ -302,7 +319,9 @@ impl Ppu {
 
             fifo: PixelFifo::new(),
             fetch_started: false,
-            fetch_offset: 0,
+            fetch_tile_x: 0,
+            line_in_tile_offset: 0,
+            fetch_map_line_offset: Word::zero(),
             current_column: 0,
             oam_dma_status: None,
             registers: PpuRegisters::new(),
@@ -480,6 +499,7 @@ impl Ppu {
                 (20..114, col) if col < SCREEN_WIDTH as u8 => {
                     if self.cycle_in_line == 20 {
                         self.registers.set_mode(Mode::PixelTransfer);
+                        self.prepare_pixel_transfer();
                     }
                     self.pixel_transfer_step(display);
                 }
@@ -504,7 +524,6 @@ impl Ppu {
             self.registers.current_line += 1;
             self.cycle_in_line = 0;
             self.current_column = 0;
-            self.fetch_offset = 0;
             self.fifo.clear();
 
             // Reset line if we reached the last one.
@@ -512,6 +531,31 @@ impl Ppu {
                 self.registers.current_line = Byte::new(0);
             }
         }
+    }
+
+    fn prepare_pixel_transfer(&mut self) {
+        // We remove all pixels from the FIFO that may still be inside. This
+        // might already happen at an earlier stage, but it's not observable to
+        // the user, so we can do this right before starting the pixel
+        // transfer.
+        self.fifo.clear();
+
+        // We calculate the x coordinate of the tile we need to fetch first.
+        // This can simply be increased by 1 after each fetch.
+        self.fetch_tile_x = self.regs().scroll_bg_x.get() / 8;
+
+        // We store the pixel exact y position of our current line relative to
+        // the background.
+        let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
+        self.line_in_tile_offset = (pos_y % 8) * 2;
+
+        // Here we precompute the address offset to the first tile of the
+        // current line in the tile map. This means that we can easily compute
+        // the address of the real tile later as `fetch_map_line_offset +
+        // fetch_tile_x`.
+        let tile_y = pos_y / 8;
+        let map_offset = self.regs().bg_tile_map_address().start();
+        self.fetch_map_line_offset = map_offset + 32 * tile_y as u16;
     }
 
     /// Performs one step of the pixel transfer phase. This involves fetching
@@ -538,26 +582,8 @@ impl Ppu {
         if !self.fetch_started {
             self.fetch_started = true;
         } else {
-            // TODO: it's a waste to calculate all of these positions every
-            // time again. The `y` value doesn't change for the whole line and
-            // the `x` value need to be calculate only once and can then be
-            // incremented by 1 after each fetch.
-
-            // The position of the first pixel we want to fetch in the
-            // background map.
-            let pos_x = (self.regs().scroll_bg_x + self.fetch_offset).get();
-            let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
-
-            // Dividing by 8 and rounding down to get the position in the 32*32
-            // tile grid.
-            let tile_x = pos_x / 8;
-            let tile_y = pos_y / 8;
-
-            // Background map data is stored in: `0x9800 - 0x9BFF` or `0x9C00 -
-            // 0x9FFF`. We have to lookup the index of our tile in that memory.
-            let map_offset = self.regs().bg_tile_map_address().start();
-            let background_addr = map_offset + (tile_y as u16 * 32 + tile_x as u16);
-            let tile_idx = self.vram[background_addr];
+            // We lookup the index of our tile in the tile map here.
+            let tile_idx = self.vram[self.fetch_map_line_offset + self.fetch_tile_x];
 
             // We calculate the start address of the tile we want to load from.
             // This depends on the addressing mode used for the
@@ -566,7 +592,7 @@ impl Ppu {
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
-            let line_offset = tile_start + 2 * (pos_y % 8);
+            let line_offset = tile_start + self.line_in_tile_offset;
 
             // Load the two bytes and add all pixels to the FIFO.
             let lo = self.vram[line_offset].get();
@@ -593,9 +619,9 @@ impl Ppu {
             //     );
             // }
 
-            // Reset status flag and bump the fetch offset
+            // Reset status flag and bump the x tile position
             self.fetch_started = false;
-            self.fetch_offset += 8;
+            self.fetch_tile_x += 1;
         }
     }
 
