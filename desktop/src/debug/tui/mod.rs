@@ -28,7 +28,7 @@ use mahboi::{
     log::*,
     machine::{
         Cpu, Machine,
-        ppu::Ppu,
+        ppu::{Mode, Ppu},
     },
     primitives::{Byte, Word},
 };
@@ -154,6 +154,15 @@ pub(crate) struct TuiDebugger {
     /// instruction.
     pause_on_ret: bool,
 
+    /// This is set whenever the user runs the emulator until a new line or new
+    /// frame is reached.
+    pause_in_line: Option<u8>,
+
+    /// This is a flag used for "jump to next frame". A value of `true` means
+    /// that `pause_in_line` won't trigger. This flag is reset once we reach
+    /// V-Blank.
+    waiting_for_vblank: bool,
+
     /// To avoid updating all elements every frame, we track whether an update
     /// is necessary. This flag is set to `true` whenever `should_pause()` is
     /// called and reset whenever all views are updated.
@@ -215,6 +224,8 @@ impl TuiDebugger {
             step_over: None,
             breakpoints: Breakpoints::new(),
             pause_on_ret: false,
+            pause_in_line: None,
+            waiting_for_vblank: false,
             boot_rom_disabled: false,
             update_needed: true,
             scroll_asm_view: None,
@@ -316,6 +327,22 @@ impl TuiDebugger {
                         return Ok(Action::Continue);
                     }
                 }
+                'l' => {
+                    if self.pause_mode {
+                        let next_line = (machine.ppu.regs().current_line.get() + 1) % 144;
+                        self.pause_in_line = Some(next_line);
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
+                'k' => {
+                    if self.pause_mode {
+                        self.waiting_for_vblank = true;
+                        self.pause_in_line = Some(0);
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
                 _ => panic!("internal error: unexpected event"),
             }
         }
@@ -387,6 +414,25 @@ impl TuiDebugger {
 
         }
 
+        if let Some(line) = self.pause_in_line {
+            // If we are supposed to wait for V-Blank, we just check if we are
+            // in V-Blank. Otherwise, we check if we are in the line we want to
+            // stop at.
+            if self.waiting_for_vblank {
+                if machine.ppu.regs().mode() == Mode::VBlank {
+                    self.waiting_for_vblank = false;
+                }
+            } else {
+                let stop = machine.ppu.regs().current_line == line
+                    && machine.ppu.regs().mode() == Mode::OamSearch;
+                if stop {
+                    trace!("[debugger] paused in line {}", line);
+                    self.pause_in_line = None;
+                    return true;
+                }
+            }
+        }
+
         // If we are at the address we should step over, we will ignore the
         // rest of this method and just *not* pause. But we will also reset the
         // `step_over` value, to pause the next time.
@@ -438,7 +484,7 @@ impl TuiDebugger {
 
         // Other global events are just forwarded to be handled in the next
         // `update()` call.
-        for &c in &['p', 'r', 's', 'f'] {
+        for &c in &['p', 'r', 's', 'f', 'l', 'k'] {
             let tx = self.event_sink.clone();
             self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
         }
@@ -742,14 +788,20 @@ impl TuiDebugger {
         let step_button = Button::new("Single step [s]", move |_| tx.send('s').unwrap());
         let tx = self.event_sink.clone();
         let fun_end_button = Button::new("Run to RET-like [f]", move |_| tx.send('f').unwrap());
+        let tx = self.event_sink.clone();
+        let line_button = Button::new("Run to next line [l]", move |_| tx.send('l').unwrap());
+        let tx = self.event_sink.clone();
+        let frame_button = Button::new("Run to next frame [k]", move |_| tx.send('k').unwrap());
 
         // Wrap all buttons
         let debug_buttons = LinearLayout::vertical()
             .child(button_breakpoints)
+            .child(mem_button)
             .child(run_button)
             .child(step_button)
             .child(fun_end_button)
-            .child(mem_button);
+            .child(line_button)
+            .child(frame_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
