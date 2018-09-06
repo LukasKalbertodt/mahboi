@@ -252,7 +252,18 @@ impl TuiDebugger {
         }
 
         if self.update_needed {
-            self.update_debugger(machine);
+            // We only update the ASM view if the emulator is paused
+            if is_paused {
+                let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
+                asm_view.update(machine);
+                let line = asm_view.get_active_line();
+                self.scroll_asm_view = Some(line.saturating_sub(10));
+            }
+
+            self.update_cpu_data(&machine.cpu);
+            self.update_stack_data(machine);
+            self.update_ppu_data(&machine.ppu);
+
             self.update_needed = false;
         }
 
@@ -325,20 +336,6 @@ impl TuiDebugger {
         }
 
         Ok(Action::Nothing)
-    }
-
-    fn update_debugger(&mut self, machine: &Machine) {
-        // We only update the ASM view if the emulator is paused
-        if self.pause_mode {
-            let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
-            asm_view.update(machine);
-            let line = asm_view.get_active_line();
-            self.scroll_asm_view = Some(line.saturating_sub(10));
-        }
-
-        self.update_cpu_data(&machine.cpu);
-        self.update_stack_data(machine);
-        self.update_ppu_data(&machine.ppu);
     }
 
     /// Switch to pause mode.
