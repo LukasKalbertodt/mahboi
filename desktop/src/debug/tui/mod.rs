@@ -284,6 +284,7 @@ impl TuiDebugger {
             self.update_cpu_data(&machine.cpu);
             self.update_stack_data(machine);
             self.update_ppu_data(&machine.ppu);
+            self.update_interrupt_data(machine);
 
             self.update_needed = false;
         }
@@ -763,6 +764,71 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("cpu_data").unwrap().set_content(body);
     }
 
+    fn update_interrupt_data(&mut self, machine: &Machine) {
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        let mut body = StyledString::new();
+        let ints = machine.interrupt_controller();
+
+        // IME
+        body.append_plain("IME: ");
+        body.append_styled((ints.ime as u8).to_string(), reg_style);
+        body.append_plain("\n");
+        body.append_plain("\n");
+
+
+        // IF and IE
+        fn bit_string(byte: u8) -> String {
+            format!(
+                "{}  {}  {}  {}  {}",
+                (byte >> 4) & 0b1,
+                (byte >> 3) & 0b1,
+                (byte >> 2) & 0b1,
+                (byte >> 1) & 0b1,
+                (byte >> 0) & 0b1,
+            )
+        }
+
+        body.append_plain("      J  S  T  L  V\n");
+
+        body.append_plain("IE:   ");
+        body.append_styled(bit_string(ints.interrupt_enable.get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("IF:   ");
+        body.append_styled(bit_string(ints.interrupt_flag.get()), reg_style);
+        body.append_plain("\n");
+        body.append_plain("\n");
+
+
+        // LCD stat interrupts
+        body.append_plain("            =  O  V  H\n");
+        body.append_plain("LCD stat:   ");
+        body.append_styled(
+            (machine.ppu.regs().coincidence_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().oam_search_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().vblank_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().hblank_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("\n");
+
+
+        self.siv.find_id::<TextView>("interrupt_view").unwrap().set_content(body);
+    }
+
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
@@ -781,10 +847,16 @@ impl TuiDebugger {
             .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
 
+        let interrupt_body = TextView::new("no data yet")
+            .with_id("interrupt_view");
+        let interrupt_view = Dialog::around(interrupt_body).title("Interrupts");
+
         let first_right_panel = LinearLayout::vertical()
             .child(cpu_view)
             .child(DummyView)
             .child(stack_view)
+            .child(DummyView)
+            .child(interrupt_view)
             .fixed_width(30);
 
         // Second right column

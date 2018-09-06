@@ -20,7 +20,7 @@ pub struct InterruptController {
 
     /// Register to request certain interrupts. The bit <-> interrupt relation in this register
     /// is the same as in `interrupt_enable`.
-    interrupt_flag: Byte,
+    pub interrupt_flag: Byte,
 
     /// Interrupt master enable (controlled by DI and EI instructions)
     pub ime: bool,

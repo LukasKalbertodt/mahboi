@@ -152,6 +152,32 @@ impl PpuRegisters {
         self.lcd_control.get() & 0b0000_0100 != 0
     }
 
+    /// Returns `true` if the LY=LYC coincidence interrupt is enabled (as
+    /// determined by bit 6 of the LCD stat register).
+    pub fn coincidence_interrupt(&self) -> bool {
+        self.status.get() & 0b0100_0000 != 0
+    }
+
+    /// Returns `true` if the OAM search interrupt is enabled (as determined by
+    /// bit 5 of the LCD stat register).
+    pub fn oam_search_interrupt(&self) -> bool {
+        self.status.get() & 0b0010_0000 != 0
+    }
+
+    /// Returns `true` if the V-Blank interrupt is enabled (as determined by
+    /// bit 4 of the LCD stat register). Note that this interrupt is part of
+    /// the 0x48 LCD status interrupt. There is another V-Blank interrupt
+    /// (0x40) that is independent from this.
+    pub fn vblank_interrupt(&self) -> bool {
+        self.status.get() & 0b0001_0000 != 0
+    }
+
+    /// Returns `true` if the H-Blank interrupt is enabled (as determined by
+    /// bit 3 of the LCD stat register).
+    pub fn hblank_interrupt(&self) -> bool {
+        self.status.get() & 0b0000_1000 != 0
+    }
+
     /// Returns the mode of the PPU (as determined by bits 1 & 0 from the LCD
     /// stat register). See [`Mode`] for more information.
     pub fn mode(&self) -> Mode {
