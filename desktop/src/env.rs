@@ -20,6 +20,7 @@ const WINDOW_TITLE: &str = "Mahboi";
 pub(crate) struct NativeWindow {
     win: Window,
     buf: WinBuffer,
+    sound: Sound,
 }
 
 impl NativeWindow {
@@ -37,11 +38,13 @@ impl NativeWindow {
             data: vec![0xa0a0; SCREEN_WIDTH * SCREEN_HEIGHT],
             buffer_up_to_date: false,
         };
+        let sound = Sound::new();
         info!("[desktop] Opened window");
 
         Ok(Self {
             win,
             buf,
+            sound,
         })
     }
 
@@ -102,7 +105,7 @@ impl Peripherals for NativeWindow {
     }
 
     fn sound(&mut self) -> &mut Self::Sound {
-        unimplemented!()
+        &mut self.sound
     }
 
     fn input(&mut self) -> &mut Self::Input {
@@ -125,6 +128,13 @@ impl Display for WinBuffer {
 
 pub(crate) struct Sound {
 
+}
+
+impl Sound {
+    fn new() -> Self {
+        Self {
+        }
+    }
 }
 
 impl env::Sound for Sound {

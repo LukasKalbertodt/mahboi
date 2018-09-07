@@ -29,6 +29,7 @@ impl Machine {
 
             // IF register
             0xFF0F => self.interrupt_controller.load_if(),
+            0xFF10..0xFF40 => self.sound_controller.load_byte(addr - 0xFF10),
             0xFF40..=0xFF4B => self.ppu.load_io_byte(addr),
             0xFF00 => self.input_controller.load_register(),
             0xFF00..0xFF80 => self.io[addr - 0xFF00], // IO registers
@@ -63,6 +64,7 @@ impl Machine {
 
             // IF register
             0xFF0F => self.interrupt_controller.store_if(byte),
+            0xFF10..0xFF40 => self.sound_controller.store_byte(addr - 0xFF10, byte),
             0xFF40..=0xFF4B => self.ppu.store_io_byte(addr, byte),
             0xFF00 => self.input_controller.store_register(byte),
             0xFF00..0xFF80 => self.io[addr - 0xFF00] = byte, // IO registers
