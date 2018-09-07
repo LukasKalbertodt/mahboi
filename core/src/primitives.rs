@@ -1,7 +1,7 @@
 //! Types to represent Gameboy data.
 
 use std::{
-    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign, Range},
+    ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign, Range, RangeInclusive},
     fmt::{self, Debug, Display},
 };
 
@@ -44,6 +44,11 @@ impl Byte {
 
     pub fn map(self, f: impl FnOnce(u8) -> u8) -> Self {
         Self::new(f(self.0))
+    }
+
+    /// Masks this [`Byte`] with the given mask and sets all ignored bits to 1.
+    pub fn mask_or(&self, mask: u8) -> Self {
+        Byte::new((self.0 & mask) | !mask)
     }
 
     /// Shifts all bits one step to left, prepending the passed in carry bit and wrapping
@@ -154,6 +159,15 @@ impl Byte {
     /// Returns a [`Byte`] with swapped low/high nybbles.
     pub fn swap_nybbles(self) -> Self {
         Byte(self.get().rotate_left(4))
+    }
+
+    /// Returns the value of the bits in the given range.
+    ///
+    /// For an input of `0b1001_1010` and `2..=4` this would output a `6`.
+    pub fn get_value_of_bits(&self, range: RangeInclusive<u8>) -> u8 {
+        let val = self.0 >> range.start();
+        let mask = 0xFF >> 7 - (range.end() - range.start());
+        val & mask
     }
 }
 
@@ -567,6 +581,20 @@ mod test {
         assert_eq!(run(0x0081,  -0x80), (0x0001, false, false));
         assert_eq!(run(0xFFFF,      1), (0x0000, true,  true));
         assert_eq!(run(0x0000,     -1), (0xFFFF, true,  true));
+    }
+
+    #[test]
+    fn test_byte_get_value_of_bits() {
+        fn run(byte: u8, range: RangeInclusive<u8>) -> u8 {
+            let out = Byte::new(byte);
+            out.get_value_of_bits(range)
+        }
+
+        assert_eq!(run(0x00, 0..=7), 0x00);
+        assert_eq!(run(0xFF, 0..=7), 0xFF);
+        assert_eq!(run(0b0000_1111, 0..=3), 0x0F);
+        assert_eq!(run(0b1111_0000, 4..=7), 0x0F);
+        assert_eq!(run(0b1001_1010, 2..=4), 6);
     }
 }
 
