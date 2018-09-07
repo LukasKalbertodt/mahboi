@@ -30,6 +30,8 @@ pub struct Machine {
     // TODO These should be arrays!
     pub bios: Memory,
     pub wram: Memory,
+
+    // TODO: Remove this, if all IO registers are implemented as their one types
     pub io: Memory,
 
     pub ppu: Ppu,
