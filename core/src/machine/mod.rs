@@ -84,6 +84,10 @@ impl Machine {
         }
     }
 
+    pub fn interrupt_controller(&self) -> &InterruptController {
+        &self.interrupt_controller
+    }
+
     pub fn load_word(&self, addr: Word) -> Word {
         // TODO: Check what happens on DMG hardware in this case
         if addr.get() == 0xffff {

@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 
 use cursive::{
-    Printer,
+    Cursive, Printer,
     direction::Direction,
     event::{AnyCb, Event, EventResult},
     theme::{ColorStyle, Color, ColorType, BaseColor},
     view::{View, Selector, Scrollable, ScrollStrategy, Identifiable},
-    views::{RadioGroup, LinearLayout, Dialog},
+    views::{RadioGroup, LinearLayout, Dialog, TextView, Checkbox},
     vec::Vec2,
 };
 use log::{Level, LevelFilter};
@@ -65,8 +65,16 @@ impl LogView {
         let log_level_box = Dialog::around(log_level_box)
             .title("Filter Logs");
 
+        let options_box = LinearLayout::vertical()
+            .child(Checkbox::new().checked().with_id("ignore_trace_box"))
+            .child(TextView::new("ignore TRACE while running"));
+
+        let options_box = Dialog::around(options_box)
+            .title("Options");
+
         let right_panel = LinearLayout::vertical()
-            .child(log_level_box);
+            .child(log_level_box)
+            .child(options_box);
 
         // Create the list showing the log messages
         let log_list = Self {
@@ -83,6 +91,10 @@ impl LogView {
         LinearLayout::horizontal()
             .child(log_list)
             .child(right_panel)
+    }
+
+    pub(crate) fn ignore_trace_logs(&self, siv: &mut Cursive) -> bool {
+        siv.find_id::<Checkbox>("ignore_trace_box").unwrap().is_checked()
     }
 
     /// Updates the view and pulls the newest messages from the global buffer.

@@ -20,7 +20,7 @@ pub struct InterruptController {
 
     /// Register to request certain interrupts. The bit <-> interrupt relation in this register
     /// is the same as in `interrupt_enable`.
-    interrupt_flag: Byte,
+    pub interrupt_flag: Byte,
 
     /// Interrupt master enable (controlled by DI and EI instructions)
     pub ime: bool,
@@ -58,11 +58,11 @@ impl InterruptController {
         // Match the result against the register mapping (see [`Machine::interrupt_enable`]). Due
         // to how match works, this respects the interrupt priority from the DMG CPU.
         match () {
-            () if (0b0000_0001 & masked_interrupts) == 1 => Some(Interrupt::Vblank),
-            () if (0b0000_0010 & masked_interrupts) == 1 => Some(Interrupt::LcdStat),
-            () if (0b0000_0100 & masked_interrupts) == 1 => Some(Interrupt::Timer),
-            () if (0b0000_1000 & masked_interrupts) == 1 => Some(Interrupt::Serial),
-            () if (0b0001_0000 & masked_interrupts) == 1 => Some(Interrupt::Joypad),
+            () if (0b0000_0001 & masked_interrupts) != 0 => Some(Interrupt::Vblank),
+            () if (0b0000_0010 & masked_interrupts) != 0 => Some(Interrupt::LcdStat),
+            () if (0b0000_0100 & masked_interrupts) != 0 => Some(Interrupt::Timer),
+            () if (0b0000_1000 & masked_interrupts) != 0 => Some(Interrupt::Serial),
+            () if (0b0001_0000 & masked_interrupts) != 0 => Some(Interrupt::Joypad),
             _ => None,
         }
     }

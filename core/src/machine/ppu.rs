@@ -1,4 +1,9 @@
-use std::fmt;
+//! Everything related to the pixel processing unit (PPU).
+
+use std::{
+    fmt,
+    ops::Range,
+};
 
 use crate::{
     SCREEN_HEIGHT, SCREEN_WIDTH,
@@ -8,6 +13,283 @@ use crate::{
 };
 use super::interrupt::{InterruptController, Interrupt};
 
+
+
+/// The (public) registers inside of the PPU.
+pub struct PpuRegisters {
+    /// `0xFF40`: LCD control. All bits can be written.
+    ///
+    /// Each bit is used for a different purpose:
+    /// - 7: LCD display enable (0=Off, 1=On)
+    /// - 6: window tile map select (0=9800-9BFF, 1=9C00-9FFF)
+    /// - 5: window display enable (0=Off, 1=On)
+    /// - 4: background and window tile data select (0=8800-97FF, 1=8000-8FFF)
+    /// - 3: background tile map select (0=9800-9BFF, 1=9C00-9FFF)
+    /// - 2: sprite size (0=8x8, 1=8x16)
+    /// - 1: sprite display enable (0=Off, 1=On)
+    /// - 0: different meaning depending on Gameboy model
+    pub lcd_control: Byte,
+
+    /// `0xFF41`: LCD/PPU status. Bits 3, 4, 5 and 6 can be written.
+    ///
+    /// Purpose of each bit:
+    /// - 7: always 1, writes are ignored.
+    /// - 6: LYC=LY coincidence interrupt (1=enabled)
+    /// - 5: OAM search interrupt (1=enabled)
+    /// - 4: V-Blank interrupt (1=enabled)
+    /// - 3: H-Blank interrupt (1=enabled)
+    /// - 2: coincidence flag (0=LYC!=LY, 1=LYC==LY). Read only.
+    /// - 1 & 0: current PPU mode. Modes 0 -- 3, see [`Mode`] for more
+    ///   information. Read only.
+    pub status: Byte,
+
+    /// `0xFF42`: y scroll position of background.
+    pub scroll_bg_y: Byte,
+
+    /// `0xFF43`: x scroll position of background.
+    pub scroll_bg_x: Byte,
+
+    /// `0xFF44`: LY. Stores the line we are currently drawing (including
+    /// V-blank lines). This value is always between 0 and 154 (exclusive).
+    /// Read only.
+    pub current_line: Byte,
+
+    /// `0xFF45`: LY compare. Is compared to `current_line` all the time. If
+    /// both values are equal, things happen (see `status` register).
+    pub lyc: Byte,
+
+    /// `0xFF46`: OAM DMA transfer start address register. This value times
+    /// `0x100` is the start address from which OAM data is read during the the
+    /// DMA transfer. Writing to this triggers DMA.
+    pub oam_dma_start: Byte,
+
+    /// `0xFF47`: background palette data.
+    pub background_palette: Byte,
+
+    /// `0xFF48`: sprite palette 0 data.
+    pub sprite_palette_0: Byte,
+
+    /// `0xFF49`: sprite palette 1 data.
+    pub sprite_palette_1: Byte,
+
+    /// `0xFF4A`: Y window position
+    pub scroll_win_y: Byte,
+
+    /// `0xFF4B`: X window position
+    pub scroll_win_x: Byte,
+}
+
+impl PpuRegisters {
+    fn new() -> Self {
+        Self {
+            lcd_control: Byte::zero(),
+            status: Byte::zero(),
+            scroll_bg_y: Byte::zero(),
+            scroll_bg_x: Byte::zero(),
+            current_line: Byte::zero(),
+            lyc: Byte::zero(),
+            oam_dma_start: Byte::zero(),
+            background_palette: Byte::zero(),
+            sprite_palette_0: Byte::zero(),
+            sprite_palette_1: Byte::zero(),
+            scroll_win_y: Byte::zero(),
+            scroll_win_x: Byte::zero(),
+        }
+    }
+
+    /// Returns bit 7 of the LCD control register which determines if the LCD
+    /// is enabled.
+    pub fn is_lcd_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b1000_0000 != 0
+    }
+
+    /// Returns bit 5 of the LCD control register which determines if the
+    /// window layer is enabled.
+    pub fn is_window_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0010_0000 != 0
+    }
+
+    /// Returns bit 1 of the LCD control register which determines if sprite
+    /// rendering is enabled.
+    pub fn are_sprites_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0000_0010 != 0
+    }
+
+    /// Returns the memory area of the tile map for the window layer (as
+    /// determined by LCD control bit 6).
+    pub fn window_tile_map_address(&self) -> TileMapArea {
+        if self.lcd_control.get() & 0b0100_0000 == 0 {
+            TileMapArea::Low
+        } else {
+            TileMapArea::High
+        }
+    }
+
+    /// Returns the memory area of the tile map for the background layer (as
+    /// determined by LCD control bit 3).
+    pub fn bg_tile_map_address(&self) -> TileMapArea {
+        if self.lcd_control.get() & 0b0000_1000 == 0 {
+            TileMapArea::Low
+        } else {
+            TileMapArea::High
+        }
+    }
+
+    /// Returns the memory area of the tile data for the background and window
+    /// layer (as determined by LCD control bit 4).
+    pub fn bg_window_tile_data_address(&self) -> TileDataArea {
+        // Yes, 0 means the higher address range.
+        if self.lcd_control.get() & 0b0001_0000 == 0 {
+            TileDataArea::High
+        } else {
+            TileDataArea::Low
+        }
+    }
+
+    /// Returns if large sprites (8x16) are enabled (instead of 8x8 sprites).
+    /// This is determined by bit 2 of the LCD control register.
+    pub fn large_sprites_enabled(&self) -> bool {
+        self.lcd_control.get() & 0b0000_0100 != 0
+    }
+
+    /// Returns `true` if the LY=LYC coincidence interrupt is enabled (as
+    /// determined by bit 6 of the LCD stat register).
+    pub fn coincidence_interrupt(&self) -> bool {
+        self.status.get() & 0b0100_0000 != 0
+    }
+
+    /// Returns `true` if the OAM search interrupt is enabled (as determined by
+    /// bit 5 of the LCD stat register).
+    pub fn oam_search_interrupt(&self) -> bool {
+        self.status.get() & 0b0010_0000 != 0
+    }
+
+    /// Returns `true` if the V-Blank interrupt is enabled (as determined by
+    /// bit 4 of the LCD stat register). Note that this interrupt is part of
+    /// the 0x48 LCD status interrupt. There is another V-Blank interrupt
+    /// (0x40) that is independent from this.
+    pub fn vblank_interrupt(&self) -> bool {
+        self.status.get() & 0b0001_0000 != 0
+    }
+
+    /// Returns `true` if the H-Blank interrupt is enabled (as determined by
+    /// bit 3 of the LCD stat register).
+    pub fn hblank_interrupt(&self) -> bool {
+        self.status.get() & 0b0000_1000 != 0
+    }
+
+    /// Returns the mode of the PPU (as determined by bits 1 & 0 from the LCD
+    /// stat register). See [`Mode`] for more information.
+    pub fn mode(&self) -> Mode {
+        match self.status.get() & 0b11 {
+            0 => Mode::HBlank,
+            1 => Mode::VBlank,
+            2 => Mode::OamSearch,
+            3 => Mode::PixelTransfer,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Sets the given mode (updates bits 1 & 0 in the LCD stat register).
+    fn set_mode(&mut self, mode: Mode) {
+        let v = mode as u8;
+        self.status = self.status.map(|b| (b & 0b1111_1100) | v);
+    }
+
+    fn set_coincidence_flag(&mut self, v: bool) {
+        self.status = self.status.map(|b| {
+            if v {
+                b | 0b0000_0100
+            } else {
+                b & 0b1111_1011
+            }
+        });
+    }
+}
+
+/// The memory area in VRAM where a tile map is stored (the index into the tile
+/// data array).
+pub enum TileMapArea {
+    /// Stored in `0x9800` - `0x9BFF`.
+    Low,
+    /// Stored in `0x9C00` - `0x9FFF`.
+    High,
+}
+
+impl TileMapArea {
+    /// Returns the memory range (absolute addresses).
+    pub fn absolute(&self) -> Range<Word> {
+        match self {
+            TileMapArea::Low  => Word::new(0x9800)..Word::new(0x9C00),
+            TileMapArea::High => Word::new(0x9C00)..Word::new(0xA000),
+        }
+    }
+
+    /// Returns the start of this memory area, relative to the beginning of
+    /// VRAM.
+    fn start(&self) -> Word {
+        match self {
+            TileMapArea::Low  => Word::new(0x1800),
+            TileMapArea::High => Word::new(0x1C00),
+        }
+    }
+}
+
+impl fmt::Display for TileMapArea {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let range = self.absolute();
+        write!(f, "{:04x}-{:04x}", range.start.get(), range.end.get() - 1)
+    }
+}
+
+/// The memory area in VRAM where tile data is stored (the actual pixel data
+/// for the 8x8 tiles).
+pub enum TileDataArea {
+    /// Stored in `0x8000` - `0x8FFF`.
+    Low,
+    /// Stored in `0x8800` - `0x97FF`.
+    High,
+}
+
+impl TileDataArea {
+    /// Returns the memory range (absolute addresses).
+    pub fn absolute(&self) -> Range<Word> {
+        match self {
+            TileDataArea::Low  => Word::new(0x8000)..Word::new(0x9000),
+            TileDataArea::High => Word::new(0x9000)..Word::new(0x9800),
+        }
+    }
+
+    /// Returns the address (relative to the beginning of VRAM) of the tile
+    /// with the given index.
+    ///
+    /// This implements the difference between the two addressing modes. If
+    /// `self` is `High`, the given byte is used as signed offset from `0x9000`
+    /// as base pointer.
+    fn index(&self, idx: Byte) -> Word {
+        match self {
+            TileDataArea::Low => {
+                // Simple indexing: we start at the very beginning of the VRAM
+                // and each tile needs 16 byte.
+                Word::new(idx.get() as u16 * 16)
+            }
+            TileDataArea::High => {
+                // In 8800 addressing mode, things are more complicated: we use
+                // `0x9000` as base address and the `idx` is now used as signed
+                // index.
+                let offset = ((idx.get() as i8) as i16) * 16;
+                Word::new((0x1000 + offset) as u16)
+            }
+        }
+    }
+}
+
+impl fmt::Display for TileDataArea {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let range = self.absolute();
+        write!(f, "{:04x}-{:04x}", range.start.get(), range.end.get() - 1)
+    }
+}
 
 /// Pixel processing unit.
 pub struct Ppu {
@@ -20,14 +302,37 @@ pub struct Ppu {
 
 
     // ===== State of the pixel transfer operation ======
+    // All of the following fields are state of the pixel transfer state
+    // machine. Outside of pixel transfer, these fields' values are useless.
+
     fifo: PixelFifo,
 
     /// Stores whether or not an fetch operation has already been started. This
     /// boolean usually flips every cycle during pixel transfer.
     fetch_started: bool,
 
-    /// The first pixel of the next 8 pixel the fetcher need to fetch.
-    fetch_offset: u8,
+    /// This is the x position of the next tile to fetch. This is in tile space
+    /// (0--31) and not pixel space (0--256)!
+    fetch_tile_x: u8,
+
+    /// This stores the offset of the line of interest in the current tile. A
+    /// tile has 8 lines, each stored in two bytes. So this value is the line
+    /// number in the tile times two.
+    line_in_tile_offset: u8,
+
+    /// This is the address to the first tile in the tile map of the current
+    /// line (relative to the beginning of VRAM). This means that
+    /// `fetch_map_line_offset + fetch_tile_x` is the address of the next tile
+    /// index in the tile map we need to fetch. We store those separated
+    /// because the x value needs to be able to overflow and wrap around
+    /// independently.
+    fetch_map_line_offset: Word,
+
+    /// Sometimes, we need to throw away some pixels from the pixel FIFO. We
+    /// calculate the number of pixels we need to throw away at the beginning
+    /// of each line. And store it. During the line this is always decreased to
+    /// 0.
+    num_throw_away_pixels: u8,
 
     /// ...
     current_column: u8,
@@ -40,45 +345,11 @@ pub struct Ppu {
     /// for the setup time.
     pub(crate) oam_dma_status: Option<Word>,
 
-    // ===== Registers ======
-    /// FF40: LCDC
-    lcd_control: Byte,
-
-    /// FF41: LCD status
-    status: Byte,
-
-    /// FF42: y scroll position of background
-    scroll_y: Byte,
-
-    /// FF43: x scroll position of background
-    scroll_x: Byte,
-
-    /// FF44: LY. Stores the line we are currently drawing (including v-blank
-    /// lines). This value is always between 0 and 154 (exclusive).
-    current_line: Byte,
-
-    /// FF45: LY compare. Is compared to `current_line` all the time. If both
-    /// values are equal, things happen.
-    lyc: Byte,
-
-    /// FF46: OAM DMA Transfer and start address register
-    oam_dma_start: Byte,
-
-    // FF47: Background palette data.
-    background_palette: Byte,
-
-    // FF48: Sprite palette 0 data.
-    sprite_palette_0: Byte,
-
-    // FF49: Sprite palette 1 data.
-    sprite_palette_1: Byte,
-
-    /// FF4A: Y window position
-    win_y: Byte,
-
-    /// FF4B: X window position
-    win_x: Byte,
+    /// All registers. If you want to read registers, use the `regs()` method
+    /// instead. That way, we can avoid accidental mutation of any registers.
+    registers: PpuRegisters,
 }
+
 
 impl Ppu {
     pub(crate) fn new() -> Self {
@@ -90,22 +361,14 @@ impl Ppu {
 
             fifo: PixelFifo::new(),
             fetch_started: false,
-            fetch_offset: 0,
+            fetch_tile_x: 0,
+            line_in_tile_offset: 0,
+            fetch_map_line_offset: Word::zero(),
+            num_throw_away_pixels: 0,
+
             current_column: 0,
             oam_dma_status: None,
-
-            lcd_control: Byte::zero(),
-            status: Byte::zero(),
-            scroll_y: Byte::zero(),
-            scroll_x: Byte::zero(),
-            current_line: Byte::zero(),
-            lyc: Byte::zero(),
-            oam_dma_start: Byte::zero(),
-            background_palette: Byte::zero(),
-            sprite_palette_0: Byte::zero(),
-            sprite_palette_1: Byte::zero(),
-            win_y: Byte::zero(),
-            win_x: Byte::zero(),
+            registers: PpuRegisters::new(),
         }
     }
 
@@ -117,8 +380,8 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this returns garbage.
     pub(crate) fn load_vram_byte(&self, addr: Word) -> Byte {
-        match self.phase() {
-            Phase::PixelTransfer if self.lcd_enabled() => Byte::new(0xff),
+        match self.regs().mode() {
+            Mode::PixelTransfer if self.regs().is_lcd_enabled() => Byte::new(0xff),
             _ => self.vram[addr - 0x8000],
         }
     }
@@ -131,8 +394,8 @@ impl Ppu {
     /// This function behaves like the real VRAM. Meaning: during pixel
     /// transfer, this write is lost (does nothing).
     pub(crate) fn store_vram_byte(&mut self, addr: Word, byte: Byte) {
-        match self.phase() {
-            Phase::PixelTransfer if self.lcd_enabled() => {},
+        match self.regs().mode() {
+            Mode::PixelTransfer if self.regs().is_lcd_enabled() => {},
             _ => self.vram[addr - 0x8000] = byte,
         }
     }
@@ -145,9 +408,9 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this returns garbage.
     pub(crate) fn load_oam_byte(&self, addr: Word) -> Byte {
-        match self.phase() {
-            Phase::PixelTransfer => Byte::new(0xff),
-            Phase::OamSearch => Byte::new(0xff),
+        match self.regs().mode() {
+            Mode::PixelTransfer | Mode::OamSearch
+                if self.regs().is_lcd_enabled() => Byte::new(0xff),
             _ => self.oam[addr - 0xFE00],
         }
     }
@@ -160,8 +423,8 @@ impl Ppu {
     /// This function behaves like the real OAM. Meaning: during pixel
     /// transfer and OAM search, this write is lost (does nothing).
     pub(crate) fn store_oam_byte(&mut self, addr: Word, byte: Byte) {
-        match self.phase() {
-            Phase::PixelTransfer | Phase::OamSearch if self.lcd_enabled() => {},
+        match self.regs().mode() {
+            Mode::PixelTransfer | Mode::OamSearch if self.regs().is_lcd_enabled() => {},
             _ => self.oam[addr - 0xFE00] = byte,
         }
     }
@@ -172,29 +435,29 @@ impl Ppu {
     /// function panics!
     pub(crate) fn load_io_byte(&self, addr: Word) -> Byte {
         match addr.get() {
-            0xFF40 => self.lcd_control,
+            0xFF40 => self.regs().lcd_control,
             // Bit 7 is always 1
-            0xFF41 => self.status.map(|mut b| {
+            0xFF41 => self.regs().status.map(|mut b| {
                 // TODO: Bit 2 has to be generated somewhere
                 // Bit 7 always returns 1
                 b |= 0b1000_0000;
-                if !self.lcd_enabled() {
+                if !self.regs().is_lcd_enabled() {
                     // Bit 0, 1 and 2 return 0 when LCD is off
                     b &= 0b1111_1000;
                 }
 
                 b
             }),
-            0xFF42 => self.scroll_y,
-            0xFF43 => self.scroll_x,
-            0xFF44 => self.current_line,
-            0xFF45 => self.lyc,
-            0xFF46 => self.oam_dma_start,
-            0xFF47 => self.background_palette,
-            0xFF48 => self.sprite_palette_0,
-            0xFF49 => self.sprite_palette_1,
-            0xFF4A => self.win_y,
-            0xFF4B => self.win_x,
+            0xFF42 => self.regs().scroll_bg_y,
+            0xFF43 => self.regs().scroll_bg_x,
+            0xFF44 => self.regs().current_line,
+            0xFF45 => self.regs().lyc,
+            0xFF46 => self.regs().oam_dma_start,
+            0xFF47 => self.regs().background_palette,
+            0xFF48 => self.regs().sprite_palette_0,
+            0xFF49 => self.regs().sprite_palette_1,
+            0xFF4A => self.regs().scroll_win_y,
+            0xFF4B => self.regs().scroll_win_x,
             _ => panic!("called `Ppu::load_io_byte` with invalid address"),
         }
     }
@@ -206,105 +469,48 @@ impl Ppu {
     pub(crate) fn store_io_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             0xFF40 => {
-                let was_enabled = self.lcd_enabled();
-                self.lcd_control = byte;
-                match (was_enabled, self.lcd_enabled()) {
+                let was_enabled = self.regs().is_lcd_enabled();
+                self.registers.lcd_control = byte;
+                match (was_enabled, self.regs().is_lcd_enabled()) {
                     (false, true) => {
                         info!("[ppu] LCD was enabled");
-                        self.set_phase(Phase::OamSearch);
+                        self.registers.set_mode(Mode::OamSearch);
                         self.cycle_in_line = 0;
                         // TODO: also reset other stuff?
                     }
                     (true, false) => {
                         info!("[ppu] LCD was disabled");
-                        self.current_line = Byte::new(0);
+                        self.registers.current_line = Byte::new(0);
                     }
                     _ => {}
                 }
             }
             0xFF41 => {
                 // Only bit 3 to 6 are writable
-                let v = self.status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
-                self.status = Byte::new(v);
+                let v = self.regs().status.get() & 0b0000_0111 | byte.get() & 0b0111_1000;
+                self.registers.status = Byte::new(v);
             },
-            0xFF42 => self.scroll_y = byte,
-            0xFF43 => self.scroll_x = byte,
+            0xFF42 => self.registers.scroll_bg_y = byte,
+            0xFF43 => self.registers.scroll_bg_x = byte,
             0xFF44 => {}, // read only
-            0xFF45 => self.lyc = byte,
+            0xFF45 => self.registers.lyc = byte,
             0xFF46 => {
-                self.oam_dma_start = byte;
+                self.registers.oam_dma_start = byte;
                 let src_addr = Word::new((byte.get() as u16) * 0x100 - 1);
                 self.oam_dma_status = Some(src_addr);
             },
-            0xFF47 => self.background_palette = byte,
-            0xFF48 => self.sprite_palette_0 = byte,
-            0xFF49 => self.sprite_palette_1 = byte,
-            0xFF4A => self.win_y = byte,
-            0xFF4B => self.win_x = byte,
+            0xFF47 => self.registers.background_palette = byte,
+            0xFF48 => self.registers.sprite_palette_0 = byte,
+            0xFF49 => self.registers.sprite_palette_1 = byte,
+            0xFF4A => self.registers.scroll_win_y = byte,
+            0xFF4B => self.registers.scroll_win_x = byte,
             _ => panic!("called `Ppu::store_io_byte` with invalid address"),
         }
     }
 
-    /// Returns in what phase the PPU currently is.
-    pub fn phase(&self) -> Phase {
-        match self.status.get() & 0b11 {
-            0 => Phase::HBlank,
-            1 => Phase::VBlank,
-            2 => Phase::OamSearch,
-            3 => Phase::PixelTransfer,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn lcd_enabled(&self) -> bool {
-        self.lcd_control.get() & 0b1000_0000 != 0
-    }
-
-    /// Returns register FF40: LCDC
-    pub fn lcd_control(&self) -> Byte { self.lcd_control }
-
-    /// Returns register FF41: LCD status
-    pub fn status(&self) -> Byte { self.status }
-
-    /// Returns register FF42: y scroll position of background
-    pub fn scroll_y(&self) -> Byte { self.scroll_y }
-
-    /// Returns register FF43: x scroll position of background
-    pub fn scroll_x(&self) -> Byte { self.scroll_x }
-
-    /// Returns register FF44: LY. Stores the line we are currently drawing
-    /// (including v-blank lines). This value is always between 0 and 154
-    /// (exclusive).
-    pub fn current_line(&self) -> Byte { self.current_line }
-
-    /// Returns register FF45: LY compare. Is compared to `current_line` all
-    /// the time. If both values are equal, things happen.
-    pub fn lyc(&self) -> Byte { self.lyc }
-
-    //  Returns register FF47: Background palette data.
-    pub fn background_palette(&self) -> Byte { self.background_palette }
-
-    //  Returns register FF48: Sprite palette 0 data.
-    pub fn sprite_palette_0(&self) -> Byte { self.sprite_palette_0 }
-
-    //  Returns register FF49: Sprite palette 1 data.
-    pub fn sprite_palette_1(&self) -> Byte { self.sprite_palette_1 }
-
-    /// Returns register FF4A: Y window position
-    pub fn win_y(&self) -> Byte { self.win_y }
-
-    /// Returns register FF4B: X window position
-    pub fn win_x(&self) -> Byte { self.win_x }
-
-    fn set_phase(&mut self, phase: Phase) {
-        let v = match phase {
-            Phase::HBlank => 0,
-            Phase::VBlank => 1,
-            Phase::OamSearch => 2,
-            Phase::PixelTransfer => 3,
-        };
-
-        self.status = Byte::new((self.status.get() & 0b1111_1100) | v);
+    /// Returns an immutable reference to all public registers.
+    pub fn regs(&self) -> &PpuRegisters {
+        &self.registers
     }
 
     /// Executes one machine cycle (1 Mhz).
@@ -314,33 +520,64 @@ impl Ppu {
         interrupt_controller: &mut InterruptController,
     ) {
         // If the whole LCD is disabled, the PPU does nothing
-        if !self.lcd_enabled() {
+        if !self.regs().is_lcd_enabled() {
             return;
         }
 
         // Check if we're currently in V-Blank or not.
-        if self.current_line.get() >= SCREEN_HEIGHT as u8 {
+        if self.regs().current_line.get() >= SCREEN_HEIGHT as u8 {
             // ===== V-Blank =====
-            if self.current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
-                self.set_phase(Phase::VBlank);
+            if self.regs().current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
+                self.registers.set_mode(Mode::VBlank);
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
+
+                if self.regs().vblank_interrupt() {
+                    interrupt_controller.request_interrupt(Interrupt::Vblank);
+                }
             }
         } else {
             // ===== Not in V-Blank =====
             match (self.cycle_in_line, self.current_column) {
                 (0..20, 0) => {
                     if self.cycle_in_line == 0 {
-                        self.set_phase(Phase::OamSearch);
+                        self.registers.set_mode(Mode::OamSearch);
+
+                        // Potentially trigger LCD stat interrupt. TODO: this
+                        // might be only correct for line 0. This might happen
+                        // one cycle earlier for lines 1--143. Check cycle
+                        // accurate gameboy docs later.
+                        if self.regs().oam_search_interrupt() {
+                            interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                        }
+
+                        // Check if we just started the line with the same
+                        // number as LYC.
+                        if self.regs().current_line == self.regs().lyc {
+                            self.registers.set_coincidence_flag(true);
+
+                            // Potentially trigger interrupt. TODO: this might
+                            // be only correct for line 0. This might happen
+                            // one cycle earlier for lines 1--143. Check cycle
+                            // accurate gameboy docs later.
+                            if self.regs().coincidence_interrupt() {
+                                interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                            }
+                        } else {
+                            self.registers.set_coincidence_flag(false);
+                        }
                     }
                     // TODO: OAM Search
                 }
                 (20..114, col) if col < SCREEN_WIDTH as u8 => {
                     if self.cycle_in_line == 20 {
-                        self.set_phase(Phase::PixelTransfer);
+                        self.registers.set_mode(Mode::PixelTransfer);
+                        self.prepare_pixel_transfer();
                     }
-                    self.pixel_transfer_step(display);
+                    self.pixel_transfer_step(display, interrupt_controller);
                 }
-                (43..114, col) if self.phase() == Phase::HBlank && col == SCREEN_WIDTH as u8 => {
+                (43..114, col)
+                    if self.regs().mode() == Mode::HBlank && col == SCREEN_WIDTH as u8
+                => {
                     // We don't have to do anything in H-Blank. This match arm
                     // just exists to make sure we never reach an invalid state
                     // (with the next arm)
@@ -356,69 +593,106 @@ impl Ppu {
         self.cycle_in_line += 1;
         if self.cycle_in_line == 114 {
             // Bump the line and reset a bunch of values.
-            self.current_line += 1;
+            self.registers.current_line += 1;
             self.cycle_in_line = 0;
             self.current_column = 0;
-            self.fetch_offset = 0;
             self.fifo.clear();
 
             // Reset line if we reached the last one.
-            if self.current_line == 154 {
-                self.current_line = Byte::new(0);
+            if self.regs().current_line == 154 {
+                self.registers.current_line = Byte::new(0);
             }
         }
     }
 
-    /// Returns the start address of the tile data for the background/window
-    /// tiles relative to the start of VRAM. This can either be `0x8000` or
-    /// `0x8800` (or rather `0x0000`/`0x0800` relative to VRAM), depending on
-    /// bit 4 in the LCD control register. The memory area is always `0x1000`
-    /// bytes long.
-    pub fn bg_tile_data_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0001_0000 == 0 {
-            Word::new(0x0800)
-        } else {
-            Word::new(0x0000)
-        }
-    }
+    fn prepare_pixel_transfer(&mut self) {
+        // We remove all pixels from the FIFO that may still be inside. This
+        // might already happen at an earlier stage, but it's not observable to
+        // the user, so we can do this right before starting the pixel
+        // transfer.
+        self.fifo.clear();
+        self.fetch_started = false;
 
-    /// Returns the start address of the tile map for the background relative
-    /// to the start of VRAM. This can either be `0x9800` or `0x9C00` (or
-    /// rather `0x1800`/`0x1C00` relative to VRAM), depending on bit 3 of the
-    /// LCD control register. The memory area is always `0x400` bytes long.
-    pub fn bg_tile_map_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0000_1000 == 0 {
-            Word::new(0x1800)
-        } else {
-            Word::new(0x1C00)
-        }
-    }
+        // We calculate the x coordinate of the tile we need to fetch first.
+        // This can simply be increased by 1 after each fetch.
+        self.fetch_tile_x = self.regs().scroll_bg_x.get() / 8;
 
-    /// Returns the start address of the tile map for the window relative to
-    /// the start of VRAM. This can either be `0x9800` or `0x9C00` (or rather
-    /// `0x1800`/`0x1C00` relative to VRAM), depending on bit 6 of the LCD
-    /// control register. The memory area is always `0x400` bytes long.
-    pub fn window_tile_map_start(&self) -> Word {
-        if self.lcd_control.get() & 0b0100_0000 == 0 {
-            Word::new(0x1800)
-        } else {
-            Word::new(0x1C00)
-        }
+        // Since we always fetch full 8 pixel tiles but can scroll pixel
+        // perfect, we might have to discard a few pixels we load into the
+        // FIFO. We can calculate the number of pixels we have to throw away
+        // here.
+        self.num_throw_away_pixels = self.regs().scroll_bg_x.get() % 8;
+
+        // Calculate the Y position and the offset within one tile.
+        let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
+        self.line_in_tile_offset = (pos_y % 8) * 2;
+
+        // Here we precompute the address offset to the first tile of the
+        // current line in the tile map. This means that we can easily compute
+        // the address of the real tile later as `fetch_map_line_offset +
+        // fetch_tile_x`.
+        let tile_y = pos_y / 8;
+        let map_offset = self.regs().bg_tile_map_address().start();
+        self.fetch_map_line_offset = map_offset + 32 * tile_y as u16;
     }
 
     /// Performs one step of the pixel transfer phase. This involves fetching
     /// new tile data and emitting the pixels.
-    fn pixel_transfer_step(&mut self, display: &mut impl Display) {
+    fn pixel_transfer_step(
+        &mut self,
+        display: &mut impl Display,
+        interrupt_controller: &mut InterruptController,
+    ) {
         // Push out up to four new pixels if we have enough data in the FIFO.
         let mut pixel_pushed = 0;
         while self.fifo.len() > 8 && pixel_pushed < 4 {
-            self.push_pixel(display);
+            // Check if the next pixel should be discarded or not.
+            if self.num_throw_away_pixels == 0 {
+                self.push_pixel(display);
+
+                // We just bumped our `current_column`. Now we check if we
+                // reached the start of the window.
+                let window_trigger = self.regs().is_window_enabled()
+                    && self.regs().scroll_win_x.get() >= 7
+                    && self.current_column == self.regs().scroll_win_x.get() - 7;
+                if window_trigger {
+                    // We need to basically reset the whole state.
+                    self.fifo.clear();
+                    self.fetch_started = false;
+
+                    // The following is nearly the same as in
+                    // `prepare_pixel_transfer`.
+                    self.fetch_tile_x = 0;
+
+                    // Calculate the Y position and the offset within one tile.
+                    let pos_y = (self.regs().scroll_win_y + self.regs().current_line).get();
+                    self.line_in_tile_offset = (pos_y % 8) * 2;
+
+                    // Here we precompute the address offset to the first tile
+                    // of the current line in the tile map. This means that we
+                    // can easily compute the address of the real tile later as
+                    // `fetch_map_line_offset + fetch_tile_x`.
+                    let tile_y = pos_y / 8;
+                    let map_offset = self.regs().window_tile_map_address().start();
+                    self.fetch_map_line_offset = map_offset + 32 * tile_y as u16;
+                }
+            } else {
+                let _ = self.fifo.emit();
+                self.num_throw_away_pixels -= 1;
+            }
+
             pixel_pushed += 1;
 
             // We are at the end of the line, stop everything and go to
             // H-Blank.
             if self.current_column == SCREEN_WIDTH as u8 {
-                self.set_phase(Phase::HBlank);
+                self.registers.set_mode(Mode::HBlank);
+
+                // Trigger H-Blank interrupt if enabled.
+                if self.regs().hblank_interrupt() {
+                    interrupt_controller.request_interrupt(Interrupt::LcdStat);
+                }
+
                 return;
             }
         }
@@ -430,45 +704,17 @@ impl Ppu {
         if !self.fetch_started {
             self.fetch_started = true;
         } else {
-            // TODO: it's a waste to calculate all of these positions every
-            // time again. The `y` value doesn't change for the whole line and
-            // the `x` value need to be calculate only once and can then be
-            // incremented by 1 after each fetch.
-
-            // The position of the first pixel we want to fetch in the
-            // background map.
-            let pos_x = (self.scroll_x + self.fetch_offset).get();
-            let pos_y = (self.scroll_y + self.current_line).get();
-
-            // Dividing by 8 and rounding down to get the position in the 32*32
-            // tile grid.
-            let tile_x = pos_x / 8;
-            let tile_y = pos_y / 8;
-
-            // Background map data is stored in: `0x9800 - 0x9BFF` or `0x9C00 -
-            // 0x9FFF`. We have to lookup the index of our tile in that memory.
-            let map_offset = self.bg_tile_map_start();
-            let background_addr = map_offset + (tile_y as u16 * 32 + tile_x as u16);
-            let tile_idx = self.vram[background_addr];
+            // We lookup the index of our tile in the tile map here.
+            let tile_idx = self.vram[self.fetch_map_line_offset + self.fetch_tile_x];
 
             // We calculate the start address of the tile we want to load from.
             // This depends on the addressing mode used for the
             // background/window tiles.
-            let tile_start = if self.bg_tile_data_start() == 0 {
-                // We start at the very beginning of the VRAM. Each tile needs
-                // 16 byte.
-                Word::new(tile_idx.get() as u16 * 16)
-            } else {
-                // In 8800 addressing mode, things are more complicated: we use
-                // `0x9000` as base address and the `tile_idx` is now used as
-                // signed index.
-                let offset = ((tile_idx.get() as i8) as i16) * 16;
-                Word::new((0x1000 + offset) as u16)
-            };
+            let tile_start = self.regs().bg_window_tile_data_address().index(tile_idx);
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
-            let line_offset = tile_start + 2 * (pos_y % 8);
+            let line_offset = tile_start + self.line_in_tile_offset;
 
             // Load the two bytes and add all pixels to the FIFO.
             let lo = self.vram[line_offset].get();
@@ -478,13 +724,13 @@ impl Ppu {
             // if self.current_line == 0 {
             //     debug!(
             //         "[ppu] fetched 8 pixels. current_col: {} ,pos_x: {}, pos_y: {}, \
-            //             scroll_x: {}, scroll_y: {}, tile_x: {}, tile_y: {}, bg_addr: {}, \
+            //             scroll_bg_x: {}, scroll_bg_y: {}, tile_x: {}, tile_y: {}, bg_addr: {}, \
             //             tile_id: {}, tile_start: {}, line_offset: {}, new FIFO len: {}",
             //         self.current_column,
             //         pos_x,
             //         pos_y,
-            //         self.scroll_x,
-            //         self.scroll_y,
+            //         self.scroll_bg_x,
+            //         self.scroll_bg_y,
             //         tile_x,
             //         tile_y,
             //         background_addr,
@@ -495,9 +741,9 @@ impl Ppu {
             //     );
             // }
 
-            // Reset status flag and bump the fetch offset
+            // Reset status flag and bump the x tile position
             self.fetch_started = false;
-            self.fetch_offset += 8;
+            self.fetch_tile_x += 1;
         }
     }
 
@@ -519,23 +765,23 @@ impl Ppu {
 
         // Determine the correct palette
         let palette = match source {
-            PixelSource::Background => self.background_palette,
-            PixelSource::Sprite0 => self.sprite_palette_0,
-            PixelSource::Sprite1 => self.sprite_palette_1,
+            PixelSource::Background => self.regs().background_palette,
+            PixelSource::Sprite0 => self.regs().sprite_palette_0,
+            PixelSource::Sprite1 => self.regs().sprite_palette_1,
         };
 
         // Convert to real color
         let color = pattern_to_color(pattern, palette);
 
         // Write to display
-        let pos = PixelPos::new(self.current_column, self.current_line.get());
+        let pos = PixelPos::new(self.current_column, self.regs().current_line.get());
         display.set_pixel(pos, color);
 
         self.current_column += 1;
     }
 }
 
-/// Specifies which phase the PPU is in.
+/// Specifies which mode the PPU is in.
 ///
 /// Breakdown of one frame:
 ///
@@ -558,37 +804,38 @@ impl Ppu {
 /// ```
 ///
 /// All cycles are machine-cycles (1 Mhz = 1_048_576). Pixel transfer can vary
-/// in length for different lines.
+/// in length for different lines. This is due to window and sprites
+/// interrupting the normal process of fetching data.
 ///
-/// Some length:
-/// - One line: 20 + 43 + 51 = 114
-/// - V-Blank: 10 * one line = 1140
-/// - One frame: one line * 154 = 17_556
+/// Duration of some things:
+/// - One line: 20 + 43 + 51 = 114 cycles
+/// - V-Blank: 10 * one line = 1140 cycles
+/// - One frame: one line * 154 = 17_556 cycles
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Phase {
+pub enum Mode {
     /// Also called "Mode 2": PPU determines which sprites are visible on the
     /// current line.
-    OamSearch,
+    OamSearch = 2,
 
-    /// Also called "Mode 3": Pixels are transferred to the LCD screen.
-    PixelTransfer,
+    /// Also called "Mode 3": pixels are transferred to the LCD screen.
+    PixelTransfer = 3,
 
-    /// Also called "Mode 0": Time after pixel transfer when the PPU is waiting
+    /// Also called "Mode 0": time after pixel transfer when the PPU is waiting
     /// to start a new line.
-    HBlank,
+    HBlank = 0,
 
-    /// Also called "Mode 1": Time after the last line has been drawn and
+    /// Also called "Mode 1": time after the last line has been drawn and
     /// before the next frame begins.
-    VBlank,
+    VBlank = 1,
 }
 
-impl fmt::Display for Phase {
+impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Phase::OamSearch => "OAM search",
-            Phase::PixelTransfer => "pixel transfer",
-            Phase::HBlank => "H-Blank",
-            Phase::VBlank => "V-Blank",
+            Mode::OamSearch => "OAM search",
+            Mode::PixelTransfer => "pixel transfer",
+            Mode::HBlank => "H-Blank",
+            Mode::VBlank => "V-Blank",
         }.fmt(f)
     }
 }
@@ -659,6 +906,9 @@ impl PixelFifo {
 
     /// Clears all data from the FIFO (sets length to 0).
     fn clear(&mut self) {
+        self.colors_hi = 0;
+        self.colors_lo = 0;
+        self.sources = 0;
         self.len = 0;
     }
 
@@ -739,5 +989,43 @@ mod tests {
         assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
         assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
         assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+    }
+
+    #[test]
+    fn fifo_clear() {
+        // The same as in `fifo_simple`
+        let mut fifo = PixelFifo::new();
+        assert_eq!(fifo.len(), 0);
+
+        let color_hi = 0b00_11_00_11u8;
+        let color_lo = 0b01_01_10_10u8;
+        fifo.add_data(color_hi, color_lo, PixelSource::Background);
+        assert_eq!(fifo.len(), 8);
+
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b01, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b11, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b10, PixelSource::Background));
+
+        // Now we clear the FIFO and only fill it with zeroes.
+        fifo.clear();
+        assert_eq!(fifo.len(), 0);
+
+        fifo.add_data(0, 0, PixelSource::Background);
+        fifo.add_data(0, 0, PixelSource::Background);
+        assert_eq!(fifo.len(), 16);
+
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
+        assert_eq!(fifo.emit(), (0b00, PixelSource::Background));
     }
 }

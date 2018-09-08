@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
     sync::{
         Mutex,
+        atomic::{AtomicBool, Ordering},
         mpsc::{channel, Receiver, Sender},
     },
 };
@@ -28,7 +29,7 @@ use mahboi::{
     log::*,
     machine::{
         Cpu, Machine,
-        ppu::Ppu,
+        ppu::{Mode, Ppu},
     },
     primitives::{Byte, Word},
 };
@@ -57,9 +58,14 @@ mod util;
 // there and the TUI interface regularly checks for new messages and shows them
 // in the TUI.
 
+/// The global logger.
+static LOGGER: TuiLogger = TuiLogger {
+    discard_trace: AtomicBool::new(true),
+};
+
 /// Initializes the logger that works in tandem with the TUI debugger.
 pub(crate) fn init_logger() {
-    log::set_logger(&TuiLogger)
+    log::set_logger(&LOGGER)
         .expect("called init(), but a logger is already set!");
 }
 
@@ -73,15 +79,19 @@ struct LogMessage {
     msg: String,
 }
 
-struct TuiLogger;
+struct TuiLogger {
+    discard_trace: AtomicBool,
+}
 
 impl Log for TuiLogger {
-    fn enabled(&self, _: &Metadata) -> bool {
-        true
+    fn enabled(&self, meta: &Metadata) -> bool {
+        !(self.discard_trace.load(Ordering::SeqCst) && meta.level() == Level::Trace)
     }
 
     fn log(&self, record: &Record) {
-        if record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false) {
+        let enabled = self.enabled(record.metadata())
+            && record.module_path().map(|p| p.starts_with("mahboi")).unwrap_or(false);
+        if enabled {
             // Just push them into the global list.
             LOG_MESSAGES.lock().unwrap().push(LogMessage {
                 level: record.level(),
@@ -154,6 +164,15 @@ pub(crate) struct TuiDebugger {
     /// instruction.
     pause_on_ret: bool,
 
+    /// This is set whenever the user runs the emulator until a new line or new
+    /// frame is reached.
+    pause_in_line: Option<u8>,
+
+    /// This is a flag used for "jump to next frame". A value of `true` means
+    /// that `pause_in_line` won't trigger. This flag is reset once we reach
+    /// V-Blank.
+    waiting_for_vblank: bool,
+
     /// To avoid updating all elements every frame, we track whether an update
     /// is necessary. This flag is set to `true` whenever `should_pause()` is
     /// called and reset whenever all views are updated.
@@ -215,6 +234,8 @@ impl TuiDebugger {
             step_over: None,
             breakpoints: Breakpoints::new(),
             pause_on_ret: false,
+            pause_in_line: None,
+            waiting_for_vblank: false,
             boot_rom_disabled: false,
             update_needed: true,
             scroll_asm_view: None,
@@ -251,22 +272,39 @@ impl TuiDebugger {
             self.pause();
         }
 
+        if self.update_needed {
+            // We only update the ASM view if the emulator is paused
+            if is_paused {
+                let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
+                asm_view.update(machine);
+                let line = asm_view.get_active_line();
+                self.scroll_asm_view = Some(line.saturating_sub(10));
+            }
+
+            self.update_cpu_data(&machine.cpu);
+            self.update_stack_data(machine);
+            self.update_ppu_data(&machine.ppu);
+            self.update_interrupt_data(machine);
+
+            self.update_needed = false;
+        }
+
         // If we're in pause mode, update elements in the debugging tab
         if is_paused {
             // If the memory dialog is opened, update it
             if let Some(mut mem_view) = self.siv.find_id::<MemView>("mem_view") {
                 mem_view.update(machine, self.update_needed);
             }
-
-            if self.update_needed {
-                self.update_debugger(machine);
-                self.update_needed = false;
-            }
         }
 
         // Append all log messages that were pushed to the global buffer into
         // the corresponding log view.
         self.siv.find_id::<LogView>("log_list").unwrap().update();
+        let discard = self.siv.find_id::<LogView>("log_list")
+            .unwrap()
+            .ignore_trace_logs(&mut self.siv)
+            && !self.pause_mode;
+        LOGGER.discard_trace.store(discard, Ordering::SeqCst);
 
         // React to any events that might have happend
         while let Ok(c) = self.pending_events.try_recv() {
@@ -305,6 +343,22 @@ impl TuiDebugger {
                         return Ok(Action::Continue);
                     }
                 }
+                'l' => {
+                    if self.pause_mode {
+                        let next_line = (machine.ppu.regs().current_line.get() + 1) % 144;
+                        self.pause_in_line = Some(next_line);
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
+                'k' => {
+                    if self.pause_mode {
+                        self.waiting_for_vblank = true;
+                        self.pause_in_line = Some(0);
+                        self.resume();
+                        return Ok(Action::Continue);
+                    }
+                }
                 _ => panic!("internal error: unexpected event"),
             }
         }
@@ -327,22 +381,13 @@ impl TuiDebugger {
         Ok(Action::Nothing)
     }
 
-    fn update_debugger(&mut self, machine: &Machine) {
-        let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
-        asm_view.update(machine);
-        let line = asm_view.get_active_line();
-        self.scroll_asm_view = Some(line.saturating_sub(10));
-
-        self.update_cpu_data(&machine.cpu);
-        self.update_stack_data(machine);
-        self.update_ppu_data(&machine.ppu);
-    }
-
     /// Switch to pause mode.
     fn pause(&mut self) {
-        trace!("[debugger] enter pause mode");
+        debug!("[debugger] enter pause mode");
 
         self.pause_mode = true;
+
+        LOGGER.discard_trace.store(false, Ordering::SeqCst);
 
         // Execution just got paused => select the debugging tab
         self.siv.find_id::<TabView>("tab_view")
@@ -359,9 +404,14 @@ impl TuiDebugger {
 
     /// Exit pause mode (continue execution)
     fn resume(&mut self) {
-        trace!("[debugger] continue execution (exit pause mode)");
+        debug!("[debugger] continue execution (exit pause mode)");
 
         self.pause_mode = false;
+
+        let discard = self.siv.find_id::<LogView>("log_list")
+            .unwrap()
+            .ignore_trace_logs(&mut self.siv);
+        LOGGER.discard_trace.store(discard, Ordering::SeqCst);
 
         // Update the title
         self.siv.find_id::<TextView>("main_title")
@@ -387,6 +437,25 @@ impl TuiDebugger {
 
         }
 
+        if let Some(line) = self.pause_in_line {
+            // If we are supposed to wait for V-Blank, we just check if we are
+            // in V-Blank. Otherwise, we check if we are in the line we want to
+            // stop at.
+            if self.waiting_for_vblank {
+                if machine.ppu.regs().mode() == Mode::VBlank {
+                    self.waiting_for_vblank = false;
+                }
+            } else {
+                let stop = machine.ppu.regs().current_line == line
+                    && machine.ppu.regs().mode() == Mode::OamSearch;
+                if stop {
+                    debug!("[debugger] paused in line {}", line);
+                    self.pause_in_line = None;
+                    return true;
+                }
+            }
+        }
+
         // If we are at the address we should step over, we will ignore the
         // rest of this method and just *not* pause. But we will also reset the
         // `step_over` value, to pause the next time.
@@ -404,7 +473,7 @@ impl TuiDebugger {
 
         // We the current instruction is one of our breakpoints, we also pause.
         if self.breakpoints.contains(machine.cpu.pc) {
-            trace!("[debugger] paused at breakpoint {}", machine.cpu.pc);
+            debug!("[debugger] paused at breakpoint {}", machine.cpu.pc);
             return true;
         }
 
@@ -438,7 +507,7 @@ impl TuiDebugger {
 
         // Other global events are just forwarded to be handled in the next
         // `update()` call.
-        for &c in &['p', 'r', 's', 'f'] {
+        for &c in &['p', 'r', 's', 'f', 'l', 'k'] {
             let tx = self.event_sink.clone();
             self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
         }
@@ -522,10 +591,12 @@ impl TuiDebugger {
 
         let mut body = StyledString::new();
 
+        let regs = ppu.regs();
+
         // Phase/Status
-        if ppu.lcd_enabled() {
+        if regs.is_lcd_enabled() {
             body.append_plain("==> Phase: ");
-            body.append_plain(ppu.phase().to_string());
+            body.append_plain(regs.mode().to_string());
             body.append_plain("\n");
         } else {
             body.append_plain("  --- LCD disabled! ---\n");
@@ -534,21 +605,17 @@ impl TuiDebugger {
 
         // Tile data memory range for BG and window
         body.append_plain("BG tile data: ");
-        let addr = if (ppu.lcd_control().get() & 0b0001_0000) != 0 {
-            "8000-8FFF\n"
-        } else {
-            "8800-97FF\n"
-        };
-        body.append_styled(addr, reg_style);
+        body.append_styled(regs.bg_window_tile_data_address().to_string(), reg_style);
+        body.append_plain("\n");
 
         // FF44 current line
         body.append_plain("Current line: ");
-        body.append_styled(ppu.current_line().get().to_string(), reg_style);
+        body.append_styled(regs.current_line.get().to_string(), reg_style);
         body.append_plain("\n");
 
         // FF45 line compare
         body.append_plain("Line compare: ");
-        body.append_styled(ppu.lyc().get().to_string(), reg_style);
+        body.append_styled(regs.lyc.get().to_string(), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -569,11 +636,11 @@ impl TuiDebugger {
         body.append_plain("## Palettes: \n");
 
         body.append_plain("- BG: ");
-        body.append_styled(format_palette(ppu.background_palette()), reg_style);
+        body.append_styled(format_palette(regs.background_palette), reg_style);
         body.append_plain("- S0: ");
-        body.append_styled(format_palette(ppu.sprite_palette_0()), reg_style);
+        body.append_styled(format_palette(regs.sprite_palette_0), reg_style);
         body.append_plain("- S1: ");
-        body.append_styled(format_palette(ppu.sprite_palette_1()), reg_style);
+        body.append_styled(format_palette(regs.sprite_palette_1), reg_style);
 
         body.append_plain("\n");
 
@@ -583,18 +650,14 @@ impl TuiDebugger {
 
         // Tile map memory region
         body.append_plain("- tile map: ");
-        if (ppu.lcd_control().get() & 0b0000_1000) != 0 {
-            body.append_styled("9C00-9FFF", reg_style);
-        } else {
-            body.append_styled("9800-9BFF", reg_style);
-        }
+        body.append_styled(regs.bg_tile_map_address().to_string(), reg_style);
         body.append_plain("\n");
 
         // Scroll
         body.append_plain("- X: ");
-        body.append_styled(format!("{: >3}", ppu.scroll_x().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_bg_x.get()), reg_style);
         body.append_plain(",  Y: ");
-        body.append_styled(format!("{: >3}", ppu.scroll_y().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_bg_y.get()), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -605,27 +668,20 @@ impl TuiDebugger {
 
         // Enabled?
         body.append_plain("- ");
-        if (ppu.lcd_control().get() & 0b0010_0000) != 0 {
-            body.append_styled("enabled", reg_style);
-        } else {
-            body.append_styled("disabled", reg_style);
-        }
+        let win_status = if regs.is_window_enabled() { "enabled" } else { "disabled" };
+        body.append_styled(win_status, reg_style);
         body.append_plain("\n");
 
         // Tile map memory region
         body.append_plain("- tile map: ");
-        if (ppu.lcd_control().get() & 0b0100_0000) != 0 {
-            body.append_styled("9C00-9FFF", reg_style);
-        } else {
-            body.append_styled("9800-9BFF", reg_style);
-        }
+        body.append_styled(regs.window_tile_map_address().to_string(), reg_style);
         body.append_plain("\n");
 
         // Scroll position
         body.append_plain("- X: ");
-        body.append_styled(format!("{: >3}", ppu.win_x().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_win_x.get()), reg_style);
         body.append_plain(",  Y: ");
-        body.append_styled(format!("{: >3}", ppu.win_y().get()), reg_style);
+        body.append_styled(format!("{: >3}", regs.scroll_win_y.get()), reg_style);
         body.append_plain("\n");
 
         body.append_plain("\n");
@@ -636,20 +692,14 @@ impl TuiDebugger {
 
         // Enabled?
         body.append_plain("- ");
-        if (ppu.lcd_control().get() & 0b0000_0010) != 0 {
-            body.append_styled("enabled", reg_style);
-        } else {
-            body.append_styled("disabled", reg_style);
-        }
+        let sprite_status = if regs.are_sprites_enabled() { "enabled" } else { "disabled" };
+        body.append_styled(sprite_status, reg_style);
         body.append_plain("\n");
 
         // Size
         body.append_plain("- Size: ");
-        if (ppu.lcd_control().get() & 0b0000_0100) != 0 {
-            body.append_styled("8x16", reg_style);
-        } else {
-            body.append_styled("8x8", reg_style);
-        }
+        let sprite_size = if regs.large_sprites_enabled() { "8x16" } else { "8x8" };
+        body.append_styled(sprite_size, reg_style);
         body.append_plain("\n");
 
 
@@ -714,6 +764,71 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("cpu_data").unwrap().set_content(body);
     }
 
+    fn update_interrupt_data(&mut self, machine: &Machine) {
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        let mut body = StyledString::new();
+        let ints = machine.interrupt_controller();
+
+        // IME
+        body.append_plain("IME: ");
+        body.append_styled((ints.ime as u8).to_string(), reg_style);
+        body.append_plain("\n");
+        body.append_plain("\n");
+
+
+        // IF and IE
+        fn bit_string(byte: u8) -> String {
+            format!(
+                "{}  {}  {}  {}  {}",
+                (byte >> 4) & 0b1,
+                (byte >> 3) & 0b1,
+                (byte >> 2) & 0b1,
+                (byte >> 1) & 0b1,
+                (byte >> 0) & 0b1,
+            )
+        }
+
+        body.append_plain("      J  S  T  L  V\n");
+
+        body.append_plain("IE:   ");
+        body.append_styled(bit_string(ints.interrupt_enable.get()), reg_style);
+        body.append_plain("\n");
+
+        body.append_plain("IF:   ");
+        body.append_styled(bit_string(ints.interrupt_flag.get()), reg_style);
+        body.append_plain("\n");
+        body.append_plain("\n");
+
+
+        // LCD stat interrupts
+        body.append_plain("            =  O  V  H\n");
+        body.append_plain("LCD stat:   ");
+        body.append_styled(
+            (machine.ppu.regs().coincidence_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().oam_search_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().vblank_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("  ");
+        body.append_styled(
+            (machine.ppu.regs().hblank_interrupt() as u8).to_string(),
+            reg_style,
+        );
+        body.append_plain("\n");
+
+
+        self.siv.find_id::<TextView>("interrupt_view").unwrap().set_content(body);
+    }
+
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
@@ -732,10 +847,16 @@ impl TuiDebugger {
             .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
 
+        let interrupt_body = TextView::new("no data yet")
+            .with_id("interrupt_view");
+        let interrupt_view = Dialog::around(interrupt_body).title("Interrupts");
+
         let first_right_panel = LinearLayout::vertical()
             .child(cpu_view)
             .child(DummyView)
             .child(stack_view)
+            .child(DummyView)
+            .child(interrupt_view)
             .fixed_width(30);
 
         // Second right column
@@ -761,14 +882,20 @@ impl TuiDebugger {
         let step_button = Button::new("Single step [s]", move |_| tx.send('s').unwrap());
         let tx = self.event_sink.clone();
         let fun_end_button = Button::new("Run to RET-like [f]", move |_| tx.send('f').unwrap());
+        let tx = self.event_sink.clone();
+        let line_button = Button::new("Run to next line [l]", move |_| tx.send('l').unwrap());
+        let tx = self.event_sink.clone();
+        let frame_button = Button::new("Run to next frame [k]", move |_| tx.send('k').unwrap());
 
         // Wrap all buttons
         let debug_buttons = LinearLayout::vertical()
             .child(button_breakpoints)
+            .child(mem_button)
             .child(run_button)
             .child(step_button)
             .child(fun_end_button)
-            .child(mem_button);
+            .child(line_button)
+            .child(frame_button);
         let debug_buttons = Dialog::around(debug_buttons).title("Actions");
 
         // Build the complete right side
