@@ -121,6 +121,10 @@ impl Mbc for Mbc1 {
     }
 
     fn load_ram_byte(&self, addr: Word) -> Byte {
+        if !self.ram_enabled {
+            return Byte::new(0xFF);
+        }
+
         // If a value outside of the usable RAM is requested, we return FF.
         self.ram.get(self.ram_bank() * 0x2000 + addr.get() as usize)
             .cloned()
@@ -128,6 +132,10 @@ impl Mbc for Mbc1 {
     }
 
     fn store_ram_byte(&mut self, addr: Word, byte: Byte) {
+        if !self.ram_enabled {
+            return;
+        }
+
         // Writes outside of the valid RAM are ignored.
         let idx = self.ram_bank() * 0x2000 + addr.get() as usize;
         if idx < self.ram.len() {
