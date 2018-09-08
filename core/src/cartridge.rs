@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     log::*,
-    mbc::{Mbc, NoMbc, Mbc1},
+    mbc::{Mbc, NoMbc, Mbc1, Mbc5},
 };
 
 
@@ -302,6 +302,19 @@ impl Cartridge {
                     Box::new(Mbc1::new(data, rom_size, ram_size))
                 }
 
+                Ct::Mbc5
+                | Ct::Mbc5Ram
+                | Ct::Mbc5RamBattery
+                | Ct::Mbc5Rumble
+                | Ct::Mbc5RumbleRam
+                | Ct::Mbc5RumbleRamBattery => {
+                    if ty == Ct::Mbc5 || ty == Ct::Mbc5Rumble {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    Box::new(Mbc5::new(data, rom_size, ram_size))
+                }
+
                 Ct::Mbc2 => unimplemented!(),
                 Ct::Mbc2Battery => unimplemented!(),
                 Ct::RomRam => unimplemented!(),
@@ -314,12 +327,6 @@ impl Cartridge {
                 Ct::Mbc3 => unimplemented!(),
                 Ct::Mbc3Ram => unimplemented!(),
                 Ct::Mbc3RamBattery => unimplemented!(),
-                Ct::Mbc5 => unimplemented!(),
-                Ct::Mbc5Ram => unimplemented!(),
-                Ct::Mbc5RamBattery => unimplemented!(),
-                Ct::Mbc5Rumble => unimplemented!(),
-                Ct::Mbc5RumbleRam => unimplemented!(),
-                Ct::Mbc5RumbleRamBattery => unimplemented!(),
                 Ct::Mbc6 => unimplemented!(),
                 Ct::Mbc7SensorRumbleRamBattery => unimplemented!(),
                 Ct::PocketCamera => unimplemented!(),
