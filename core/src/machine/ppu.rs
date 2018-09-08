@@ -691,7 +691,6 @@ impl Ppu {
                 // Trigger H-Blank interrupt if enabled.
                 if self.regs().hblank_interrupt() {
                     interrupt_controller.request_interrupt(Interrupt::LcdStat);
-                    debug!("triggered");
                 }
 
                 return;
