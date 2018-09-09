@@ -9,6 +9,7 @@ use crate::{
 impl Machine {
     /// Executes one DMA step if any DMA operations are currently ongoing.
     pub(crate) fn dma_step(&mut self) {
+        // TODO: pause DMA when LCD is disabled
         // OAM DMA
         if let Some(src_addr) = self.ppu.oam_dma_status {
             if src_addr.into_bytes().0 < Byte::new(0xF1) {
