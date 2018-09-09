@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     log::*,
-    mbc::{Mbc, NoMbc, Mbc1, Mbc5},
+    mbc::{Mbc, NoMbc, Mbc1, Mbc3, Mbc5},
 };
 
 
@@ -315,6 +315,20 @@ impl Cartridge {
                     Box::new(Mbc5::new(data, rom_size, ram_size))
                 }
 
+                Ct::Mbc3TimerBattery
+                | Ct::Mbc3TimerRamBattery
+                | Ct::Mbc3
+                | Ct::Mbc3Ram
+                | Ct::Mbc3RamBattery => {
+                    if ty == Ct::Mbc3TimerBattery || ty == Ct::Mbc3 {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    // TODO: maybe check something with the clock?
+
+                    Box::new(Mbc3::new(data, rom_size, ram_size))
+                }
+
                 Ct::Mbc2 => unimplemented!(),
                 Ct::Mbc2Battery => unimplemented!(),
                 Ct::RomRam => unimplemented!(),
@@ -322,11 +336,6 @@ impl Cartridge {
                 Ct::Mmm01 => unimplemented!(),
                 Ct::Mmm01Ram => unimplemented!(),
                 Ct::Mmm01RamBattery => unimplemented!(),
-                Ct::Mbc3TimerBattery => unimplemented!(),
-                Ct::Mbc3TimerRamBattery => unimplemented!(),
-                Ct::Mbc3 => unimplemented!(),
-                Ct::Mbc3Ram => unimplemented!(),
-                Ct::Mbc3RamBattery => unimplemented!(),
                 Ct::Mbc6 => unimplemented!(),
                 Ct::Mbc7SensorRumbleRamBattery => unimplemented!(),
                 Ct::PocketCamera => unimplemented!(),
