@@ -39,6 +39,11 @@ impl Mbc1 {
             rom_size.len() == data.len(),
             "Length of cartridge doesn't match length specified in ROM size header",
         );
+        assert!(
+            ram_size <= RamSize::Kb32,
+            "Illegal ram size {:?} for MBC1",
+            ram_size,
+        );
 
         let rom: Vec<_> = data.iter().cloned().map(Byte::new).collect();
         let ram = vec![Byte::zero(); ram_size.len()];
