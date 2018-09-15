@@ -28,6 +28,7 @@ pub(crate) struct Mbc5 {
 
 impl Mbc5 {
     pub(crate) fn new(data: &[u8], rom_size: RomSize, ram_size: RamSize) -> Self {
+        assert!(rom_size <= RomSize::Banks512, "More than 128 banks, but only MBC5!");
         assert!(
             rom_size.len() == data.len(),
             "Length of cartridge doesn't match length specified in ROM size header",
