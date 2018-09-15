@@ -188,13 +188,26 @@ impl PartialOrd for RomSize {
     }
 }
 
-/// Size of a cartridge's RAM. Specified in KiB.
+/// Size of a cartridge's RAM. Specified in KiB. Each RAM bank can hold 8KiB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RamSize {
     None,
+
+    /// Only the first quarter of the RAM address space (0xA000 - 0xA7FF) is
+    /// valid RAM.
     Kb2,
+
+    /// One bank, full address space used.
     Kb8,
-    Kb32, // 4 banks of 8KBytes each
+
+    /// 4 banks.
+    Kb32,
+
+    /// 16 banks.
+    Kb128,
+
+    /// 8 banks.
+    Kb64,
 }
 
 impl RamSize {
@@ -205,6 +218,8 @@ impl RamSize {
             0x01 => RamSize::Kb2,
             0x02 => RamSize::Kb8,
             0x03 => RamSize::Kb32,
+            0x04 => RamSize::Kb128,
+            0x05 => RamSize::Kb64,
             _ => panic!("Invalid RAM size in cartridge: {:02x}!", byte)
         }
     }
@@ -216,6 +231,8 @@ impl RamSize {
             RamSize::Kb2 => 2 * 1024,
             RamSize::Kb8 => 8 * 1024,
             RamSize::Kb32 => 32 * 1024,
+            RamSize::Kb128 => 128 * 1024,
+            RamSize::Kb64 => 64 * 1024,
         }
     }
 }
