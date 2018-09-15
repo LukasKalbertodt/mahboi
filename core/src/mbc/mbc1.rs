@@ -1,6 +1,7 @@
 use std::cmp::max;
 
 use crate::{
+    log::*,
     cartridge::{RamSize, RomSize},
     primitives::{Byte, Word},
 };
@@ -145,6 +146,12 @@ impl Mbc for Mbc1 {
         let idx = self.ram_bank() * 0x2000 + addr.get() as usize;
         if idx < self.ram.len() {
             self.ram[idx] = byte;
+        } else {
+            warn!(
+                "[mbc1] write outside of valid RAM (bank {}, address {})",
+                self.ram_bank(),
+                addr,
+            );
         }
     }
 }

@@ -174,6 +174,12 @@ impl Mbc for Mbc3 {
                 let idx = self.ram_bank as usize * 0x2000 + addr.get() as usize;
                 if idx < self.ram.len() {
                     self.ram[idx] = byte;
+                } else {
+                    warn!(
+                        "[mbc3] write outside of valid RAM (bank {}, address {})",
+                        self.ram_bank,
+                        addr,
+                    );
                 }
             }
 

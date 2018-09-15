@@ -1,4 +1,5 @@
 use crate::{
+    log::*,
     cartridge::{RamSize, RomSize},
     primitives::{Byte, Word},
 };
@@ -121,6 +122,12 @@ impl Mbc for Mbc5 {
         let idx = self.ram_bank as usize * 0x2000 + addr.get() as usize;
         if idx < self.ram.len() {
             self.ram[idx] = byte;
+        } else {
+            warn!(
+                "[mbc5] write outside of valid RAM (bank {}, address {})",
+                self.ram_bank,
+                addr,
+            );
         }
     }
 }
