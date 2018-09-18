@@ -476,6 +476,7 @@ impl Ppu {
                         info!("[ppu] LCD was enabled");
                         self.registers.set_mode(Mode::OamSearch);
                         self.cycle_in_line = 0;
+                        self.current_column = 0;
                         // TODO: also reset other stuff?
                     }
                     (true, false) => {

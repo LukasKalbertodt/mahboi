@@ -6,10 +6,14 @@ use crate::{
 pub(crate) use self::{
     no_mbc::NoMbc,
     mbc1::Mbc1,
+    mbc3::Mbc3,
+    mbc5::Mbc5,
 };
 
 mod no_mbc;
 mod mbc1;
+mod mbc3;
+mod mbc5;
 
 
 /// A memory bank controller.

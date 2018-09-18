@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     log::*,
-    mbc::{Mbc, NoMbc, Mbc1},
+    mbc::{Mbc, NoMbc, Mbc1, Mbc3, Mbc5},
 };
 
 
@@ -188,13 +188,26 @@ impl PartialOrd for RomSize {
     }
 }
 
-/// Size of a cartridge's RAM. Specified in KiB.
+/// Size of a cartridge's RAM. Specified in KiB. Each RAM bank can hold 8KiB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RamSize {
     None,
+
+    /// Only the first quarter of the RAM address space (0xA000 - 0xA7FF) is
+    /// valid RAM.
     Kb2,
+
+    /// One bank, full address space used.
     Kb8,
-    Kb32, // 4 banks of 8KBytes each
+
+    /// 4 banks.
+    Kb32,
+
+    /// 16 banks.
+    Kb128,
+
+    /// 8 banks.
+    Kb64,
 }
 
 impl RamSize {
@@ -205,6 +218,8 @@ impl RamSize {
             0x01 => RamSize::Kb2,
             0x02 => RamSize::Kb8,
             0x03 => RamSize::Kb32,
+            0x04 => RamSize::Kb128,
+            0x05 => RamSize::Kb64,
             _ => panic!("Invalid RAM size in cartridge: {:02x}!", byte)
         }
     }
@@ -216,6 +231,8 @@ impl RamSize {
             RamSize::Kb2 => 2 * 1024,
             RamSize::Kb8 => 8 * 1024,
             RamSize::Kb32 => 32 * 1024,
+            RamSize::Kb128 => 128 * 1024,
+            RamSize::Kb64 => 64 * 1024,
         }
     }
 }
@@ -302,6 +319,33 @@ impl Cartridge {
                     Box::new(Mbc1::new(data, rom_size, ram_size))
                 }
 
+                Ct::Mbc5
+                | Ct::Mbc5Ram
+                | Ct::Mbc5RamBattery
+                | Ct::Mbc5Rumble
+                | Ct::Mbc5RumbleRam
+                | Ct::Mbc5RumbleRamBattery => {
+                    if ty == Ct::Mbc5 || ty == Ct::Mbc5Rumble {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    Box::new(Mbc5::new(data, rom_size, ram_size))
+                }
+
+                Ct::Mbc3TimerBattery
+                | Ct::Mbc3TimerRamBattery
+                | Ct::Mbc3
+                | Ct::Mbc3Ram
+                | Ct::Mbc3RamBattery => {
+                    if ty == Ct::Mbc3TimerBattery || ty == Ct::Mbc3 {
+                        assert!(ram_size == RamSize::None);
+                    }
+
+                    // TODO: maybe check something with the clock?
+
+                    Box::new(Mbc3::new(data, rom_size, ram_size))
+                }
+
                 Ct::Mbc2 => unimplemented!(),
                 Ct::Mbc2Battery => unimplemented!(),
                 Ct::RomRam => unimplemented!(),
@@ -309,17 +353,6 @@ impl Cartridge {
                 Ct::Mmm01 => unimplemented!(),
                 Ct::Mmm01Ram => unimplemented!(),
                 Ct::Mmm01RamBattery => unimplemented!(),
-                Ct::Mbc3TimerBattery => unimplemented!(),
-                Ct::Mbc3TimerRamBattery => unimplemented!(),
-                Ct::Mbc3 => unimplemented!(),
-                Ct::Mbc3Ram => unimplemented!(),
-                Ct::Mbc3RamBattery => unimplemented!(),
-                Ct::Mbc5 => unimplemented!(),
-                Ct::Mbc5Ram => unimplemented!(),
-                Ct::Mbc5RamBattery => unimplemented!(),
-                Ct::Mbc5Rumble => unimplemented!(),
-                Ct::Mbc5RumbleRam => unimplemented!(),
-                Ct::Mbc5RumbleRamBattery => unimplemented!(),
                 Ct::Mbc6 => unimplemented!(),
                 Ct::Mbc7SensorRumbleRamBattery => unimplemented!(),
                 Ct::PocketCamera => unimplemented!(),
