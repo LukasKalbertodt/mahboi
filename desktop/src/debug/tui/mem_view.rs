@@ -84,7 +84,7 @@ impl View for MemView {
         printer.with_style(Color::Light(BaseColor::Blue), |printer| {
             for col in 0..16 {
                 buf.clear();
-                write!(buf, "_{:X}", col);
+                let _ = write!(buf, "_{:X}", col);
                 printer.print((DATA_OFFSET + 3 * col, 0), &buf);
             }
 
@@ -98,14 +98,14 @@ impl View for MemView {
             let addr = self.first_line_addr + (row as u16) * 16;
             printer.with_style(Color::Light(BaseColor::Blue), |printer| {
                 buf.clear();
-                write!(buf, "{} │", addr);
+                let _ = write!(buf, "{} │", addr);
                 printer.print((0, row + 2), &buf);
             });
 
             // Print actual data
             for (col, b) in line.iter().enumerate() {
                 buf.clear();
-                write!(buf, "{:02x}", b.get());
+                let _ = write!(buf, "{:02x}", b.get());
 
                 let effect = if self.cursor == addr + col as u8 {
                     Effect::Reverse

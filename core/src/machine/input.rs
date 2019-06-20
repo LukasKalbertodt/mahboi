@@ -41,7 +41,7 @@ impl InputController {
     /// Reacts to the input transmitted via the input parameter.
     pub(crate) fn handle_input(
         &mut self,
-        input: &Input,
+        input: &impl Input,
         _interrupt_controller: &mut InterruptController,
     ) {
         let pressed = input.get_pressed_keys();

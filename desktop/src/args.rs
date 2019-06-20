@@ -7,6 +7,12 @@ use structopt::StructOpt;
 use mahboi::primitives::Word;
 
 
+/// Gameboy Emulator.
+///
+/// The keys WASD are mapped to the up, left, down and right button
+/// respectively. 'J' is mapped to the gameboy's A button, 'K' to the B button,
+/// 'N' to the Select button and 'M' to the Start button. The button 'Q' can be
+/// used to speed up the emulation.
 #[derive(Debug, StructOpt)]
 pub(crate) struct Args {
     #[structopt(

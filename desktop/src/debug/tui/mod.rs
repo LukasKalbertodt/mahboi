@@ -193,7 +193,7 @@ pub(crate) struct TuiDebugger {
 impl TuiDebugger {
     pub(crate) fn new(args: &Args) -> Result<Self, Error> {
         // Create a handle to the terminal (with the correct backend).
-        let mut siv = Cursive::ncurses();
+        let mut siv = Cursive::ncurses()?;
 
         // To handle events, we use `Cursive::step`. Sadly, this function
         // blocks to wait on an event before it returns. This isn't good. We

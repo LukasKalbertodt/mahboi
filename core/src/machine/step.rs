@@ -954,23 +954,6 @@ impl Machine {
                             }
                         }
                     }
-
-                    _ => {
-                        debug!(
-                            "Template:\n\
-                            prefixed_opcode!(\"{}\") => {{\
-                            \n\
-                            }}",
-                            instr.mnemonic,
-                        );
-                        terminate!(
-                            "Unimplemented prefix instruction {:?} in position: {} after: \
-                                {} cycles!",
-                            instr,
-                            instr_start,
-                            self.cycle_counter,
-                        );
-                    }
                 }
             }
 
