@@ -1,6 +1,3 @@
-#![feature(const_fn)]
-#![feature(const_vec_new)]
-
 use std::{
     fs,
     panic::{self, AssertUnwindSafe},
