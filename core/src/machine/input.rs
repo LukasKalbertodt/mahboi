@@ -1,5 +1,3 @@
-use bit_field::BitField;
-
 use crate::{
     primitives::Byte,
     env::Input,
@@ -58,11 +56,13 @@ impl InputController {
     }
 
     /// Returns true, if the button keys are selected, false otherwise.
+    #[inline(always)]
     fn is_button_selected(&self) -> bool {
         (self.register.get() & 0b0010_0000) == 0
     }
 
     /// Returns true, if the direction keys are selected, false otherwise.
+    #[inline(always)]
     fn is_direction_selected(&self) -> bool {
         (self.register.get() & 0b0001_0000) == 0
     }
@@ -84,32 +84,29 @@ pub struct Keys(u8);
 
 impl Keys {
     /// Creates an instance with no buttons pressed.
+    #[inline(always)]
     pub fn none() -> Self {
         Keys(0x00)
     }
 
     /// Sets the given key in this instance to the given state.
+    #[inline(always)]
     pub fn set_key(mut self, key: JoypadKey, is_pressed: bool) -> Self {
-        let bit = match key {
-            JoypadKey::A => 0,
-            JoypadKey::B => 1,
-            JoypadKey::Select => 2,
-            JoypadKey::Start => 3,
-            JoypadKey::Right => 4,
-            JoypadKey::Left => 5,
-            JoypadKey::Up => 6,
-            JoypadKey::Down => 7,
-        };
-        self.0.set_bit(bit, is_pressed);
+        if is_pressed {
+            self.0 |= key as u8;
+        }
+
         self
     }
 
     /// Returns the direction keys in the low nybble (the high nybble is 0).
+    #[inline(always)]
     pub(crate) fn get_direction_keys(&self) -> u8 {
         (self.0 >> 4) & 0x0F
     }
 
     /// Returns the button keys in the low nybble (the high nybble is 0).
+    #[inline(always)]
     pub(crate) fn get_button_keys(&self) -> u8 {
         self.0 & 0x0F
     }
@@ -117,15 +114,16 @@ impl Keys {
 
 /// Represents a key on the Game Boy.
 #[derive(Clone, Copy, Debug)]
+#[repr(u8)]
 pub enum JoypadKey {
-    A,
-    B,
-    Start,
-    Select,
-    Up,
-    Right,
-    Down,
-    Left,
+    A      = 0b0000_0001,
+    B      = 0b0000_0010,
+    Select = 0b0000_0100,
+    Start  = 0b0000_1000,
+    Right  = 0b0001_0000,
+    Left   = 0b0010_0000,
+    Up     = 0b0100_0000,
+    Down   = 0b1000_0000,
 }
 
 #[cfg(test)]

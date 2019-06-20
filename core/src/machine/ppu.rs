@@ -753,6 +753,7 @@ impl Ppu {
     fn push_pixel(&mut self, display: &mut impl Display) {
         // Converts the color number to a real color depending on the given
         // palette.
+        #[inline(always)]
         fn pattern_to_color(pattern: u8, palette: Byte) -> PixelColor {
             // The palette contains four color values. Bit0 and bit1 define the
             // color for the color number 0, bit2 and bit3 for color number 1

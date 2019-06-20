@@ -53,6 +53,7 @@ impl Emulator {
     ///
     /// After executing this once, the emulator has written a new frame via the display
     /// (defined as peripherals) and the display buffer can be written to the actual display.
+    #[inline(never)]
     pub fn execute_frame(
         &mut self,
         peripherals: &mut impl Peripherals,
@@ -76,6 +77,11 @@ impl Emulator {
             }
 
             // Handle input
+            //
+            // TODO: It's a bit wasteful to check this every cycle. Normal
+            // users probably wouldn't notice any difference if we would check
+            // this only once per frame. However, sub frame inputs are a thing
+            // in speed running. We could make this configurable.
             self.machine.input_controller.handle_input(
                 peripherals.input(),
                 &mut self.machine.interrupt_controller,

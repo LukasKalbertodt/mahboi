@@ -30,14 +30,17 @@ use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, Bi
 pub struct Byte(u8);
 
 impl Byte {
+    #[inline(always)]
     pub const fn new(val: u8) -> Self {
         Byte(val)
     }
 
+    #[inline(always)]
     pub fn zero() -> Self {
         Self::new(0)
     }
 
+    #[inline(always)]
     pub fn get(&self) -> u8 {
         self.0
     }
@@ -160,6 +163,7 @@ impl Byte {
 impl Add for Byte {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: Self) -> Self {
         Byte(self.0.wrapping_add(rhs.0))
     }
@@ -168,18 +172,21 @@ impl Add for Byte {
 impl Add<u8> for Byte {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: u8) -> Self {
         Byte(self.0.wrapping_add(rhs))
     }
 }
 
 impl AddAssign for Byte {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
 impl AddAssign<u8> for Byte {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: u8) {
         *self = *self + rhs;
     }
@@ -188,6 +195,7 @@ impl AddAssign<u8> for Byte {
 impl Sub for Byte {
     type Output = Self;
 
+    #[inline(always)]
     fn sub(self, rhs: Self) -> Self {
         Byte(self.0.wrapping_sub(rhs.0))
     }
@@ -196,24 +204,28 @@ impl Sub for Byte {
 impl Sub<u8> for Byte {
     type Output = Self;
 
+    #[inline(always)]
     fn sub(self, rhs: u8) -> Self {
         Byte(self.0.wrapping_sub(rhs))
     }
 }
 
 impl SubAssign for Byte {
+    #[inline(always)]
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
 }
 
 impl SubAssign<u8> for Byte {
+    #[inline(always)]
     fn sub_assign(&mut self, rhs: u8) {
         *self = *self - rhs;
     }
 }
 
 impl PartialEq<u8> for Byte {
+    #[inline(always)]
     fn eq(&self, other: &u8) -> bool {
         self.0 == *other
     }
@@ -238,14 +250,17 @@ pub struct Word(u16);
 
 
 impl Word {
+    #[inline(always)]
     pub fn new(val: u16) -> Self {
         Word(val)
     }
 
+    #[inline(always)]
     pub fn zero() -> Self {
         Self::new(0)
     }
 
+    #[inline(always)]
     pub fn get(&self) -> u16 {
         self.0
     }
@@ -308,6 +323,7 @@ impl Word {
 impl Add for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: Self) -> Self {
         Word(self.0.wrapping_add(rhs.0))
     }
@@ -316,6 +332,7 @@ impl Add for Word {
 impl Add<i8> for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: i8) -> Self {
         Word((self.0 as i16).wrapping_add(rhs as i16) as u16)
     }
@@ -324,6 +341,7 @@ impl Add<i8> for Word {
 impl Add<u8> for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: u8) -> Self {
         self + rhs as u16
     }
@@ -332,6 +350,7 @@ impl Add<u8> for Word {
 impl Add<u16> for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: u16) -> Self {
         Word(self.0.wrapping_add(rhs as u16))
     }
@@ -340,36 +359,42 @@ impl Add<u16> for Word {
 impl Add<Byte> for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn add(self, rhs: Byte) -> Self {
         Word(self.0.wrapping_add(rhs.get() as u16))
     }
 }
 
 impl AddAssign for Word {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
 impl AddAssign<i8> for Word {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: i8) {
         *self = *self + rhs;
     }
 }
 
 impl AddAssign<u8> for Word {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: u8) {
         *self += rhs as u16;
     }
 }
 
 impl AddAssign<u16> for Word {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: u16) {
         *self = *self + rhs;
     }
 }
 
 impl AddAssign<Byte> for Word {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: Byte) {
         *self = *self + rhs;
     }
@@ -378,6 +403,7 @@ impl AddAssign<Byte> for Word {
 impl Sub for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn sub(self, rhs: Self) -> Self {
         Word(self.0.wrapping_sub(rhs.0))
     }
@@ -386,18 +412,21 @@ impl Sub for Word {
 impl Sub<u16> for Word {
     type Output = Self;
 
+    #[inline(always)]
     fn sub(self, rhs: u16) -> Self {
         Word(self.0.wrapping_sub(rhs as u16))
     }
 }
 
 impl SubAssign<u16> for Word {
+    #[inline(always)]
     fn sub_assign(&mut self, rhs: u16) {
         *self = *self - rhs;
     }
 }
 
 impl PartialEq<u16> for Word {
+    #[inline(always)]
     fn eq(&self, other: &u16) -> bool {
         self.0 == *other
     }
@@ -438,6 +467,8 @@ impl Memory {
 
 impl Index<Word> for Memory {
     type Output = Byte;
+
+    #[inline(always)]
     fn index(&self, index: Word) -> &Self::Output {
         &(*self.0)[index.0 as usize]
     }
@@ -445,12 +476,15 @@ impl Index<Word> for Memory {
 
 impl Index<Range<Word>> for Memory {
     type Output = [Byte];
+
+    #[inline(always)]
     fn index(&self, index: Range<Word>) -> &Self::Output {
         &(*self.0)[index.start.0 as usize..index.end.0 as usize]
     }
 }
 
 impl IndexMut<Word> for Memory {
+    #[inline(always)]
     fn index_mut(&mut self, index: Word) -> &mut Self::Output {
         &mut (*self.0)[index.0 as usize]
     }
@@ -467,21 +501,120 @@ pub const CYCLES_PER_FRAME: u64 = 17556;
 pub struct CycleCounter(u64);
 
 impl CycleCounter {
+    #[inline(always)]
     pub fn zero() -> Self {
         CycleCounter(0)
     }
 
     /// Returns true, if the counter is exactly btweeen two frames, false otherwise.
+    #[inline(always)]
     pub fn is_between_frames(&self) -> bool {
         self.0 % CYCLES_PER_FRAME == 0
     }
 }
 
 impl AddAssign<u8> for CycleCounter {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: u8) {
         self.0 += rhs as u64;
     }
 }
+
+
+/// Position of a pixel on a gameboy screen.
+#[derive(Clone, Copy, Debug)]
+pub struct PixelPos {
+    x: u8,
+    y: u8,
+}
+
+impl PixelPos {
+    /// Creates a new `PixelPos`. `x` has to be between 0 and 159 (inclusive)
+    /// and `y` has to be between 0 and 143 (inclusive).
+    #[inline(always)]
+    pub fn new(x: u8, y: u8) -> Self {
+        assert!(x < 160);
+        assert!(y < 144);
+
+        Self { x, y }
+    }
+
+    #[inline(always)]
+    pub fn x(&self) -> u8 {
+        self.x
+    }
+
+    #[inline(always)]
+    pub fn y(&self) -> u8 {
+        self.y
+    }
+}
+
+/// A gameboy color pixel color.
+///
+/// Each channel has a depth of 5 bit = 32 different values, so `r`, `g` and
+/// `b` hold values between 0 and 31 (inclusive). In sum, this means we have
+/// 32^3 = 32768 different colors.
+#[derive(Clone, Copy, Debug)]
+pub struct PixelColor {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+impl PixelColor {
+    /// Decodes the color in the word, which is encoded like this:
+    ///
+    /// - Bit 0 - 4: Red
+    /// - Bit 5 - 9: Green
+    /// - Bit 10 - 14: Blue
+    /// - Bit 15: not used
+    #[inline(always)]
+    pub fn from_color_word(w: Word) -> Self {
+        Self {
+            r: ((w.get() >>  0) as u8) & 0b0001_1111,
+            g: ((w.get() >>  5) as u8) & 0b0001_1111,
+            b: ((w.get() >> 10) as u8) & 0b0001_1111,
+        }
+    }
+
+    /// Creates a color from a classic gameboy color (2 bit). The given `c`
+    /// value has to be 0, 1, 2 or 3.
+    #[inline(always)]
+    pub fn from_greyscale(c: u8) -> Self {
+        assert!(c <= 3);
+        let v = (3 - c) << 3;
+        Self {
+            r: v,
+            g: v,
+            b: v,
+        }
+    }
+
+    /// Creates a new `PixelColor` instance. `r`, `g` and `b` have to be
+    /// smaller than 32!
+    #[inline(always)]
+    pub fn new(r: u8, g: u8, b: u8) -> Self {
+        assert!(r <= 31);
+        assert!(g <= 31);
+        assert!(b <= 31);
+
+        Self { r, g, b }
+    }
+
+    /// Converts this color into the SRGB 24-bit color space. Returns the array
+    /// `[r, g, b]`.
+    ///
+    /// **Note**: this function currently doesn't perform the correct
+    /// conversion!
+    #[inline(always)]
+    pub fn to_srgb(&self) -> [u8; 3] {
+        // TODO: well, it seems to be rather complicated
+        [self.r << 3, self.g << 3, self.b << 3]
+    }
+}
+
+
 
 #[cfg(test)]
 mod test {
@@ -567,91 +700,5 @@ mod test {
         assert_eq!(run(0x0081,  -0x80), (0x0001, false, false));
         assert_eq!(run(0xFFFF,      1), (0x0000, true,  true));
         assert_eq!(run(0x0000,     -1), (0xFFFF, true,  true));
-    }
-}
-
-/// Position of a pixel on a gameboy screen.
-#[derive(Clone, Copy, Debug)]
-pub struct PixelPos {
-    x: u8,
-    y: u8,
-}
-
-impl PixelPos {
-    /// Creates a new `PixelPos`. `x` has to be between 0 and 159 (inclusive)
-    /// and `y` has to be between 0 and 143 (inclusive).
-    pub fn new(x: u8, y: u8) -> Self {
-        assert!(x < 160);
-        assert!(y < 144);
-
-        Self { x, y }
-    }
-
-    pub fn x(&self) -> u8 {
-        self.x
-    }
-
-    pub fn y(&self) -> u8 {
-        self.y
-    }
-}
-
-/// A gameboy color pixel color.
-///
-/// Each channel has a depth of 5 bit = 32 different values, so `r`, `g` and
-/// `b` hold values between 0 and 31 (inclusive). In sum, this means we have
-/// 32^3 = 32768 different colors.
-#[derive(Clone, Copy, Debug)]
-pub struct PixelColor {
-    r: u8,
-    g: u8,
-    b: u8,
-}
-
-impl PixelColor {
-    /// Decodes the color in the word, which is encoded like this:
-    ///
-    /// - Bit 0 - 4: Red
-    /// - Bit 5 - 9: Green
-    /// - Bit 10 - 14: Blue
-    /// - Bit 15: not used
-    pub fn from_color_word(w: Word) -> Self {
-        Self {
-            r: ((w.get() >>  0) as u8) & 0b0001_1111,
-            g: ((w.get() >>  5) as u8) & 0b0001_1111,
-            b: ((w.get() >> 10) as u8) & 0b0001_1111,
-        }
-    }
-
-    /// Creates a color from a classic gameboy color (2 bit). The given `c`
-    /// value has to be 0, 1, 2 or 3.
-    pub fn from_greyscale(c: u8) -> Self {
-        assert!(c <= 3);
-        let v = (3 - c) << 3;
-        Self {
-            r: v,
-            g: v,
-            b: v,
-        }
-    }
-
-    /// Creates a new `PixelColor` instance. `r`, `g` and `b` have to be
-    /// smaller than 32!
-    pub fn new(r: u8, g: u8, b: u8) -> Self {
-        assert!(r <= 31);
-        assert!(g <= 31);
-        assert!(b <= 31);
-
-        Self { r, g, b }
-    }
-
-    /// Converts this color into the SRGB 24-bit color space. Returns the array
-    /// `[r, g, b]`.
-    ///
-    /// **Note**: this function currently doesn't perform the correct
-    /// conversion!
-    pub fn to_srgb(&self) -> [u8; 3] {
-        // TODO: well, it seems to be rather complicated
-        [self.r << 3, self.g << 3, self.b << 3]
     }
 }
