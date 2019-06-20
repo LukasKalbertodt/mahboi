@@ -748,7 +748,7 @@ impl Ppu {
 
             // Reset status flag and bump the x tile position
             self.fetch_started = false;
-            self.fetch_tile_x += 1;
+            self.fetch_tile_x = (self.fetch_tile_x + 1) % 32;
         }
     }
 
