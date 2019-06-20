@@ -171,7 +171,8 @@ pub struct Cpu {
     ///
     /// Bit 7 = zero, bit 6 = substract, bit 5 = half carry, bit 4 = carry. To
     /// access single flags, use the corresponding methods on `Cpu`. To set
-    /// flags, you probably want to use the `set_flags` macro.
+    /// flags, you probably want to use the `set_flags` macro. The four lower
+    /// bits have to be 0 at all times.
     pub f: Byte,
 
     // General purpose register
@@ -241,8 +242,9 @@ impl Cpu {
     }
 
     pub fn set_af(&mut self, word: Word) {
+        // Only the four most significant bits are set in `F`
         let (lsb, msb) = word.into_bytes();
-        self.f = lsb;
+        self.f = Byte::new(lsb.get() & 0xF0);
         self.a = msb;
     }
 
