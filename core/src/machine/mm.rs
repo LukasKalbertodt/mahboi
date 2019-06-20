@@ -34,7 +34,6 @@ impl Machine {
             0xFF00..0xFF80 => self.io[addr - 0xFF00], // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80], // hram
             0xFFFF => self.interrupt_controller.interrupt_enable, // IE register
-            _ => unreachable!(),
         }
     }
 
@@ -68,7 +67,6 @@ impl Machine {
             0xFF00..0xFF80 => self.io[addr - 0xFF00] = byte, // IO registers
             0xFF80..0xFFFF => self.hram[addr - 0xFF80] = byte, // hram
             0xFFFF => self.interrupt_controller.interrupt_enable = byte, // IE register
-            _ => unreachable!(),
         }
     }
 }

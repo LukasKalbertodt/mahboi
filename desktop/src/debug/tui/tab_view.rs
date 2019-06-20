@@ -204,7 +204,7 @@ impl View for TabView {
 
 struct Tab {
     title: String,
-    body: Box<View>,
+    body: Box<dyn View>,
 }
 
 impl Tab {

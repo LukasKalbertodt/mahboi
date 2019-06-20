@@ -1,7 +1,6 @@
 //! Mahboi!
 
 #![feature(exclusive_range_pattern)]
-#![feature(const_fn)]
 
 
 use crate::{
