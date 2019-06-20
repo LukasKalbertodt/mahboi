@@ -497,7 +497,7 @@ impl Ppu {
             0xFF45 => self.registers.lyc = byte,
             0xFF46 => {
                 self.registers.oam_dma_start = byte;
-                let src_addr = Word::new((byte.get() as u16) * 0x100 - 1);
+                let src_addr = Word::new((byte.get() as u16) * 0x100) - 1;
                 self.oam_dma_status = Some(src_addr);
             },
             0xFF47 => self.registers.background_palette = byte,

@@ -24,7 +24,7 @@ impl Machine {
 
         // The OAM DMA always copies from XX00 to XXF1. So if the lower byte is
         // F2, we stop (by setting it to `None`).
-        if self.ppu.oam_dma_status.map(|addr| addr.into_bytes().1) == Some(Byte::new(0xF2)) {
+        if self.ppu.oam_dma_status.map(|addr| addr.into_bytes().0) == Some(Byte::new(0xF2)) {
             self.ppu.oam_dma_status = None;
         }
     }
