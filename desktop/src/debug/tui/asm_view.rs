@@ -289,11 +289,13 @@ fn comment_for(instr: &DecodedInstr, addr: Word) -> String {
             | opcode!("JR NZ, r8")
             | opcode!("JR NC, r8")
             | opcode!("JR Z, r8")
-            | opcode!("JR C, r8") => {
-                let raw = instr.arg1()
-                    .unwrap_or(instr.arg0().unwrap())
-                    .raw_data()
-                    .unwrap();
+            | opcode!("JR C, r8") if !instr.prefixed() => {
+                let arg = if opcode.get() == opcode!("JR r8") {
+                    instr.arg0().unwrap()
+                } else {
+                    instr.arg1().unwrap()
+                };
+                let raw = arg.raw_data().unwrap();
                 let r8 = raw[0].get() as i8;
 
                 let dst = addr + r8 + 2u8;
