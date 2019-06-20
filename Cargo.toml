@@ -4,3 +4,6 @@ members = [
     "desktop",
     "web",
 ]
+
+[profile.dev]
+opt-level = 1
