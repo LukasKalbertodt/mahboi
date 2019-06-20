@@ -71,6 +71,11 @@ impl NativeWindow {
     pub(crate) fn in_turbo_mode(&self) -> bool {
         self.win.is_key_down(Key::Q)
     }
+
+    pub(crate) fn reset_to_pink(&mut self) {
+        self.buf.data = vec![0xFF69B4; SCREEN_WIDTH * SCREEN_HEIGHT];
+        self.buf.buffer_up_to_date = false;
+    }
 }
 
 impl Input for NativeWindow {

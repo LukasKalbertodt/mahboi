@@ -113,7 +113,7 @@ fn run() -> Result<(), Error> {
 
         // If we're in debug mode (and have a TUI debugger), let's update it.
         if let Some(debugger) = &mut tui_debugger {
-            let action = debugger.update(is_paused, emulator.machine())?;
+            let action = debugger.update(is_paused, emulator.machine(), &mut window)?;
             match action {
                 Action::Quit => break,
                 Action::Pause => is_paused = true,
