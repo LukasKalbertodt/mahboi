@@ -372,7 +372,7 @@ impl Machine {
                 let mut src = self.cpu.sp;
                 let (carry, half_carry) = src.add_i8_with_carries(arg_byte.get() as i8);
                 set_flags!(self.cpu.f => 0 0 half_carry carry);
-                self.cpu.set_hl(self.load_word(src));
+                self.cpu.set_hl(src);
             }
             opcode!("LD (a16), SP") => self.store_word(arg_word, self.cpu.sp),
 
