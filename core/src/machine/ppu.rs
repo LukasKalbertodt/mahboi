@@ -530,10 +530,14 @@ impl Ppu {
             // ===== V-Blank =====
             if self.regs().current_line == SCREEN_HEIGHT as u8 && self.cycle_in_line == 0 {
                 self.registers.set_mode(Mode::VBlank);
+
+                // The V-Blank interrupt is always triggered now
                 interrupt_controller.request_interrupt(Interrupt::Vblank);
 
+                // If the corresponding bit is set, we also trigger an LCD stat
+                // interrupt.
                 if self.regs().vblank_interrupt() {
-                    interrupt_controller.request_interrupt(Interrupt::Vblank);
+                    interrupt_controller.request_interrupt(Interrupt::LcdStat);
                 }
             }
         } else {
