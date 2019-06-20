@@ -1,6 +1,9 @@
 use crate::{
     primitives::{PixelColor, PixelPos},
-    machine::input::Keys,
+    machine::{
+        input::Keys,
+        sound::{Tone, SoundChannel},
+    },
 };
 
 pub trait Peripherals {
@@ -18,7 +21,7 @@ pub trait Display {
 }
 
 pub trait Sound {
-
+    fn play_on(&mut self, tones: (Tone, Tone), channel: SoundChannel);
 }
 
 pub trait Input {

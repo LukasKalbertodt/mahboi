@@ -74,6 +74,9 @@ impl Emulator {
                     &mut self.machine.interrupt_controller,
                 );
                 self.machine.dma_step();
+
+                // Pump out sound
+                self.machine.sound_controller.step(peripherals.sound());
             }
 
             // Handle input
@@ -81,8 +84,6 @@ impl Emulator {
                 peripherals.input(),
                 &mut self.machine.interrupt_controller,
             );
-
-            self.machine.sound_controller.step(peripherals.sound());
 
             self.cycles_in_frame += cycles_spent as u64;
             self.machine.cycle_counter += cycles_spent;

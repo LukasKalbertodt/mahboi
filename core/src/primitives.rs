@@ -3,9 +3,11 @@
 use std::{
     ops::{Add, Sub, Index, IndexMut, AddAssign, SubAssign, Range, RangeInclusive},
     fmt::{self, Debug, Display},
+    collections::HashMap,
 };
 
 use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use bit_field::BitField;
 
 
 /// A single Gameboy byte.
@@ -168,6 +170,12 @@ impl Byte {
         let val = self.0 >> range.start();
         let mask = 0xFF >> 7 - (range.end() - range.start());
         val & mask
+    }
+
+    pub fn get_bit(&self, bit: u8) -> bool {
+        assert!(bit < 8);
+
+        self.0.get_bit(bit as usize)
     }
 }
 
@@ -471,9 +479,10 @@ impl IndexMut<Word> for Memory {
 }
 
 
-// TODO cpu cycles or machine cycles???
-/// Numbers of cycles per frame (including v-blank)
+/// Numbers of cycles per frame (including v-blank). 4 CPU clocks are 1 cycle.
 pub const CYCLES_PER_FRAME: u64 = 17556;
+
+pub const TARGET_FPS: f64 = 59.73;
 
 /// A simple integer to count how many cycles were already executed by the
 /// emulator. This allows to check in what part of the frame we currently are.
@@ -483,11 +492,6 @@ pub struct CycleCounter(u64);
 impl CycleCounter {
     pub fn zero() -> Self {
         CycleCounter(0)
-    }
-
-    /// Returns true, if the counter is exactly btweeen two frames, false otherwise.
-    pub fn is_between_frames(&self) -> bool {
-        self.0 % CYCLES_PER_FRAME == 0
     }
 }
 

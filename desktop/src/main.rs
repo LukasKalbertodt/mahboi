@@ -13,6 +13,7 @@ use mahboi::{
     Emulator, Disruption,
     cartridge::Cartridge,
     log::*,
+    primitives::TARGET_FPS,
 };
 use crate::{
     debug::{Action, TuiDebugger},
@@ -25,8 +26,6 @@ mod args;
 mod debug;
 mod env;
 
-
-const TARGET_FPS: f64 = 59.73;
 
 fn main() {
     // We just catch potential errors here and pretty print them.

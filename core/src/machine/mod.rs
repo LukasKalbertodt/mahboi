@@ -19,7 +19,7 @@ pub mod ppu;
 mod step;
 mod interrupt;
 pub mod input;
-mod sound;
+pub mod sound;
 
 
 pub struct Machine {
@@ -166,6 +166,10 @@ impl Machine {
         } else {
             20
         }
+    }
+
+    pub fn sound_controller(&self) -> &SoundController {
+        &self.sound_controller
     }
 }
 

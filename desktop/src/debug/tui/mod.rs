@@ -30,6 +30,7 @@ use mahboi::{
     machine::{
         Cpu, Machine,
         ppu::{Mode, Ppu},
+        sound::{SoundController, SoundChannel},
     },
     primitives::{Byte, Word},
 };
@@ -285,6 +286,7 @@ impl TuiDebugger {
             self.update_stack_data(machine);
             self.update_ppu_data(&machine.ppu);
             self.update_interrupt_data(machine);
+            self.update_sound_data(machine.sound_controller());
 
             self.update_needed = false;
         }
@@ -829,6 +831,71 @@ impl TuiDebugger {
         self.siv.find_id::<TextView>("interrupt_view").unwrap().set_content(body);
     }
 
+    fn update_sound_data(&mut self, sound: &SoundController) {
+        let mut body = StyledString::new();
+        let reg_style = Color::Light(BaseColor::Magenta);
+
+        macro_rules! append_channel {
+            ($channel:expr) => {{
+                body.append_plain("\n");
+                body.append_plain("- Freq:     ");
+                body.append_styled($channel.get_frequency().to_string(), reg_style);
+                body.append_plain("\n");
+                body.append_plain("- Out:      ");
+                body.append_styled(
+                    sound.get_stereo_output($channel.get_channel()).to_string(),
+                    reg_style,
+                );
+                let playing = if $channel.is_enabled() {
+                    "yes"
+                } else {
+                    "no"
+                };
+                body.append_plain("\n");
+                body.append_plain("- Playing:  ");
+                body.append_styled(playing, reg_style);
+            }}
+        }
+
+        body.append_plain("Sound is ");
+        let on = if sound.is_enabled() {
+            "On"
+        } else {
+            "Off"
+        };
+        body.append_styled(on, reg_style);
+
+        body.append_plain("\n\n");
+        body.append_plain("## Tone 1 Channel");
+        body.append_plain("\n");
+        body.append_plain("- Counter:  ");
+        let on = if sound.tone1_channel.length_counter.is_enabled() {
+            "On"
+        } else {
+            "Off"
+        };
+        body.append_styled(on, reg_style);
+        append_channel!(sound.tone1_channel);
+
+        body.append_plain("\n\n");
+        body.append_plain("## Tone 2 Channel");
+        append_channel!(sound.tone2_channel);
+
+        body.append_plain("\n\n");
+        body.append_plain("## Wave Channel");
+        body.append_plain("\n");
+        body.append_plain("- On/Off:   ");
+        let on = if sound.wave_channel.is_on() {
+            "On"
+        } else {
+            "Off"
+        };
+        body.append_styled(on, reg_style);
+        append_channel!(sound.wave_channel);
+
+        self.siv.find_id::<TextView>("sound_view").unwrap().set_content(body);
+    }
+
     /// Create the body of the debugging tab.
     fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
         // Main body (left)
@@ -851,12 +918,18 @@ impl TuiDebugger {
             .with_id("interrupt_view");
         let interrupt_view = Dialog::around(interrupt_body).title("Interrupts");
 
+        let sound_body = TextView::new("no data yet")
+            .with_id("sound_view");
+        let sound_view = Dialog::around(sound_body).title("Sound");
+
         let first_right_panel = LinearLayout::vertical()
             .child(cpu_view)
             .child(DummyView)
             .child(stack_view)
             .child(DummyView)
             .child(interrupt_view)
+            .child(DummyView)
+            .child(sound_view)
             .fixed_width(30);
 
         // Second right column
