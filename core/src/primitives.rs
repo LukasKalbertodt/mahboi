@@ -291,7 +291,7 @@ impl Word {
     /// Adds the given [`Word`] to this [`Word`] and returns a tuple containing information
     /// about carry and half carry bits: (carry, half_carry)
     pub fn add_with_carries(&mut self, rhs: Word) -> (bool, bool) {
-        let half_carry = (((self.get() & 0x00ff) + (rhs.get() & 0x00ff)) & 0x0100) == 0x0100;
+        let half_carry = (((self.get() & 0x0fff) + (rhs.get() & 0x0fff)) & 0x1000) == 0x1000;
         let carry = self.get().checked_add(rhs.get()).is_none();
         *self += rhs;
 
@@ -301,19 +301,13 @@ impl Word {
     /// Adds the given `i8` to this [`Word`] and returns a tuple containing information
     /// about carry and half carry bits: `(carry, half_carry)`.
     pub fn add_i8_with_carries(&mut self, rhs: i8) -> (bool, bool) {
-        let half_carry;
-        let carry;
+        // Figure out the carry and half carry values. They only depend on the
+        // lower byte of this 16 bit value!
+        let left = (self.get() & 0xFF) as u8;
+        let right = rhs as u8;
+        let half_carry = (((left & 0x0f) + (right & 0x0f)) & 0x10) == 0x10;
+        let carry = left.checked_add(right).is_none();
 
-        if rhs < 0 {
-            // RHS is negative. We make it positive (through `i16` to avoid
-            // -128 problem) and then check for the carries via `checked_sub`.
-            carry = self.get().checked_sub(-(rhs as i16) as u16).is_none();
-            half_carry = ((self.get() & 0xFF) as u8).checked_sub(-(rhs as i16) as u8).is_none();
-        } else {
-            // RHS is positive: we check for carries via `checked_add`.
-            carry = self.get().checked_add(rhs as u16).is_none();
-            half_carry = ((self.get() & 0xFF) as u8).checked_add(rhs as u8).is_none();
-        };
         *self += rhs;
 
         (carry, half_carry)
@@ -690,15 +684,15 @@ mod test {
 
         assert_eq!(run(0x0000,      0), (0x0000, false, false));
         assert_eq!(run(0x0000,      2), (0x0002, false, false));
-        assert_eq!(run(0x0000,     -2), (0xFFFE, true,  true));
-        assert_eq!(run(0x0002,     -2), (0x0000, false, false));
+        assert_eq!(run(0x0000,     -2), (0xFFFE, false,  false));
+        assert_eq!(run(0x0002,     -2), (0x0000, true, true));
         assert_eq!(run(0xFFFE,      3), (0x0001, true,  true));
-        assert_eq!(run(0xFFFE,     -3), (0xFFFB, false, false));
-        assert_eq!(run(0x01FF,   -128), (0x017F, false, false));
-        assert_eq!(run(0x00FF,      1), (0x0100, false, true));
-        assert_eq!(run(0x0081,   0x7F), (0x0100, false, true));
-        assert_eq!(run(0x0081,  -0x80), (0x0001, false, false));
+        assert_eq!(run(0xFFFE,     -3), (0xFFFB, true, true));
+        assert_eq!(run(0x01FF,   -128), (0x017F, true, false));
+        assert_eq!(run(0x00FF,      1), (0x0100, true, true));
+        assert_eq!(run(0x0081,   0x7F), (0x0100, true, true));
+        assert_eq!(run(0x0081,  -0x80), (0x0001, true, false));
         assert_eq!(run(0xFFFF,      1), (0x0000, true,  true));
-        assert_eq!(run(0x0000,     -1), (0xFFFF, true,  true));
+        assert_eq!(run(0x0000,     -1), (0xFFFF, false,  false));
     }
 }
