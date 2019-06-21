@@ -113,7 +113,7 @@ pub const INSTRUCTIONS: InstrDb<Option<Instr>> = InstrDb([
     Instr::some(0x0e, "LD C, d8",     2,  8,  None),
     Instr::some(0x0f, "RRCA",         1,  4,  None),
 
-    Instr::some(0x10, "STOP 0",       2,  4,  None),
+    Instr::some(0x10, "STOP",         2,  4,  None),
     Instr::some(0x11, "LD DE, d16",   3, 12,  None),
     Instr::some(0x12, "LD (DE), A",   1,  8,  None),
     Instr::some(0x13, "INC DE",       1,  8,  None),
@@ -663,7 +663,7 @@ macro_rules! opcode {
     ("LD C, d8") => { 0x0e };
     ("RRCA") => { 0x0f };
 
-    ("STOP 0") => { 0x10 };
+    ("STOP") => { 0x10 };
     ("LD DE, d16") => { 0x11 };
     ("LD (DE), A") => { 0x12 };
     ("INC DE") => { 0x13 };

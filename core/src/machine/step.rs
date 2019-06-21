@@ -38,12 +38,7 @@ impl Machine {
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
-                terminate!(
-                    "Unknown instruction {} in position: {} after: {} cycles",
-                    op_code,
-                    instr_start,
-                    self.cycle_counter,
-                );
+                terminate!("Invalid opcode {} at position {}", op_code, instr_start);
             }
         };
         self.cpu.pc += instr.len as u16;
@@ -766,6 +761,10 @@ impl Machine {
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
+            opcode!("STOP") => {
+                // TODO
+                terminate!("STOP instruction not implemented yet!");
+            }
             opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
             opcode!("CPL") => self.cpu.a = !self.cpu.a,
 
@@ -957,21 +956,11 @@ impl Machine {
                 }
             }
 
-            _ => {
-                debug!(
-                    "Template:\n\
-                    opcode!(\"{}\") => {{\
-                    \n\
-                    }}",
-                    instr.mnemonic,
-                );
-                terminate!(
-                    "Unimplemented instruction {:?} in position: {} after: \
-                        {} cycles!",
-                    instr,
-                    instr_start,
-                    self.cycle_counter,
-                );
+            // Invalid Opcodes
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
+                // We already try to decode the instruction above. If that
+                // fails, it panics.
+                unreachable!()
             }
         }
 
