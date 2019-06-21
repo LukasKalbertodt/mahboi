@@ -161,5 +161,5 @@ fn init_emulator(args: &Args) -> Result<Emulator, Error> {
     info!("[desktop] Loaded: {:#?}", cartridge);
 
     // Create emulator
-    Ok(Emulator::new(cartridge))
+    Ok(Emulator::new(cartridge, args.bios))
 }

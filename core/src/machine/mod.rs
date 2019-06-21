@@ -1,4 +1,5 @@
 use crate::{
+    BiosKind,
     primitives::{Byte, Word, Memory},
     cartridge::{Cartridge},
 };
@@ -61,15 +62,20 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub(crate) fn new(cartridge: Cartridge) -> Self {
+    pub(crate) fn new(cartridge: Cartridge, bios_kind: BiosKind) -> Self {
+        let bios_bytes = match bios_kind {
+            BiosKind::Original => include_bytes!(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
+            ),
+            BiosKind::Minimal => include_bytes!(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/data/minimal-bios.bin")
+            ),
+        };
+
         Self {
             cpu: Cpu::new(),
             cartridge,
-            bios: Memory::from_bytes(
-                include_bytes!(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
-                )
-            ),
+            bios: Memory::from_bytes(bios_bytes),
             wram: Memory::zeroed(Word::new(0x2000)),
             ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),

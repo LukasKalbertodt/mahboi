@@ -4,7 +4,10 @@ use log::LevelFilter;
 use minifb::Scale;
 use structopt::StructOpt;
 
-use mahboi::primitives::Word;
+use mahboi::{
+    BiosKind,
+    primitives::Word,
+};
 
 
 /// Gameboy Emulator.
@@ -76,6 +79,17 @@ pub(crate) struct Args {
             in `--debug` mode, 'error' otherwise]",
     )]
     pub(crate) log_level: Option<LevelFilter>,
+
+    /// Specifies which BIOS (boot ROM) to load. The original BIOS scrolls in
+    /// the Nintendo logo and plays a sound. The minimal one skips all that and
+    /// you immediately see your game.
+    #[structopt(
+        long = "--bios",
+        short = "-b",
+        default_value = "minimal",
+        parse(try_from_str = "parse_bios_kind"),
+    )]
+    pub(crate) bios: BiosKind,
 }
 
 fn parse_scale(src: &str) -> Result<Scale, &'static str> {
@@ -113,5 +127,13 @@ fn parse_log_level(src: &str) -> Result<LevelFilter, &'static str> {
             "invalid log level (valid values: 'off', 'error', 'warn', 'info', 'debug' \
                 and 'trace'"
         ),
+    }
+}
+
+fn parse_bios_kind(src: &str) -> Result<BiosKind, &'static str> {
+    match src {
+        "original" => Ok(BiosKind::Original),
+        "minimal" => Ok(BiosKind::Minimal),
+        _ => Err("invalid bios kind (valid values: 'original' and 'minimal')"),
     }
 }

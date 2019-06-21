@@ -30,17 +30,28 @@ pub const SCREEN_WIDTH: usize = 160;
 pub const SCREEN_HEIGHT: usize = 144;
 
 
+/// Different kinds of BIOS (boot ROMs) that can be loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BiosKind {
+    /// The original BIOS scrolling in the Nintendo logo.
+    Original,
+
+    /// A BIOS just setting up internals without showing anything. Saves time!
+    Minimal,
+}
+
+
 pub struct Emulator {
     machine: Machine,
     cycles_in_frame: u64,
 }
 
 impl Emulator {
-    pub fn new(cartridge: Cartridge) -> Self {
+    pub fn new(cartridge: Cartridge, bios: BiosKind) -> Self {
         info!("Creating emulator");
 
         Self {
-            machine: Machine::new(cartridge),
+            machine: Machine::new(cartridge, bios),
             cycles_in_frame: 0,
         }
     }
