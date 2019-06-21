@@ -38,6 +38,9 @@ impl Machine {
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
+                // TODO: we might want to treat this just as a NOP instruction
+                // (i.e. ignore the problem) or exit more gracefully or freeze
+                // the emulator. Not quite clear what's supposed to happen.
                 terminate!("Invalid opcode {} at position {}", op_code, instr_start);
             }
         };
@@ -969,20 +972,16 @@ impl Machine {
             (Some(_), Some(b)) => b,
             (Some(_), None) => {
                 terminate!(
-                    "action_taken not set for branch instruction {:?} in position: \
-                        {} after: {} cycles!",
+                    "bug: `action_taken` not set for branch instruction {:?} at {}",
                     instr,
                     instr_start,
-                    self.cycle_counter,
                 );
             }
             (None, Some(_)) => {
                 terminate!(
-                    "action_taken set for non-branch instruction {:?} in position: \
-                        {} after: {} cycles!",
+                    "bug: `action_taken` set for non-branch instruction {:?} at {}",
                     instr,
                     instr_start,
-                    self.cycle_counter,
                 );
             }
             (None, None) => false,
@@ -993,15 +992,7 @@ impl Machine {
         } else if action_taken {
             match instr.clocks_taken {
                 Some(c) => c,
-                None => {
-                    terminate!(
-                        "Action taken for non-branch instruction {:?} in position: {} after: \
-                            {} cycles!",
-                        instr,
-                        instr_start,
-                        self.cycle_counter,
-                    );
-                }
+                None => unreachable!(), // already checked above
             }
         } else {
             instr.clocks

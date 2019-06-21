@@ -5,7 +5,7 @@ use std::{
     fmt::{self, Debug, Display},
 };
 
-use derive_more::{BitXor, BitXorAssign, Display, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use derive_more::{BitXor, BitXorAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 
 /// A single Gameboy byte.
@@ -488,31 +488,6 @@ impl IndexMut<Word> for Memory {
 // TODO cpu cycles or machine cycles???
 /// Numbers of cycles per frame (including v-blank)
 pub const CYCLES_PER_FRAME: u64 = 17556;
-
-/// A simple integer to count how many cycles were already executed by the
-/// emulator. This allows to check in what part of the frame we currently are.
-#[derive(Debug, Display, Clone, Copy)]
-pub struct CycleCounter(u64);
-
-impl CycleCounter {
-    #[inline(always)]
-    pub fn zero() -> Self {
-        CycleCounter(0)
-    }
-
-    /// Returns true, if the counter is exactly btweeen two frames, false otherwise.
-    #[inline(always)]
-    pub fn is_between_frames(&self) -> bool {
-        self.0 % CYCLES_PER_FRAME == 0
-    }
-}
-
-impl AddAssign<u8> for CycleCounter {
-    #[inline(always)]
-    fn add_assign(&mut self, rhs: u8) {
-        self.0 += rhs as u64;
-    }
-}
 
 
 /// Position of a pixel on a gameboy screen.
