@@ -778,29 +778,38 @@ impl Ppu {
         for sprite in &self.sprites_on_line {
             let x = sprite.x.get();
             let y = sprite.y.get();
-            // if x >= SCREEN_WIDTH + 8 {
-            //     continue;
-            // }
 
-            let tile_start = Word::new(sprite.tile_idx.get() as u16 * 16);
-
-            let pixels = if sprite_height == 8 {
-                let mut line_in_sprite = self.regs().current_line.get() + 16 - y;
-                if sprite.is_y_flipped() {
-                    line_in_sprite = 7 - line_in_sprite;
-                }
-
-                let line_addr = tile_start + 2 * line_in_sprite as u16;
-                double_byte_to_pixels(self.vram[line_addr], self.vram[line_addr + 1u8])
+            // We need to load the correct line of the correct tile bitmap. For
+            // 8x16 sprites, there are two tiles involved. We first obtain the
+            // address to the start of the tile (or the first tile, in the 8x16
+            // case).
+            let tile_id = if sprite_height == 8 {
+                sprite.tile_idx.get()
             } else {
-                unimplemented!()
+                sprite.tile_idx.get() & 0xFE
             };
+            let tile_start = Word::new(tile_id as u16 * 16);
+
+            // Next we find out which line of the sprite we need to draw. If
+            // the y coordinate is 16, the upper edge of the sprite is exactly
+            // at the top screen border (for both sprite sizes). So we have to
+            // substract 16. We also need to adjust the line if the sprite is
+            // flipped. Luckily it's fairly easy and even works for the 8x16
+            // case.
+            let mut line_in_sprite = self.regs().current_line.get() + 16 - y;
+            if sprite.is_y_flipped() {
+                line_in_sprite = (sprite_height - 1) - line_in_sprite;
+            }
+
+            // We offset the base address with the line of the sprite (times 2,
+            // because we need two bytes per line of sprite data).
+            let line_addr = tile_start + 2 * line_in_sprite as u16;
+            let pixels = double_byte_to_pixels(self.vram[line_addr], self.vram[line_addr + 1u8]);
 
 
-
-            // let start = 7u8.saturating_sub(x);
-            // let end = 8u8.saturating_sub()
-
+            // Here we need to figure out which of the 8 tile pixels we just
+            // loaded are actually drawn. Usually all are drawn, but sprites
+            // can be clipped on the left or right side of the screen.
             let (start, end) = match x {
                 // Clipped left
                 0..8 => (SPRITE_WIDTH - x, SPRITE_WIDTH),
@@ -812,6 +821,7 @@ impl Ppu {
                 _ => continue,
             };
 
+            // Just obtain the palette for this sprite.
             let palette = match sprite.palette0() {
                 true => self.regs().sprite_palette_0,
                 false => self.regs().sprite_palette_1,
