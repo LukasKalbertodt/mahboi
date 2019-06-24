@@ -115,6 +115,16 @@ impl PpuRegisters {
         self.lcd_control.get() & 0b0000_0010 != 0
     }
 
+    /// Returns the height of all sprites. This can either be 8 or 16,
+    /// controlled by bit 3 of the LCD control register.
+    pub fn sprite_height(&self) -> u8 {
+        if self.lcd_control.get() & 0b0000_0100 == 0 {
+            8
+        } else {
+            16
+        }
+    }
+
     /// Returns the memory area of the tile map for the window layer (as
     /// determined by LCD control bit 6).
     pub fn window_tile_map_address(&self) -> TileMapArea {
