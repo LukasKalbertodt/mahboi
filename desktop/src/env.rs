@@ -5,7 +5,7 @@ use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
     env::{self, Peripherals, Display, Input},
-    primitives::{PixelColor, PixelPos},
+    primitives::PixelColor,
     machine::input::{Keys, JoypadKey},
 };
 use crate::{
@@ -116,11 +116,13 @@ impl Peripherals for NativeWindow {
 }
 
 impl Display for WinBuffer {
-    fn set_pixel(&mut self, pos: PixelPos, color: PixelColor) {
-        let idx = pos.x() as usize + pos.y() as usize * 160;
-        let [r, g, b] = color.to_srgb();
-        let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
-        self.data[idx] = combined;
+    fn set_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]) {
+        let offset = line_idx as usize * SCREEN_WIDTH;
+        for col in 0..SCREEN_WIDTH {
+            let [r, g, b] = pixels[col].to_srgb();
+            let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+            self.data[offset + col] = combined;
+        }
         self.buffer_up_to_date = false;
     }
 }

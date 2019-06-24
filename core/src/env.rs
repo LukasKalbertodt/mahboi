@@ -1,5 +1,6 @@
 use crate::{
-    primitives::{PixelColor, PixelPos},
+    SCREEN_WIDTH,
+    primitives::PixelColor,
     machine::input::Keys,
 };
 
@@ -14,7 +15,7 @@ pub trait Peripherals {
 }
 
 pub trait Display {
-   fn set_pixel(&mut self, pos: PixelPos, color: PixelColor);
+    fn set_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]);
 }
 
 pub trait Sound {

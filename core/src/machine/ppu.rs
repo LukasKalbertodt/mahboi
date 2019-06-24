@@ -9,7 +9,7 @@ use crate::{
     SCREEN_HEIGHT, SCREEN_WIDTH,
     env::Display,
     log::*,
-    primitives::{Byte, Word, Memory, PixelPos, PixelColor},
+    primitives::{Byte, Word, Memory, PixelColor},
 };
 use super::interrupt::{InterruptController, Interrupt};
 
@@ -758,12 +758,7 @@ impl Ppu {
         }
 
         // ----- Send the line to the actual display -------------------------
-        // TODO: speed this up by not setting each pixel individually, but
-        // adding a `set_line` method or so.
-        for col in 0..SCREEN_WIDTH {
-            let pos = PixelPos::new(col as u8, self.regs().current_line.get());
-            display.set_pixel(pos, line[col]);
-        }
+        display.set_line(self.regs().current_line.get(), &line);
 
         // TODO: make more precise
         43

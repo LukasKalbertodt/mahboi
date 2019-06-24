@@ -494,35 +494,6 @@ impl IndexMut<Word> for Memory {
 pub const CYCLES_PER_FRAME: u64 = 17556;
 
 
-/// Position of a pixel on a gameboy screen.
-#[derive(Clone, Copy, Debug)]
-pub struct PixelPos {
-    x: u8,
-    y: u8,
-}
-
-impl PixelPos {
-    /// Creates a new `PixelPos`. `x` has to be between 0 and 159 (inclusive)
-    /// and `y` has to be between 0 and 143 (inclusive).
-    #[inline(always)]
-    pub fn new(x: u8, y: u8) -> Self {
-        assert!(x < 160);
-        assert!(y < 144);
-
-        Self { x, y }
-    }
-
-    #[inline(always)]
-    pub fn x(&self) -> u8 {
-        self.x
-    }
-
-    #[inline(always)]
-    pub fn y(&self) -> u8 {
-        self.y
-    }
-}
-
 /// A gameboy color pixel color.
 ///
 /// Each channel has a depth of 5 bit = 32 different values, so `r`, `g` and
