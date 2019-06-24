@@ -734,6 +734,7 @@ impl Ppu {
 
         // ===== Draw ========================================================
         let mut line = [PixelColor::from_greyscale(0); SCREEN_WIDTH];
+        let mut background_zero = [true; SCREEN_WIDTH]; // TODO: maybe use bit array
 
 
         // ----- Draw the background and window ------------------------------
@@ -763,6 +764,7 @@ impl Ppu {
             }
 
             // Transfer pixel from tile to LCD
+            background_zero[col] = tile_line[pixel_in_line] == 0;
             line[col] = pattern_to_color(tile_line[pixel_in_line], self.regs().background_palette);
 
             // Advance
@@ -827,15 +829,24 @@ impl Ppu {
                 false => self.regs().sprite_palette_1,
             };
 
+            // For all relevant pixels of the tile line, we will draw that
+            // pixel into the buffer.
             for mut col_of_sprite in start..end {
+                // Determine the screen x coordinate.
                 let screen_col = x as usize + col_of_sprite as usize - 8;
+
+                // Get the pattern from the sprite data (considering x flip).
                 if sprite.is_x_flipped() {
                     col_of_sprite = 7 - col_of_sprite;
                 }
+                let pattern = pixels[col_of_sprite as usize];
 
-                let color = pattern_to_color(pixels[col_of_sprite as usize], palette);
-                // let color = PixelColor::from_greyscale(3);
-                line[screen_col] = color;
+                // If the pattern is 0, the pixel is translucent and is not
+                // drawn.
+                if pattern != 0 && (sprite.is_always_at_top() || background_zero[screen_col]) {
+                    let color = pattern_to_color(pattern, palette);
+                    line[screen_col] = color;
+                }
             }
         }
 
@@ -939,5 +950,9 @@ impl Sprite {
 
     fn palette0(&self) -> bool {
         (self.flags.get() & 0b0001_0000) == 0
+    }
+
+    fn is_always_at_top(&self) -> bool {
+        (self.flags.get() & 0b1000_0000) == 0
     }
 }
