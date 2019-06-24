@@ -28,6 +28,10 @@ const NUM_LINES: u8 = 154;
 /// Meaning: the background map is 32 * 32 tiles large.
 const MAP_SIZE: u8 = 32;
 
+/// The width of a sprite in pixels.
+const SPRITE_WIDTH: u8 = 8;
+
+
 
 /// The (public) registers inside of the PPU.
 pub struct PpuRegisters {
@@ -161,7 +165,7 @@ impl PpuRegisters {
 
     /// Returns the memory area of the tile data for the background and window
     /// layer (as determined by LCD control bit 4).
-    pub fn tile_data_address(&self) -> TileDataArea {
+    pub fn bg_window_tile_data_address(&self) -> TileDataArea {
         // Yes, 0 means the higher address range.
         if self.lcd_control.get() & 0b0001_0000 == 0 {
             TileDataArea::High
@@ -637,6 +641,12 @@ impl Ppu {
         for idx in next_idx..10 {
             self.sprites_on_line[idx] = Sprite::invisible();
         }
+
+        // We sort them here to make drawing them easier. It has to be stable
+        // sort to retain the original order of sprites with the same x
+        // coordinate. We also have to sort them backwards so that sprites that
+        // are more left are drawn on top of others.
+        self.sprites_on_line.sort_by(|sa, sb| sa.x.cmp(&sb.x).reverse());
     }
 
     /// Performs the whole pixel transfer step at once.
@@ -682,15 +692,21 @@ impl Ppu {
             // We calculate the start address of the tile we want to load from.
             // This depends on the addressing mode used for the background/window
             // tiles.
-            let tile_start = self.regs().tile_data_address().index(tile_idx);
+            let tile_start = self.regs().bg_window_tile_data_address().index(tile_idx);
 
             // We only need to load one line (two bytes), so we need to
             // calculate that offset.
             let line_offset = tile_start + offset_in_tile;
 
             // Load the two bytes encoding the 8 pixels.
-            let lo = self.vram[line_offset].get();
-            let hi = self.vram[line_offset + 1u8].get();
+            double_byte_to_pixels(self.vram[line_offset], self.vram[line_offset + 1u8])
+        };
+
+
+        #[inline(always)]
+        fn double_byte_to_pixels(lo: Byte, hi: Byte) -> [u8; 8] {
+            let lo = lo.get();
+            let hi = hi.get();
 
             [
                 ((hi >> 6) & 0b10) | ((lo >> 7) & 0b1),
@@ -702,7 +718,7 @@ impl Ppu {
                 ((hi >> 0) & 0b10) | ((lo >> 1) & 0b1),
                 ((hi << 1) & 0b10) | ((lo >> 0) & 0b1),
             ]
-        };
+        }
 
         /// Converts the color number to a real color depending on the given
         /// palette.
@@ -757,7 +773,64 @@ impl Ppu {
             }
         }
 
-        // ----- Send the line to the actual display -------------------------
+        // ----- Draw sprites ------------------------------------------------
+        let sprite_height = self.regs().sprite_height();
+        for sprite in &self.sprites_on_line {
+            let x = sprite.x.get();
+            let y = sprite.y.get();
+            // if x >= SCREEN_WIDTH + 8 {
+            //     continue;
+            // }
+
+            let tile_start = Word::new(sprite.tile_idx.get() as u16 * 16);
+
+            let pixels = if sprite_height == 8 {
+                let mut line_in_sprite = self.regs().current_line.get() + 16 - y;
+                if sprite.is_y_flipped() {
+                    line_in_sprite = 7 - line_in_sprite;
+                }
+
+                let line_addr = tile_start + 2 * line_in_sprite as u16;
+                double_byte_to_pixels(self.vram[line_addr], self.vram[line_addr + 1u8])
+            } else {
+                unimplemented!()
+            };
+
+
+
+            // let start = 7u8.saturating_sub(x);
+            // let end = 8u8.saturating_sub()
+
+            let (start, end) = match x {
+                // Clipped left
+                0..8 => (SPRITE_WIDTH - x, SPRITE_WIDTH),
+                // Fully visible
+                8..161 => (0, SPRITE_WIDTH),
+                // Clipped right
+                161..169 => (0, SPRITE_WIDTH + SCREEN_WIDTH as u8 - x),
+                // Offscreen
+                _ => continue,
+            };
+
+            let palette = match sprite.palette0() {
+                true => self.regs().sprite_palette_0,
+                false => self.regs().sprite_palette_1,
+            };
+
+            for mut col_of_sprite in start..end {
+                let screen_col = x as usize + col_of_sprite as usize - 8;
+                if sprite.is_x_flipped() {
+                    col_of_sprite = 7 - col_of_sprite;
+                }
+
+                let color = pattern_to_color(pixels[col_of_sprite as usize], palette);
+                // let color = PixelColor::from_greyscale(3);
+                line[screen_col] = color;
+            }
+        }
+
+
+        // ===== Send the line to the actual display =========================
         display.set_line(self.regs().current_line.get(), &line);
 
         // TODO: make more precise
@@ -844,5 +917,17 @@ impl Sprite {
             tile_idx: Byte::zero(),
             flags: Byte::zero(),
         }
+    }
+
+    fn is_y_flipped(&self) -> bool {
+        (self.flags.get() & 0b0100_0000) != 0
+    }
+
+    fn is_x_flipped(&self) -> bool {
+        (self.flags.get() & 0b0010_0000) != 0
+    }
+
+    fn palette0(&self) -> bool {
+        (self.flags.get() & 0b0001_0000) == 0
     }
 }

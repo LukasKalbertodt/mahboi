@@ -251,7 +251,7 @@ pub struct Word(u16);
 
 impl Word {
     #[inline(always)]
-    pub fn new(val: u16) -> Self {
+    pub const fn new(val: u16) -> Self {
         Word(val)
     }
 
