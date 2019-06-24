@@ -612,7 +612,7 @@ impl TuiDebugger {
 
         // Tile data memory range for BG and window
         body.append_plain("BG tile data: ");
-        body.append_styled(regs.bg_window_tile_data_address().to_string(), reg_style);
+        body.append_styled(regs.tile_data_address().to_string(), reg_style);
         body.append_plain("\n");
 
         // FF44 current line
