@@ -344,6 +344,8 @@ pub struct Ppu {
     /// 0.
     num_throw_away_pixels: u8,
 
+    sprites_on_line: [Sprite; 10],
+
     /// ...
     current_column: u8,
 
@@ -375,6 +377,7 @@ impl Ppu {
             line_in_tile_offset: 0,
             fetch_map_line_offset: Word::zero(),
             num_throw_away_pixels: 0,
+            sprites_on_line: [Sprite::invisible(); 10],
 
             current_column: 0,
             oam_dma_status: None,
@@ -580,8 +583,14 @@ impl Ppu {
                         } else {
                             self.registers.set_coincidence_flag(false);
                         }
+
+                        // The real hardware performs this in the following 20
+                        // cycles, but we can do it in one step as the result of
+                        // this operation is not observable before pixel transfer
+                        // and OAM memory cannot be written during the OAM search
+                        // phase.
+                        self.do_oam_search();
                     }
-                    // TODO: OAM Search
                 }
                 (20..114, col) if col < SCREEN_WIDTH as u8 => {
                     if self.cycle_in_line == 20 {
@@ -617,6 +626,42 @@ impl Ppu {
             if self.regs().current_line == 154 {
                 self.registers.current_line = Byte::new(0);
             }
+        }
+    }
+
+    /// Performs the OAM search.
+    ///
+    /// Looks through all 40 sprites in the OAM and extracts the first (up to)
+    /// 10 that are drawn on the current line. These are stored in the
+    /// `sprites_on_line` array. If there are fewer than 10 sprites on the
+    /// current line, the remaining entries are `Sprite::invisible`.
+    fn do_oam_search(&mut self) {
+        let mut next_idx = 0;
+
+        for sprite in self.oam.as_slice().chunks(4) {
+            let sprite = Sprite {
+                y: sprite[0],
+                x: sprite[1],
+                tile_idx: sprite[2],
+                flags: sprite[3],
+            };
+
+            let line = self.regs().current_line + 16;
+            if sprite.x != 0 && line >= sprite.y && line < sprite.y + self.regs().sprite_height() {
+                self.sprites_on_line[next_idx] = sprite;
+                next_idx += 1;
+
+                // If we already found 10 sprites, we just stop OAM search. Any
+                // other sprites are not drawn.
+                if next_idx == 10 {
+                    break;
+                }
+            }
+        }
+
+        // Fill the remaining entries with invisble sprites.
+        for idx in next_idx..10 {
+            self.sprites_on_line[idx] = Sprite::invisible();
         }
     }
 
@@ -868,6 +913,29 @@ enum PixelSource {
 
     /// Sprite with palette 1
     Sprite1 = 2,
+}
+
+/// Describes a sprite. The OAM stores exactly this information for up to 40
+/// sprites.
+#[derive(Copy, Clone, Debug)]
+struct Sprite {
+    y: Byte,
+    x: Byte,
+    tile_idx: Byte,
+    flags: Byte,
+}
+
+impl Sprite {
+    /// Returns an instance that has an x value of 255, making it invisble. All
+    /// other fields are 0.
+    fn invisible() -> Self {
+        Self {
+            y: Byte::zero(),
+            x: Byte::new(255),
+            tile_idx: Byte::zero(),
+            flags: Byte::zero(),
+        }
+    }
 }
 
 

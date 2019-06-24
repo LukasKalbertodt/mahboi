@@ -457,6 +457,10 @@ impl Memory {
     pub fn len(&self) -> Word {
         Word::new(self.0.len() as u16)
     }
+
+    pub fn as_slice(&self) -> &[Byte] {
+        &self.0
+    }
 }
 
 impl Index<Word> for Memory {
