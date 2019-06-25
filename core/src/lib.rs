@@ -6,7 +6,10 @@
 use crate::{
     env::Peripherals,
     cartridge::{Cartridge},
-    machine::Machine,
+    machine::{
+        Machine,
+        ppu::Mode,
+    },
     primitives::CYCLES_PER_FRAME,
     log::*,
 };
@@ -43,7 +46,6 @@ pub enum BiosKind {
 
 pub struct Emulator {
     machine: Machine,
-    cycles_in_frame: u64,
 }
 
 impl Emulator {
@@ -52,7 +54,6 @@ impl Emulator {
 
         Self {
             machine: Machine::new(cartridge, bios),
-            cycles_in_frame: 0,
         }
     }
 
@@ -70,6 +71,7 @@ impl Emulator {
         peripherals: &mut impl Peripherals,
         mut should_pause: impl FnMut(&Machine) -> bool,
     ) -> Result<(), Disruption> {
+        let mut cycles = 0;
         loop {
             if should_pause(&self.machine) {
                 return Err(Disruption::Paused);
@@ -79,6 +81,7 @@ impl Emulator {
             let cycles_spent = self.machine.step()?;
 
             // Let the PPU run for the same number of cycles as the CPU did.
+            let vblank_before = self.machine.ppu.regs().mode() == Mode::VBlank;
             for _ in 0..cycles_spent {
                 self.machine.ppu.step(
                     peripherals.display(),
@@ -98,9 +101,18 @@ impl Emulator {
                 &mut self.machine.interrupt_controller,
             );
 
-            self.cycles_in_frame += cycles_spent as u64;
-            if self.cycles_in_frame >= CYCLES_PER_FRAME {
-                self.cycles_in_frame -= CYCLES_PER_FRAME;
+            // If we just entered V-Blank, we will return. This is here to get
+            // the PPU and real Display synchronized.
+            if !vblank_before && self.machine.ppu.regs().mode() == Mode::VBlank {
+                break;
+            }
+
+            // This is just a fallback for the case that the LCD is disabled
+            // the whole time or repeatedly which would mean no V-Blank is ever
+            // entered. To avoid spending too many cycles in this method, we
+            // return after a fixed number of cycles regardless.
+            cycles += cycles_spent as u64;
+            if cycles >= CYCLES_PER_FRAME {
                 break;
             }
         }
