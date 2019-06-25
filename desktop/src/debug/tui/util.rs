@@ -69,17 +69,20 @@ pub(crate) enum DecodedInstr {
     NoArgs {
         name: &'static str,
         instr: Instr,
+        prefixed: bool,
     },
     OneArg {
         name: &'static str,
         arg: InstrArg,
         instr: Instr,
+        prefixed: bool,
     },
     TwoArgs {
         name: &'static str,
         arg0: InstrArg,
         arg1: InstrArg,
         instr: Instr,
+        prefixed: bool,
     },
     Unknown(Byte),
 }
@@ -92,14 +95,14 @@ impl DecodedInstr {
         let opcode = bytes[0];
 
         // Fetch the correct instruction data
-        let (instr, arg_start) = if opcode.get() == 0xCB {
+        let (instr, arg_start, prefixed) = if opcode.get() == 0xCB {
             if bytes.len() == 1 {
                 return None;
             }
 
-            (Some(PREFIXED_INSTRUCTIONS[bytes[1]]), 2)
+            (Some(PREFIXED_INSTRUCTIONS[bytes[1]]), 2, true)
         } else {
-            (INSTRUCTIONS[opcode], 1)
+            (INSTRUCTIONS[opcode], 1, false)
         };
 
         match instr {
@@ -113,17 +116,20 @@ impl DecodedInstr {
                     [name] => DecodedInstr::NoArgs {
                         name,
                         instr,
+                        prefixed,
                     },
                     [name, arg0] => DecodedInstr::OneArg {
                         name,
                         arg: InstrArg::new(arg0, arg_data)?,
                         instr,
+                        prefixed,
                     },
                     [name, arg0, arg1] => DecodedInstr::TwoArgs {
                         name,
                         arg0: InstrArg::new(&arg0[..arg0.len() - 1], arg_data)?,
                         arg1: InstrArg::new(arg1, arg_data)?,
                         instr,
+                        prefixed,
                     },
                     _ => panic!("internal error: instructions with more than 2 args"),
                 };
@@ -147,6 +153,15 @@ impl DecodedInstr {
         match self {
             DecodedInstr::Unknown(_) => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn prefixed(&self) -> bool {
+        match *self {
+            DecodedInstr::NoArgs { prefixed, .. } => prefixed,
+            DecodedInstr::OneArg { prefixed, .. } => prefixed,
+            DecodedInstr::TwoArgs { prefixed, .. } => prefixed,
+            DecodedInstr::Unknown(_) => true,
         }
     }
 

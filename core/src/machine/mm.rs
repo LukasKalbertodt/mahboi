@@ -10,7 +10,17 @@ use crate::{
 impl Machine {
     /// Loads a byte from the given address.
     pub fn load_byte(&self, addr: Word) -> Byte {
-        // TODO :(
+        // If DMA is ongoing, only HRAM can be accessed.
+        if self.ppu.oam_dma_status.is_some() && !(0xFF80..0xFFFF).contains(&addr.get()) {
+            Byte::new(0xFF) // TODO: is it really FF?
+        } else {
+            self.load_byte_bypass_dma(addr)
+        }
+    }
+
+    /// Loads a byte from the given address, even if DMA is active (this is
+    /// mainly used by the DMA precedure itself).
+    pub fn load_byte_bypass_dma(&self, addr: Word) -> Byte {
         match addr.get() {
             // ROM mounted switch
             0x0000..0x0100 if self.bios_mounted() => self.bios[addr],
@@ -39,6 +49,11 @@ impl Machine {
 
     /// Stores the given byte at the given address.
     pub(crate) fn store_byte(&mut self, addr: Word, byte: Byte) {
+        // If DMA is ongoing, only HRAM can be accessed.
+        if self.ppu.oam_dma_status.is_some() && !(0xFF80..0xFFFF).contains(&addr.get()) {
+            return;
+        }
+
         match addr.get() {
             // ROM mounted switch
             0x0000..0x0100 if self.bios_mounted() => warn!("Wrote to BIOS ROM!"),

@@ -7,4 +7,3 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 derive_more = "0.15.0"
-bit_field = "0.10.0"

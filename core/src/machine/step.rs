@@ -38,12 +38,10 @@ impl Machine {
         let instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
-                terminate!(
-                    "Unknown instruction {} in position: {} after: {} cycles",
-                    op_code,
-                    instr_start,
-                    self.cycle_counter,
-                );
+                // TODO: we might want to treat this just as a NOP instruction
+                // (i.e. ignore the problem) or exit more gracefully or freeze
+                // the emulator. Not quite clear what's supposed to happen.
+                terminate!("Invalid opcode {} at position {}", op_code, instr_start);
             }
         };
         self.cpu.pc += instr.len as u16;
@@ -103,8 +101,11 @@ impl Machine {
         /// This is a template macro for all SBC instructions. Input should be a [`Byte`].
         macro_rules! sbc {
             ($x:expr) => {{
-                let val = $x - (self.cpu.carry() as u8);
-                sub!(val);
+                // let val = $x - (self.cpu.carry() as u8);
+                // sub!(val);
+                let (carry, half_carry) = self.cpu.a.full_sub_with_carries($x, self.cpu.carry());
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
             }}
         }
 
@@ -131,8 +132,9 @@ impl Machine {
         /// This is a template macro for all ADC A, b instructions (where `b` should be a [`Byte`]).
         macro_rules! adc {
             ($x:expr) => {{
-                let val = $x + (self.cpu.carry() as u8);
-                add!(val)
+                let (carry, half_carry) = self.cpu.a.full_add_with_carries($x, self.cpu.carry());
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 half_carry carry);
             }}
         }
 
@@ -372,7 +374,7 @@ impl Machine {
                 let mut src = self.cpu.sp;
                 let (carry, half_carry) = src.add_i8_with_carries(arg_byte.get() as i8);
                 set_flags!(self.cpu.f => 0 0 half_carry carry);
-                self.cpu.set_hl(self.load_word(src));
+                self.cpu.set_hl(src);
             }
             opcode!("LD (a16), SP") => self.store_word(arg_word, self.cpu.sp),
 
@@ -766,8 +768,16 @@ impl Machine {
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
+            opcode!("STOP") => {
+                // TODO: this is most likely still incorrect in some ways
+                self.ppu.disable();
+                self.halt = true;
+            }
             opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
-            opcode!("CPL") => self.cpu.a = !self.cpu.a,
+            opcode!("CPL") => {
+                self.cpu.a = !self.cpu.a;
+                set_flags!(self.cpu.f => - 1 1 -);
+            }
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
@@ -957,21 +967,11 @@ impl Machine {
                 }
             }
 
-            _ => {
-                debug!(
-                    "Template:\n\
-                    opcode!(\"{}\") => {{\
-                    \n\
-                    }}",
-                    instr.mnemonic,
-                );
-                terminate!(
-                    "Unimplemented instruction {:?} in position: {} after: \
-                        {} cycles!",
-                    instr,
-                    instr_start,
-                    self.cycle_counter,
-                );
+            // Invalid Opcodes
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
+                // We already try to decode the instruction above. If that
+                // fails, it panics.
+                unreachable!()
             }
         }
 
@@ -980,20 +980,16 @@ impl Machine {
             (Some(_), Some(b)) => b,
             (Some(_), None) => {
                 terminate!(
-                    "action_taken not set for branch instruction {:?} in position: \
-                        {} after: {} cycles!",
+                    "bug: `action_taken` not set for branch instruction {:?} at {}",
                     instr,
                     instr_start,
-                    self.cycle_counter,
                 );
             }
             (None, Some(_)) => {
                 terminate!(
-                    "action_taken set for non-branch instruction {:?} in position: \
-                        {} after: {} cycles!",
+                    "bug: `action_taken` set for non-branch instruction {:?} at {}",
                     instr,
                     instr_start,
-                    self.cycle_counter,
                 );
             }
             (None, None) => false,
@@ -1004,15 +1000,7 @@ impl Machine {
         } else if action_taken {
             match instr.clocks_taken {
                 Some(c) => c,
-                None => {
-                    terminate!(
-                        "Action taken for non-branch instruction {:?} in position: {} after: \
-                            {} cycles!",
-                        instr,
-                        instr_start,
-                        self.cycle_counter,
-                    );
-                }
+                None => unreachable!(), // already checked above
             }
         } else {
             instr.clocks

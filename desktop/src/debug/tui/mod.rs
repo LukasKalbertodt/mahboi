@@ -33,7 +33,10 @@ use mahboi::{
     },
     primitives::{Byte, Word},
 };
-use crate::args::Args;
+use crate::{
+    args::Args,
+    env::NativeWindow,
+};
 use super::{Action};
 use self::{
     asm_view::AsmView,
@@ -261,6 +264,7 @@ impl TuiDebugger {
         &mut self,
         is_paused: bool,
         machine: &Machine,
+        window: &mut NativeWindow,
     ) -> Result<Action, Error> {
         if !self.siv.is_running() {
             return Ok(Action::Quit);
@@ -358,6 +362,9 @@ impl TuiDebugger {
                         self.resume();
                         return Ok(Action::Continue);
                     }
+                }
+                'c' => {
+                    window.reset_to_pink();
                 }
                 _ => panic!("internal error: unexpected event"),
             }
@@ -507,7 +514,7 @@ impl TuiDebugger {
 
         // Other global events are just forwarded to be handled in the next
         // `update()` call.
-        for &c in &['p', 'r', 's', 'f', 'l', 'k'] {
+        for &c in &['p', 'r', 's', 'f', 'l', 'k', 'c'] {
             let tx = self.event_sink.clone();
             self.siv.add_global_callback(c, move |_| tx.send(c).unwrap());
         }

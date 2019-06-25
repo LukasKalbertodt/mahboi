@@ -1,5 +1,6 @@
 use crate::{
-    primitives::{Byte, Word, Memory, CycleCounter},
+    BiosKind,
+    primitives::{Byte, Word, Memory},
     cartridge::{Cartridge},
 };
 use self::{
@@ -37,8 +38,6 @@ pub struct Machine {
     pub(crate) interrupt_controller: InterruptController,
     pub(crate) input_controller: InputController,
 
-    pub cycle_counter: CycleCounter,
-
     /// Because the EI instruction enables the interrupts during the next cycle we have to store
     /// the request for doing this. This is the purpose of this variable.
     pub enable_interrupts_next_step: bool,
@@ -63,22 +62,26 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub(crate) fn new(cartridge: Cartridge) -> Self {
+    pub(crate) fn new(cartridge: Cartridge, bios_kind: BiosKind) -> Self {
+        let bios_bytes = match bios_kind {
+            BiosKind::Original => include_bytes!(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
+            ),
+            BiosKind::Minimal => include_bytes!(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/data/minimal-bios.bin")
+            ),
+        };
+
         Self {
             cpu: Cpu::new(),
             cartridge,
-            bios: Memory::from_bytes(
-                include_bytes!(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/data/DMG_BIOS_ROM.bin")
-                )
-            ),
+            bios: Memory::from_bytes(bios_bytes),
             wram: Memory::zeroed(Word::new(0x2000)),
             ppu: Ppu::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
             input_controller: InputController::new(),
-            cycle_counter: CycleCounter::zero(),
             enable_interrupts_next_step: false,
             halt: false,
         }
@@ -171,7 +174,8 @@ pub struct Cpu {
     ///
     /// Bit 7 = zero, bit 6 = substract, bit 5 = half carry, bit 4 = carry. To
     /// access single flags, use the corresponding methods on `Cpu`. To set
-    /// flags, you probably want to use the `set_flags` macro.
+    /// flags, you probably want to use the `set_flags` macro. The four lower
+    /// bits have to be 0 at all times.
     pub f: Byte,
 
     // General purpose register
@@ -241,8 +245,9 @@ impl Cpu {
     }
 
     pub fn set_af(&mut self, word: Word) {
+        // Only the four most significant bits are set in `F`
         let (lsb, msb) = word.into_bytes();
-        self.f = lsb;
+        self.f = Byte::new(lsb.get() & 0xF0);
         self.a = msb;
     }
 

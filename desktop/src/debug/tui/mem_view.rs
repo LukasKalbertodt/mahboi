@@ -78,6 +78,14 @@ impl MemView {
 
 impl View for MemView {
     fn draw(&self, printer: &Printer) {
+        let correct_mem_loaded = !self.data.is_empty()
+            && self.cursor >= self.first_line_addr
+            && self.cursor < self.first_line_addr + 0x100u16;
+        if !correct_mem_loaded {
+            printer.print((0, 0), "not loaded yet");
+            return;
+        }
+
         let mut buf = String::new();
 
         // Print header
