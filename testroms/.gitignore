@@ -1,9 +1,2 @@
-cgb_sound/
-cpu_instrs/
-dmg_sound/
-halt_bug.gb
-instr_timing/
-interrupt_time/
-mem_timing-2/
-mem_timing/
-oam_bug/
+blargg/
+gekkio/

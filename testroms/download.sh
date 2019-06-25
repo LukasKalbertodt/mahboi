@@ -8,7 +8,7 @@ MY_PATH="`dirname \"$0\"`"
 
 cd $MY_PATH
 
-
+# Download Blargg's tests
 declare -a files=(
     "cgb_sound.zip"
     "cpu_instrs.zip"
@@ -21,10 +21,23 @@ declare -a files=(
     "oam_bug.zip"
 )
 
+mkdir -p blargg
+cd blargg
+
 for file in "${files[@]}"
 do
-   echo "$file"
    wget -nv "http://gbdev.gg8.se/files/roms/blargg-gb-tests/$file"
    unzip -qo $file
    rm $file
 done
+
+cd ..
+
+
+# Download Gekkio's tests
+mkdir -p gekkio
+cd gekkio
+
+wget -nv https://gekkio.fi/files/mooneye-gb/latest/mooneye-gb_hwtests.zip
+unzip -qo mooneye-gb_hwtests.zip
+rm mooneye-gb_hwtests.zip
