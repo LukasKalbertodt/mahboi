@@ -431,7 +431,6 @@ impl Ppu {
             0xFF40 => self.regs().lcd_control,
             // Bit 7 is always 1
             0xFF41 => self.regs().status.map(|mut b| {
-                // TODO: Bit 2 has to be generated somewhere
                 // Bit 7 always returns 1
                 b |= 0b1000_0000;
                 if !self.regs().is_lcd_enabled() {
@@ -662,7 +661,7 @@ impl Ppu {
     /// number of sprites. This number is only an approximation as apparently
     /// no one exactly knows how to determine the number of cycles. It's
     /// between 43 and 72 cycles.
-    fn do_pixel_transfer(&mut self, display: &mut impl Display) -> u8 {
+    fn do_pixel_transfer(&self, display: &mut impl Display) -> u8 {
         // ===== Preparations ================================================
 
         // We calculate the x coordinate of the first tile.
