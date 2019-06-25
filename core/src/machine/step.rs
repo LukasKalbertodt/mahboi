@@ -101,8 +101,11 @@ impl Machine {
         /// This is a template macro for all SBC instructions. Input should be a [`Byte`].
         macro_rules! sbc {
             ($x:expr) => {{
-                let val = $x - (self.cpu.carry() as u8);
-                sub!(val);
+                // let val = $x - (self.cpu.carry() as u8);
+                // sub!(val);
+                let (carry, half_carry) = self.cpu.a.full_sub_with_carries($x, self.cpu.carry());
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 1 half_carry carry);
             }}
         }
 
@@ -129,8 +132,9 @@ impl Machine {
         /// This is a template macro for all ADC A, b instructions (where `b` should be a [`Byte`]).
         macro_rules! adc {
             ($x:expr) => {{
-                let val = $x + (self.cpu.carry() as u8);
-                add!(val)
+                let (carry, half_carry) = self.cpu.a.full_add_with_carries($x, self.cpu.carry());
+                let zero = self.cpu.a == Byte::zero();
+                set_flags!(self.cpu.f => zero 0 half_carry carry);
             }}
         }
 

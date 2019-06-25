@@ -89,12 +89,37 @@ impl Byte {
         (carry, half_carry)
     }
 
+    /// Adds the given [`Byte`] plus the given `carry` to `self` and returns a
+    /// tuple containing information about carry and half carry bits: (carry,
+    /// half_carry)
+    pub fn full_add_with_carries(&mut self, rhs: Byte, carry_in: bool) -> (bool, bool) {
+        let carry_in = carry_in as u8;
+        let half_carry = (((self.get() & 0x0f) + (rhs.get() & 0x0f) + carry_in) & 0x10) == 0x10;
+        let carry
+            = (((self.get() as u16) + (rhs.get() as u16) + (carry_in as u16)) & 0x100) == 0x100;
+        *self += rhs + carry_in;
+
+        (carry, half_carry)
+    }
+
     /// Substracts the given [`Byte`] from this [`Byte`] and returns a tuple containing information
     /// about carry and half carry bits: (carry, half_carry)
     pub fn sub_with_carries(&mut self, rhs: Byte) -> (bool, bool) {
         let half_carry = (self.get() & 0x0f) < (rhs.get() & 0x0f);
         let carry = *self < rhs;
         *self -= rhs;
+
+        (carry, half_carry)
+    }
+
+    /// Substracts the given [`Byte`] plus the given `carry` from `self` and
+    /// returns a tuple containing information about carry and half carry bits:
+    /// (carry, half_carry)
+    pub fn full_sub_with_carries(&mut self, rhs: Byte, carry_in: bool) -> (bool, bool) {
+        let carry_in = carry_in as u8;
+        let half_carry = (self.get() & 0x0f) < (rhs.get() & 0x0f) + carry_in;
+        let carry = (self.get() as u16) < (rhs.get() as u16 + carry_in as u16);
+        *self -= rhs + carry_in;
 
         (carry, half_carry)
     }
