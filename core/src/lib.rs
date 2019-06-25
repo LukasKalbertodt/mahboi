@@ -80,13 +80,20 @@ impl Emulator {
             // Let the CPU execute one instruction
             let cycles_spent = self.machine.step()?;
 
-            // Let the PPU run for the same number of cycles as the CPU did.
+            // Let other subsystems run for the same number of cycles as the
+            // CPU did.
             let vblank_before = self.machine.ppu.regs().mode() == Mode::VBlank;
             for _ in 0..cycles_spent {
+                // Timer
+                self.machine.timer.step(&mut self.machine.interrupt_controller);
+
+                // PPU
                 self.machine.ppu.step(
                     peripherals.display(),
                     &mut self.machine.interrupt_controller,
                 );
+
+                // OAM DMA
                 self.machine.dma_step();
             }
 

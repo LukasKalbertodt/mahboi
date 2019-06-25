@@ -7,6 +7,7 @@ use self::{
     ppu::Ppu,
     interrupt::{InterruptController, Interrupt},
     input::InputController,
+    timer::Timer,
 };
 
 
@@ -19,6 +20,7 @@ pub mod ppu;
 mod step;
 mod interrupt;
 pub mod input;
+mod timer;
 
 
 pub struct Machine {
@@ -32,8 +34,10 @@ pub struct Machine {
     pub io: Memory,
 
     pub ppu: Ppu,
+    pub(crate) timer: Timer,
 
     pub hram: Memory,
+
 
     pub(crate) interrupt_controller: InterruptController,
     pub(crate) input_controller: InputController,
@@ -78,6 +82,7 @@ impl Machine {
             bios: Memory::from_bytes(bios_bytes),
             wram: Memory::zeroed(Word::new(0x2000)),
             ppu: Ppu::new(),
+            timer: Timer::new(),
             io: Memory::zeroed(Word::new(0x80)),
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
