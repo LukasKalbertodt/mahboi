@@ -670,43 +670,76 @@ impl Ppu {
     fn do_pixel_transfer(&self, display: &mut impl Display) -> u8 {
         // ===== Preparations ================================================
 
-        // We calculate the x coordinate of the first tile.
-        let mut fetch_tile_x = self.regs().scroll_bg_x.get() / 8;
+        /// Helper to fetch background and window tiles.
+        struct Fetcher<'a> {
+            // Reference to the whole PPU.
+            ppu: &'a Ppu,
 
-        // Calculate the Y position and the offset within one tile. As one line
-        // in a tile (8 pixel) is encoded using 2 bytes, we can calculate the
-        // offset based on the y position easily.
-        let pos_y = (self.regs().scroll_bg_y + self.regs().current_line).get();
-        let offset_in_tile = (pos_y % 8) * 2;
+            /// The address in the VRAM of the current line of tiles in the
+            /// tile map. For example, if the background is not scrolled (i.e.
+            /// at 0, 0), this is either 0x1800 or 0x1C00. The address is
+            /// relative to the VRAM memory block which is mapped to 0x8000.
+            map_addr: Word,
 
-        // We precompute the address offset to the first tile of the current
-        // line in the background map. This means we can easily compute the
-        // address of the tile later as `map_offset + fetch_tile_x`.
-        let tile_y = pos_y / 8;
-        let mut map_offset = self.regs().bg_tile_map_address().start()
-            + MAP_SIZE as u16 * tile_y as u16;
+            /// The x coordinate in the 32*32 tile map. `map_addr + map_x` is
+            /// the address to the current tile.
+            map_x: u8,
 
-        // Loads the pixel data (pattern, not color yet) from one line of the
-        // tile with the x coordinate (in the background/window map) `tile_x`.
-        // Each element in the returned array is between 0 and 3, encoding one
-        // pixel.
-        let get_line_of_tile = |tile_x, map_offset| -> [u8; 8] {
-            // We lookup the index of our tile in the tile map here.
-            let tile_idx = self.vram[map_offset + tile_x];
+            /// The offset to the required line in the 16 byte tile bitmaps.
+            bitmap_offset: u8,
+        }
 
-            // We calculate the start address of the tile we want to load from.
-            // This depends on the addressing mode used for the background/window
-            // tiles.
-            let tile_start = self.regs().bg_window_tile_data_address().index(tile_idx);
+        impl<'a> Fetcher<'a> {
+            /// Creates a fetcher that is not properly initialized yet and
+            /// cannot be used to fetch tiles. Call `prime` before fetching any
+            /// tiles.
+            fn unprimed(ppu: &'a Ppu) -> Self {
+                Self {
+                    ppu,
+                    map_addr: Word::zero(),
+                    map_x: 0,
+                    bitmap_offset: 0,
+                }
+            }
 
-            // We only need to load one line (two bytes), so we need to
-            // calculate that offset.
-            let line_offset = tile_start + offset_in_tile;
+            /// Prime the prefetcher to start fetching from the map at address
+            /// `map_base`, with the `x` and `y` pixel coordinates.
+            fn prime(&mut self, map_base: Word, x: u8, y: u8) {
+                self.map_x = x / 8;
 
-            // Load the two bytes encoding the 8 pixels.
-            double_byte_to_pixels(self.vram[line_offset], self.vram[line_offset + 1u8])
-        };
+                // Each line in the bitmap is stored using 2 bytes, so we have
+                // an offset of 2 per line in the bitmap.
+                self.bitmap_offset = (y % 8) * 2;
 
+                self.map_addr = map_base + MAP_SIZE as u16 * (y / 8) as u16;
+            }
+
+            /// Advances to the next tile (in the x dimension, "right").
+            fn advance_one_tile(&mut self) {
+                self.map_x = (self.map_x + 1) % MAP_SIZE;
+            }
+
+            /// Fetches the current line of the current tile.
+            fn fetch_tile_line(&self) -> [u8; 8] {
+                // Lookup the tile index of the current tile in the tile map.
+                let tile_idx = self.ppu.vram[self.map_addr + self.map_x];
+
+                // We calculate the start address of the tile we want to load from.
+                // This depends on the addressing mode used for the background/window
+                // tiles.
+                let tile_start = self.ppu.regs().bg_window_tile_data_address().index(tile_idx);
+
+                // We only need to load one line (two bytes), so we need to
+                // calculate that offset.
+                let line_offset = tile_start + self.bitmap_offset;
+
+                // Load the two bytes encoding the 8 pixels.
+                double_byte_to_pixels(
+                    self.ppu.vram[line_offset],
+                    self.ppu.vram[line_offset + 1u8],
+                )
+            }
+        }
 
         #[inline(always)]
         fn double_byte_to_pixels(lo: Byte, hi: Byte) -> [u8; 8] {
@@ -747,6 +780,15 @@ impl Ppu {
             && self.regs().scroll_win_y <= self.regs().current_line;
         let win_scroll_x = self.regs().scroll_win_x.get();
 
+        // Create and prime the prefetcher to fetch background tiles
+        let mut fetcher = Fetcher::unprimed(self);
+        fetcher.prime(
+            self.regs().bg_tile_map_address().start(),
+            self.regs().scroll_bg_x.get(),
+            (self.regs().scroll_bg_y + self.regs().current_line).get()
+        );
+
+
         let mut tile_line = [0; 8]; // This value will never be read
         let mut needs_update = true;
         let mut pixel_in_line = (self.regs().scroll_bg_x.get() as usize) % 8;
@@ -755,16 +797,19 @@ impl Ppu {
         for col in 0..SCREEN_WIDTH {
             // Check if the window starts here
             if window_visible && win_scroll_x.saturating_sub(7) == col as u8 {
+                // Reset the fetcher to now fetch from window tiles.
                 pixel_in_line = 7u8.saturating_sub(win_scroll_x) as usize;
-                fetch_tile_x = 0;
-                map_offset = self.regs().window_tile_map_address().start()
-                    + MAP_SIZE as u16 * tile_y as u16;
+                fetcher.prime(
+                    self.regs().window_tile_map_address().start(),
+                    0,
+                    (self.regs().current_line - self.regs().scroll_win_y).get(),
+                );
                 needs_update = true;
             }
 
             // If necessary, get new tile.
             if needs_update {
-                tile_line = get_line_of_tile(fetch_tile_x, map_offset);
+                tile_line = fetcher.fetch_tile_line();
                 needs_update = false;
             }
 
@@ -775,7 +820,7 @@ impl Ppu {
             // Advance
             pixel_in_line = (pixel_in_line + 1) % 8;
             if pixel_in_line == 0 {
-                fetch_tile_x  = (fetch_tile_x + 1) % MAP_SIZE;
+                fetcher.advance_one_tile();
                 needs_update = true;
             }
         }
