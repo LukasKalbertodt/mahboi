@@ -69,13 +69,13 @@ impl InputController {
 
     /// Returns true, if the button keys are selected, false otherwise.
     #[inline(always)]
-    fn is_button_selected(&self) -> bool {
+    pub(crate) fn is_button_selected(&self) -> bool {
         (self.register.get() & 0b0010_0000) == 0
     }
 
     /// Returns true, if the direction keys are selected, false otherwise.
     #[inline(always)]
-    fn is_direction_selected(&self) -> bool {
+    pub(crate) fn is_direction_selected(&self) -> bool {
         (self.register.get() & 0b0001_0000) == 0
     }
 }

@@ -1,6 +1,6 @@
 //! Contains code to actually execute instructions.
 
-use super::Machine;
+use super::{Machine, State};
 use crate::{
     Disruption,
     primitives::{Byte, Word},
@@ -19,14 +19,26 @@ impl Machine {
         }
 
         // Check if we are in HALT mode
-        if self.halt {
+        if self.state == State::Halted {
             // If no interrupt was triggered (otherwise we wouldn't have gotten here) but at least
             // one interrupt was requested -> exit HALT mode.
             if self.interrupt_controller.is_interrupt_requested() {
-                self.halt = false;
+                debug!("Interrupt in HALT mode: CPU woke up");
+                self.state = State::Normal;
             }
 
             // Executed 1 cycle doing nothing ＼(＾O＾)／
+            return Ok(1);
+        } else if self.state == State::Stopped {
+            // If any selected button is pressed, we exit STOP mode. I'm not
+            // 100% sure this is the correct behavior. Manuals mention it like
+            // that but the `cpu_instr.gb` combined ROM disables all buttons
+            // and executes `STOP`... which should freeze everything?
+            if self.input_controller.load_register().get() & 0b1111 != 0b1111 {
+                self.state = State::Normal;
+                self.ppu.enable();
+            }
+
             return Ok(1);
         }
 
@@ -769,13 +781,21 @@ impl Machine {
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => {
                 debug!("Executed HALT: CPU entering HALT mode");
-                self.halt = true
+                self.state = State::Halted;
             },
             opcode!("STOP") => {
-                // TODO: this is most likely still incorrect in some ways
                 debug!("Executed STOP: CPU entering ultra-low power mode");
+
+                let any_buttons_select = self.input_controller.is_button_selected()
+                    || self.input_controller.is_direction_selected();
+                if !any_buttons_select {
+                    error!("STOP instruction executed, but no buttons are selected, meaning \
+                        that there is no way to exit this STOP mode");
+                }
+
+                // TODO: this is most likely still incorrect in some ways
                 self.ppu.disable();
-                self.halt = true;
+                self.state = State::Stopped;
             }
             opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
             opcode!("CPL") => {

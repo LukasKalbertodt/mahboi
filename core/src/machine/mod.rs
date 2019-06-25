@@ -48,23 +48,8 @@ pub struct Machine {
     /// the request for doing this. This is the purpose of this variable.
     pub enable_interrupts_next_step: bool,
 
-    // TODO: HALT bug is not implemented!
-    // An incomplete version can be found in the previous commit (58dccd7).
 
-    /// Indicates if the machine is in HALT mode. This mode can be exited in three ways:
-    ///
-    /// IME is set to true
-    ///     1. The CPU jumps to the next enabled and requested interrupt
-    ///
-    /// IME is set to false
-    ///     2. (IE & IF & 0x1F) == 0 -> The CPU resumes to normal, when an enabled interrupt is
-    ///                                 requested but doesn't jump to the ISR.
-    ///     3. (IE & IF & 0x1F) != 0 -> HALT bug occurs: The CPU fails to increase PC when
-    ///                                 executing the next instruction, so it is executed twice.
-    ///                                 Examples are given in chapter 4.10. of [1].
-    ///
-    /// [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
-    pub halt: bool,
+    state: State,
 }
 
 impl Machine {
@@ -90,7 +75,7 @@ impl Machine {
             interrupt_controller: InterruptController::new(),
             input_controller: InputController::new(),
             enable_interrupts_next_step: false,
-            halt: false,
+            state: State::Normal,
         }
     }
 
@@ -163,12 +148,42 @@ impl Machine {
 
         // It takes 20 clocks to dispatch a normal interrupt + 4 clocks when returning
         // from HALT mode.
-        if self.halt {
+        if self.state == State::Halted {
             // Exit HALT mode if we are in it
-            self.halt = false;
+            self.state = State::Normal;
             24
         } else {
             20
         }
     }
+}
+
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum State {
+    /// Nothing special.
+    Normal,
+
+    // TODO: HALT bug is not implemented!
+    // An incomplete version can be found in the previous commit (58dccd7).
+
+    /// Indicates if the machine is in HALT mode. This mode can be exited in
+    /// three ways:
+    ///
+    /// IME is set to true
+    ///     1. The CPU jumps to the next enabled and requested interrupt
+    ///
+    /// IME is set to false
+    ///     2. (IE & IF & 0x1F) == 0 -> The CPU resumes to normal, when an enabled interrupt is
+    ///                                 requested but doesn't jump to the ISR.
+    ///     3. (IE & IF & 0x1F) != 0 -> HALT bug occurs: The CPU fails to increase PC when
+    ///                                 executing the next instruction, so it is executed twice.
+    ///                                 Examples are given in chapter 4.10. of [1].
+    ///
+    /// [1]: https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf
+    Halted,
+
+    /// The machine is in ultra-low power mode after the STOP instruction was
+    /// executed.
+    Stopped,
 }

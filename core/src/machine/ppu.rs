@@ -507,6 +507,12 @@ impl Ppu {
         self.store_io_byte(Word::new(0xFF40), new_val);
     }
 
+    /// Enables the LCD by writing 1 to `FF40.7`.
+    pub fn enable(&mut self) {
+        let new_val = self.regs().lcd_control.map(|b| b | 0b1000_0000);
+        self.store_io_byte(Word::new(0xFF40), new_val);
+    }
+
     /// Returns an immutable reference to all public registers.
     pub fn regs(&self) -> &PpuRegisters {
         &self.registers
