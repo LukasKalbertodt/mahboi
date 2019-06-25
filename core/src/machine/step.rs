@@ -773,7 +773,10 @@ impl Machine {
                 terminate!("STOP instruction not implemented yet!");
             }
             opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
-            opcode!("CPL") => self.cpu.a = !self.cpu.a,
+            opcode!("CPL") => {
+                self.cpu.a = !self.cpu.a;
+                set_flags!(self.cpu.f => - 1 1 -);
+            }
 
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
