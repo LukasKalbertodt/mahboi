@@ -47,7 +47,7 @@ impl Machine {
         let arg_byte = self.load_byte(instr_start + 1u16);
         let arg_word = self.load_word(instr_start + 1u16);
         let op_code = self.load_byte(instr_start);
-        let instr = match INSTRUCTIONS[op_code] {
+        let mut instr = match INSTRUCTIONS[op_code] {
             Some(v) => v,
             None => {
                 // TODO: we might want to treat this just as a NOP instruction
@@ -806,7 +806,7 @@ impl Machine {
             opcode!("PREFIX CB") => {
                 let instr_start = self.cpu.pc + 1u16;
                 let op_code = self.load_byte(instr_start);
-                let instr = PREFIXED_INSTRUCTIONS[op_code];
+                instr = PREFIXED_INSTRUCTIONS[op_code];
                 self.cpu.pc += instr.len as u16;
 
                 match op_code.get() {
@@ -1019,9 +1019,7 @@ impl Machine {
             (None, None) => false,
         };
 
-        let clocks_spent = if op_code.get() == opcode!("PREFIX CB") {
-            PREFIXED_INSTRUCTIONS[op_code].clocks
-        } else if action_taken {
+        let clocks_spent = if action_taken {
             match instr.clocks_taken {
                 Some(c) => c,
                 None => unreachable!(), // already checked above
