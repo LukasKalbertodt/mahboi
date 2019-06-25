@@ -767,9 +767,13 @@ impl Machine {
             }
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
-            opcode!("HALT") => self.halt = true,
+            opcode!("HALT") => {
+                debug!("Executed HALT: CPU entering HALT mode");
+                self.halt = true
+            },
             opcode!("STOP") => {
                 // TODO: this is most likely still incorrect in some ways
+                debug!("Executed STOP: CPU entering ultra-low power mode");
                 self.ppu.disable();
                 self.halt = true;
             }
