@@ -769,8 +769,9 @@ impl Machine {
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => self.halt = true,
             opcode!("STOP") => {
-                // TODO
-                terminate!("STOP instruction not implemented yet!");
+                // TODO: this is most likely still incorrect in some ways
+                self.ppu.disable();
+                self.halt = true;
             }
             opcode!("NOP") => {}, // Just do nothing _(:3」∠)_
             opcode!("CPL") => {
