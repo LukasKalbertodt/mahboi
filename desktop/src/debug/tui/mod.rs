@@ -28,7 +28,8 @@ use mahboi::{
     opcode,
     log::*,
     machine::{
-        Cpu, Machine,
+        Machine,
+        cpu::Cpu,
         ppu::{Mode, Ppu},
     },
     primitives::{Byte, Word},

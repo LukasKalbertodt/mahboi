@@ -1,7 +1,7 @@
 use crate::{
     primitives::Byte,
     env::Input,
-    machine::interrupt::InterruptController,
+    machine::interrupt::{Interrupt, InterruptController},
 };
 
 
@@ -40,7 +40,7 @@ impl InputController {
     pub(crate) fn handle_input(
         &mut self,
         input: &impl Input,
-        _interrupt_controller: &mut InterruptController,
+        interrupt_controller: &mut InterruptController,
     ) {
         let pressed = input.get_pressed_keys();
         let keys = match (self.is_direction_selected(), self.is_button_selected()) {
@@ -50,20 +50,32 @@ impl InputController {
             (true, true) => pressed.get_direction_keys() | pressed.get_button_keys(),
         };
 
-        self.register = self.register.map(|r| {
+        let new_state = self.register.map(|r| {
             (r & 0b1111_0000) | (!keys & 0b0000_1111)
         });
+
+        // We check if any of the four lower bits changed from high to low. The
+        // XOR leaves only the bits that changed, masking with `!new` masks out
+        // the bits of the buttons that are not pressed in `new`, leaving us
+        // with just the high to low changes.
+        let old = self.register.get() & 0b1111;
+        let new = new_state.get() & 0b1111;
+        if ((old ^ new) & !new) != 0 {
+            interrupt_controller.request_interrupt(Interrupt::Joypad);
+        }
+
+        self.register = new_state;
     }
 
     /// Returns true, if the button keys are selected, false otherwise.
     #[inline(always)]
-    fn is_button_selected(&self) -> bool {
+    pub(crate) fn is_button_selected(&self) -> bool {
         (self.register.get() & 0b0010_0000) == 0
     }
 
     /// Returns true, if the direction keys are selected, false otherwise.
     #[inline(always)]
-    fn is_direction_selected(&self) -> bool {
+    pub(crate) fn is_direction_selected(&self) -> bool {
         (self.register.get() & 0b0001_0000) == 0
     }
 }
