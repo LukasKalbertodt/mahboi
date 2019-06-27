@@ -1,6 +1,6 @@
 use crate::{
     primitives::Byte,
-    env::Input,
+    env::Peripherals,
     machine::interrupt::{Interrupt, InterruptController},
 };
 
@@ -39,10 +39,10 @@ impl InputController {
     /// Reacts to the input transmitted via the input parameter.
     pub(crate) fn handle_input(
         &mut self,
-        input: &impl Input,
+        peripherals: &impl Peripherals,
         interrupt_controller: &mut InterruptController,
     ) {
-        let pressed = input.get_pressed_keys();
+        let pressed = peripherals.get_pressed_keys();
         let keys = match (self.is_direction_selected(), self.is_button_selected()) {
             (false, false) => 0,
             (false, true) => pressed.get_button_keys(),

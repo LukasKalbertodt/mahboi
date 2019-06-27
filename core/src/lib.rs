@@ -88,10 +88,7 @@ impl Emulator {
                 self.machine.timer.step(&mut self.machine.interrupt_controller);
 
                 // PPU
-                self.machine.ppu.step(
-                    peripherals.display(),
-                    &mut self.machine.interrupt_controller,
-                );
+                self.machine.ppu.step(peripherals, &mut self.machine.interrupt_controller);
 
                 // OAM DMA
                 self.machine.dma_step();
@@ -104,7 +101,7 @@ impl Emulator {
             // this only once per frame. However, sub frame inputs are a thing
             // in speed running. We could make this configurable.
             self.machine.input_controller.handle_input(
-                peripherals.input(),
+                peripherals,
                 &mut self.machine.interrupt_controller,
             );
 
