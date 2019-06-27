@@ -3,7 +3,10 @@
 use failure::{bail, Error};
 
 use mahboi::machine::Machine;
-use crate::args::Args;
+use crate::{
+    args::Args,
+    env::NativeWindow,
+};
 use super::Action;
 
 
@@ -14,7 +17,12 @@ impl TuiDebugger {
         bail!("Debugging mode not usable on Windows!");
     }
 
-    pub(crate) fn update(&mut self, _: bool, _: &Machine) -> Result<Action, Error> {
+    pub(crate) fn update(
+        &mut self,
+        _: bool,
+        _: &Machine,
+        _: &mut NativeWindow,
+    ) -> Result<Action, Error> {
         unreachable!()
     }
     pub(crate) fn should_pause(&mut self, _: &Machine) -> bool {
