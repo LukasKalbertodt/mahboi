@@ -4,7 +4,7 @@ use minifb::{Key, ScaleMode, WindowOptions, Window};
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
-    env::{self, Peripherals, Display, Input},
+    env::Peripherals,
     primitives::PixelColor,
     machine::input::{Keys, JoypadKey},
 };
@@ -78,7 +78,7 @@ impl NativeWindow {
     }
 }
 
-impl Input for NativeWindow {
+impl Peripherals for NativeWindow {
     fn get_pressed_keys(&self) -> Keys {
         Keys::none()
             .set_key(JoypadKey::Up, self.win.is_key_down(Key::W))
@@ -90,50 +90,19 @@ impl Input for NativeWindow {
             .set_key(JoypadKey::Select, self.win.is_key_down(Key::N))
             .set_key(JoypadKey::Start, self.win.is_key_down(Key::M))
     }
+
+    fn write_lcd_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]) {
+        let offset = line_idx as usize * SCREEN_WIDTH;
+        for col in 0..SCREEN_WIDTH {
+            let [r, g, b] = pixels[col].to_srgb();
+            let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+            self.buf.data[offset + col] = combined;
+        }
+        self.buf.buffer_up_to_date = false;
+    }
 }
 
 pub(crate) struct WinBuffer {
     data: Vec<u32>,
     buffer_up_to_date: bool,
-}
-
-impl Peripherals for NativeWindow {
-    type Display = WinBuffer;
-    type Sound = Sound;
-    type Input = Self;
-
-    fn display(&mut self) -> &mut Self::Display {
-        &mut self.buf
-    }
-
-    fn sound(&mut self) -> &mut Self::Sound {
-        unimplemented!()
-    }
-
-    fn input(&mut self) -> &mut Self::Input {
-        self
-    }
-}
-
-impl Display for WinBuffer {
-    fn set_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]) {
-        let offset = line_idx as usize * SCREEN_WIDTH;
-        for col in 0..SCREEN_WIDTH {
-            let [r, g, b] = pixels[col].to_srgb();
-            let combined = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
-            self.data[offset + col] = combined;
-        }
-        self.buffer_up_to_date = false;
-    }
-}
-
-
-// Dummy implementations
-
-pub(crate) struct Sound {
-
-}
-
-impl env::Sound for Sound {
-
 }
