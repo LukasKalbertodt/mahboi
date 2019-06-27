@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use log::LevelFilter;
-use minifb::Scale;
 use structopt::StructOpt;
 
 use mahboi::{
@@ -24,9 +23,9 @@ pub(crate) struct Args {
     #[structopt(
         long = "--scale",
         default_value = "4",
-        parse(try_from_str = "parse_scale"),
     )]
-    pub(crate) scale: Scale,
+    // TODO: add validator to have this positive!
+    pub(crate) scale: f32,
 
     /// Start in debugging mode (a TUI debugger). Not usable on Windows!
     #[structopt(
@@ -97,18 +96,6 @@ pub(crate) struct Args {
     pub(crate) bios: BiosKind,
 }
 
-fn parse_scale(src: &str) -> Result<Scale, &'static str> {
-    match src {
-        "1" => Ok(Scale::X1),
-        "2" => Ok(Scale::X2),
-        "4" => Ok(Scale::X4),
-        "8" => Ok(Scale::X8),
-        "16" => Ok(Scale::X16),
-        "32" => Ok(Scale::X32),
-        "fit" => Ok(Scale::FitScreen),
-        _ => Err("only '1', '2', '4', '8', '16', '32' or 'fit' are allowed"),
-    }
-}
 
 fn parse_breakpoint(src: &str) -> Result<Word, String> {
     u16::from_str_radix(src, 16)

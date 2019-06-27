@@ -526,9 +526,9 @@ pub const CYCLES_PER_FRAME: u64 = 17556;
 /// 32^3 = 32768 different colors.
 #[derive(Clone, Copy, Debug)]
 pub struct PixelColor {
-    r: u8,
-    g: u8,
-    b: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
 }
 
 impl PixelColor {
