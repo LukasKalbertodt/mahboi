@@ -92,7 +92,7 @@ impl InputController {
 /// - 6: Up
 /// - 7: Down (MSB)
 #[derive(Clone, Copy, Debug)]
-pub struct Keys(u8);
+pub struct Keys(pub u8);
 
 impl Keys {
     /// Creates an instance with no buttons pressed.
@@ -103,12 +103,14 @@ impl Keys {
 
     /// Sets the given key in this instance to the given state.
     #[inline(always)]
-    pub fn set_key(mut self, key: JoypadKey, is_pressed: bool) -> Self {
-        if is_pressed {
-            self.0 |= key as u8;
-        }
+    pub fn set_key(&mut self, key: JoypadKey) {
+        self.0 |= key as u8;
+    }
 
-        self
+    /// Sets the given key in this instance to the given state.
+    #[inline(always)]
+    pub fn unset_key(&mut self, key: JoypadKey) {
+        self.0 &= !(key as u8);
     }
 
     /// Returns the direction keys in the low nybble (the high nybble is 0).
