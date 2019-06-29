@@ -41,6 +41,11 @@ fn run() -> Result<(), Error> {
     // Parse CLI arguments
     let args = Args::from_args();
 
+    // env_logger::init();
+    let mut builder = env_logger::Builder::from_default_env();
+    builder.filter_module("mahboi", args.log_level);
+    builder.init();
+
     // Prepare everything
     // let mut tui_debugger = init_debugger(&args)?;
     let mut emulator = init_emulator(&args)?;
@@ -73,7 +78,7 @@ fn init_emulator(args: &Args) -> Result<Emulator, Error> {
     // Load ROM
     let rom = fs::read(&args.path_to_rom).context("failed to load ROM file")?;
     let cartridge = Cartridge::from_bytes(&rom);
-    info!("[desktop] Loaded: {:#?}", cartridge);
+    info!("Loaded: {:#?}", cartridge);
 
     // Create emulator
     Ok(Emulator::new(cartridge, args.bios))

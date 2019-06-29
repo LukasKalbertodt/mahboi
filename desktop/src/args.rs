@@ -75,14 +75,14 @@ pub(crate) struct Args {
     /// trace` will show all levels. You can also disable all log messages with
     /// `-l off`. Valid values: 'off', 'error', 'warn', 'info', 'debug' and
     /// 'trace'. Note that `trace` messages are statically disabled in release
-    /// builds and cannot be reenabled by this flag. [default: 'trace' in
-    /// `--debug` mode, 'error' otherwise]
+    /// builds and cannot be reenabled by this flag.
     #[structopt(
         long = "--log-level",
         short = "-l",
+        default_value = "error",
         parse(try_from_str = "parse_log_level"),
     )]
-    pub(crate) log_level: Option<LevelFilter>,
+    pub(crate) log_level: LevelFilter,
 
     /// Specifies which BIOS (boot ROM) to load. The original BIOS scrolls in
     /// the Nintendo logo and plays a sound. The minimal one skips all that and

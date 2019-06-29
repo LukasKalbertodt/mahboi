@@ -5,6 +5,7 @@ authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+env_logger = "0.6.0"
 failure = "0.1.2"
 glium = "0.25"
 lazy_static = "1.1"
