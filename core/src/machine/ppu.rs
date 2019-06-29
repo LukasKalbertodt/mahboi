@@ -773,12 +773,12 @@ impl Ppu {
             // color for the color number 0, bit2 and bit3 for color number 1
             // and so on.
             let color = (palette.get() >> (pattern * 2)) & 0b11;
-            PixelColor::from_greyscale(color)
+            PixelColor::from_cgb_greenish(color)
         }
 
 
         // ===== Draw ========================================================
-        let mut line = [PixelColor::from_greyscale(0); SCREEN_WIDTH];
+        let mut line = [PixelColor::from_color_word(Word::new(0)); SCREEN_WIDTH];
         let mut background_zero = [true; SCREEN_WIDTH]; // TODO: maybe use bit array
 
 

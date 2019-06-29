@@ -547,17 +547,30 @@ impl PixelColor {
         }
     }
 
-    /// Creates a color from a classic gameboy color (2 bit). The given `c`
-    /// value has to be 0, 1, 2 or 3.
+    /// Creates a greyscale color from a classic gameboy brightness value (2
+    /// bit). The given `c` value has to be 0, 1, 2 or 3.
     #[inline(always)]
-    pub fn from_greyscale(c: u8) -> Self {
-        assert!(c <= 3);
-        let v = (3 - c) << 3;
+    pub fn from_cgb_grey(c: u8) -> Self {
+        const VALUES: [u8; 4] = [31, 21, 10, 0];
+        let v = VALUES[c as usize];
         Self {
             r: v,
             g: v,
             b: v,
         }
+    }
+
+    /// Creates a green-ish color from a classic gameboy brightness value (2
+    /// bit). The given `c` value has to be 0, 1, 2 or 3.
+    #[inline(always)]
+    pub fn from_cgb_greenish(c: u8) -> Self {
+        const VALUES: [PixelColor; 4] = [
+            PixelColor { r: 25, g: 26, b: 20 },
+            PixelColor { r: 17, g: 19, b: 14 },
+            PixelColor { r: 10, g: 11, b:  8 },
+            PixelColor { r:  4, g:  4, b:  4 },
+        ];
+        VALUES[c as usize]
     }
 
     /// Creates a new `PixelColor` instance. `r`, `g` and `b` have to be
