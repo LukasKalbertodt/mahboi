@@ -15,7 +15,7 @@ use glium::{
     implement_vertex, uniform,
     glutin::{
         ContextBuilder, EventsLoop, WindowBuilder, WindowedContext, NotCurrent,
-        dpi::PhysicalSize,
+        dpi::{LogicalSize, PhysicalSize},
     },
     index::NoIndices,
     program::ProgramCreationInput,
@@ -99,6 +99,10 @@ fn run() -> Result<(), Error> {
             gb_screen: GbScreenBuffer::new(),
             emulation_rate: Mutex::new(TARGET_FPS),
             turbo_mode: AtomicBool::new(false),
+
+            // Dummy values that are overwritten later
+            window_dpi_factor: Mutex::new(1.0),
+            window_size: Mutex::new(LogicalSize::new(1.0, 1.0)),
         }),
     };
 
@@ -130,8 +134,12 @@ fn run() -> Result<(), Error> {
                 SCREEN_WIDTH as f64 * shared.state.args.scale,
                 SCREEN_HEIGHT as f64 * shared.state.args.scale,
             );
+            let size = size.to_logical(dpi_factor);
+            *shared.state.window_dpi_factor.lock().unwrap() = dpi_factor;
+            *shared.state.window_size.lock().unwrap() = size;
+
             let wb = WindowBuilder::new()
-                .with_dimensions(size.to_logical(dpi_factor))
+                .with_dimensions(size)
                 .with_resizable(true)
                 .with_title(WINDOW_TITLE);
 
@@ -231,6 +239,14 @@ fn input_thread(
         // Now handle window events.
         match event {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => send_action(Message::Quit),
+
+            WindowEvent::Resized(new_size) => {
+                *shared.state.window_size.lock().unwrap() = new_size;
+            }
+            WindowEvent::HiDpiFactorChanged(new_dpi_factor) => {
+                *shared.state.window_dpi_factor.lock().unwrap() = new_dpi_factor;
+            }
+
 
             // A key input that has a virtual keycode attached
             WindowEvent::KeyboardInput {
@@ -368,13 +384,30 @@ fn render_thread(
             0..1,
         );
 
+        // We need to find out the current physical window size to know how to
+        // stretch the texture.
+        let dpi_factor = *shared.state.window_dpi_factor.lock().unwrap();
+        let logical_size = *shared.state.window_size.lock().unwrap();
+        let physical_size = logical_size.to_physical(dpi_factor);
+        let scale_x = physical_size.width / SCREEN_WIDTH as f64;
+        let scale_y = physical_size.height / SCREEN_HEIGHT as f64;
+        let scale = if scale_x > scale_y { scale_y } else { scale_x };
+        let scale_factor = [(scale_x / scale) as f32, (scale_y / scale) as f32];
+
+
         // Draw the fullscreenquad to the framebuffer
         let mut target = display.draw();
+        target.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
+
+        let uniforms = uniform! {
+            scale_factor: scale_factor,
+            tex: &texture,
+        };
         target.draw(
             &vertex_buffer,
             &indices,
             &program,
-            &uniform! { tex: &texture },
+            &uniforms,
             &Default::default(),
         )?;
         target.finish()?;
@@ -587,4 +620,12 @@ struct SharedState {
 
     /// Whether we are currently in turbo mode.
     turbo_mode: AtomicBool,
+
+    /// The DPI factor of the window. This value is updated by the input
+    /// thread.
+    window_dpi_factor: Mutex<f64>,
+
+    /// The current logical size of the window. This value is updated by the
+    /// input thread.
+    window_size: Mutex<LogicalSize>,
 }
