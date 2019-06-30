@@ -4,7 +4,7 @@ use std::{
     sync::{
         Arc, Mutex, MutexGuard,
         mpsc::{channel, Sender},
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
     thread,
 };
@@ -93,9 +93,11 @@ fn run() -> Result<(), Error> {
     let shared = Shared {
         messages,
         state: Arc::new(SharedState {
+            args,
             keys: AtomicKeys::none(),
             gb_screen: GbScreenBuffer::new(),
             emulation_rate: Mutex::new(TARGET_FPS),
+            turbo_mode: AtomicBool::new(false),
         }),
     };
 
@@ -246,6 +248,10 @@ fn input_thread(
                     // Other non-Gameboy related functions
                     Key::Q if state == State::Pressed && modifiers.ctrl
                         => send_action(Message::Quit),
+
+                    Key::LShift => {
+                        shared.state.turbo_mode.store(state == State::Pressed, Ordering::SeqCst);
+                    }
 
                     _ => {}
                 }
@@ -412,6 +418,13 @@ fn emulator_thread(
         .build_with_target_rate(TARGET_FPS);
 
     loop {
+        let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
+            shared.state.args.turbo_mode_factor * TARGET_FPS
+        } else {
+            TARGET_FPS
+        };
+        loop_helper.set_target_rate(target_rate);
+
         loop_helper.loop_start();
 
         // Lock the buffer for the whole emulation step.
@@ -543,6 +556,9 @@ struct Shared {
 }
 
 struct SharedState {
+    /// The command line arguments.
+    args: Args,
+
     /// The Gameboy keys currently being pressed.
     keys: AtomicKeys,
 
@@ -553,4 +569,7 @@ struct SharedState {
     /// The current rate of emulation in FPS. Should be `TARGET_FPS` or at
     /// least very close to it.
     emulation_rate: Mutex<f64>,
+
+    /// Whether we are currently in turbo mode.
+    turbo_mode: AtomicBool,
 }
