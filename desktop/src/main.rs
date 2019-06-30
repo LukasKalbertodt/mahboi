@@ -23,6 +23,7 @@ use glium::{
         pixel_buffer::PixelBuffer,
     },
 };
+use spin_sleep::LoopHelper;
 use structopt::StructOpt;
 
 use mahboi::{
@@ -42,7 +43,7 @@ mod args;
 // mod debug;
 
 
-const TARGET_FPS: f64 = 59.73;
+const TARGET_FPS: f64 = 59.7275;
 const WINDOW_TITLE: &str = "Mahboi";
 
 
@@ -132,15 +133,17 @@ fn run() -> Result<(), Error> {
 
 
     // ----- Render Thread ---------------------------------------------------
+    let emulator_rate = Arc::new(Mutex::new(0.0f64));
     {
         // Clonse arc and sender.
         let gb_buffer = gb_buffer.clone();
+        let emulator_rate = emulator_rate.clone();
         let messages = messages.clone();
 
         thread::spawn(move || {
             // There could actually go something wrong in the render thread. If
             // that's the case, we send an action to the main thread.
-            let result = render_thread(context, gb_buffer);
+            let result = render_thread(context, gb_buffer, emulator_rate);
             if let Err(e) = result {
                 messages.send(Message::RenderError(e)).unwrap();
             }
@@ -152,10 +155,11 @@ fn run() -> Result<(), Error> {
         // Clonse arcs and sender.
         let gb_buffer = gb_buffer.clone();
         let keys = keys.clone();
+        let emulator_rate = emulator_rate.clone();
         let messages = messages.clone();
 
         thread::spawn(|| {
-            emulator_thread(emulator, gb_buffer, keys, messages);
+            emulator_thread(emulator, gb_buffer, keys, emulator_rate, messages);
         });
     }
 
@@ -267,6 +271,7 @@ fn input_thread(
 fn render_thread(
     context: WindowedContext<NotCurrent>,
     gb_buffer: Arc<GbScreenBuffer>,
+    emulator_rate: Arc<Mutex<f64>>,
 ) -> Result<(), Error> {
     let display = Display::from_gl_window(context)?;
 
@@ -325,8 +330,13 @@ fn render_thread(
         }
     )?;
 
+    let mut loop_helper = LoopHelper::builder()
+        .report_interval_s(0.25)
+        .build_without_target_rate();
 
     loop {
+        loop_helper.loop_start();
+
         // We map the pixel buffer and write directly to it.
         {
             let mut pixel_buffer = pixel_buffer.map_write();
@@ -355,7 +365,25 @@ fn render_thread(
         )?;
         target.finish()?;
 
+        // We try really hard to make OpenGL sync here. We want to avoid OpenGL
+        // rendering several frames in advance as this drives up the input lag.
+        let fence = glium::SyncFence::new(&display).unwrap();
+        fence.wait();
         display.finish();
+
+        // Potentially update the window title to show the current speed.
+        if let Some(ogl_fps) = loop_helper.report_rate() {
+            let emu_fps = *emulator_rate.lock().unwrap();
+            let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
+            let title = format!(
+                "{} (emulator: {:.1} FPS / {:3}%, openGL: {:.1} FPS)",
+                WINDOW_TITLE,
+                emu_fps,
+                emu_percent.round(),
+                ogl_fps,
+            );
+            display.gl_window().window().set_title(&title);
+        }
     }
 }
 
@@ -367,9 +395,9 @@ fn emulator_thread(
     mut emulator: Emulator,
     gb_buffer: Arc<GbScreenBuffer>,
     keys: Arc<AtomicKeys>,
+    emulator_rate: Arc<Mutex<f64>>,
     messages: Sender<Message>,
 ) {
-
     /// This is what we pass to the emulator.
     struct DesktopPeripherals<'a> {
         back_buffer: MutexGuard<'a, Vec<PixelColor>>,
@@ -389,7 +417,13 @@ fn emulator_thread(
     }
 
     // Run forever, until an error occurs.
+    let mut loop_helper = LoopHelper::builder()
+        .report_interval_s(0.25)
+        .build_with_target_rate(TARGET_FPS);
+
     loop {
+        loop_helper.loop_start();
+
         let mut back = gb_buffer.back.lock().expect("[T-emu] failed to lock back buffer");
 
         // Swap both buffers
@@ -413,6 +447,12 @@ fn emulator_thread(
             }
             _ => {}
         }
+
+        if let Some(fps) = loop_helper.report_rate() {
+            *emulator_rate.lock().unwrap() = fps;
+        }
+
+        loop_helper.loop_sleep();
     }
 }
 
