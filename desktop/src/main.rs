@@ -89,9 +89,15 @@ fn run() -> Result<(), Error> {
 
     // ----- Input Thread ----------------------------------------------------
     // These three instances are shared across all threads.
-    let keys = Arc::new(AtomicKeys::none());
-    let gb_buffer = Arc::new(GbScreenBuffer::new());
     let (messages, incoming_messages) = channel();
+    let shared = Shared {
+        messages,
+        state: Arc::new(SharedState {
+            keys: AtomicKeys::none(),
+            gb_screen: GbScreenBuffer::new(),
+            emulation_rate: Mutex::new(TARGET_FPS),
+        }),
+    };
 
     // Here we start the input thread. It's a bit awkward because the input
     // thread needs the `EventsLoop`, but this type cannot be sent to new
@@ -100,9 +106,8 @@ fn run() -> Result<(), Error> {
     // also cannot be transferred across threads. Luckily, we can build a
     // glutin context already and transfer it across threads.
     let context = {
-        // Clone arcs and sender.
-        let keys = keys.clone();
-        let messages = messages.clone();
+        // Create a new handle to the shared values.
+        let shared = shared.clone();
 
         // Even more awkward: to send the glutin context back to the main
         // thread, we cannot just return it, because the input thread runs
@@ -124,7 +129,7 @@ fn run() -> Result<(), Error> {
             tx.send(context).unwrap();
 
             // Start polling input events (forever)
-            input_thread(events_loop, keys, messages);
+            input_thread(events_loop, shared);
         });
 
         // Receive the context from the thread.
@@ -133,36 +138,22 @@ fn run() -> Result<(), Error> {
 
 
     // ----- Render Thread ---------------------------------------------------
-    let emulator_rate = Arc::new(Mutex::new(0.0f64));
     {
-        // Clonse arc and sender.
-        let gb_buffer = gb_buffer.clone();
-        let emulator_rate = emulator_rate.clone();
-        let messages = messages.clone();
+        // Create a new handle to the shared values.
+        let shared = shared.clone();
 
         thread::spawn(move || {
             // There could actually go something wrong in the render thread. If
             // that's the case, we send an action to the main thread.
-            let result = render_thread(context, gb_buffer, emulator_rate);
+            let result = render_thread(context, shared.clone());
             if let Err(e) = result {
-                messages.send(Message::RenderError(e)).unwrap();
+                shared.messages.send(Message::RenderError(e)).unwrap();
             }
         });
     }
 
     // ----- Emulator Thread -------------------------------------------------
-    {
-        // Clonse arcs and sender.
-        let gb_buffer = gb_buffer.clone();
-        let keys = keys.clone();
-        let emulator_rate = emulator_rate.clone();
-        let messages = messages.clone();
-
-        thread::spawn(|| {
-            emulator_thread(emulator, gb_buffer, keys, emulator_rate, messages);
-        });
-    }
-
+    thread::spawn(move || emulator_thread(emulator, shared));
 
 
 
@@ -192,21 +183,21 @@ fn run() -> Result<(), Error> {
 /// sending messages to the main thread.
 fn input_thread(
     mut events_loop: EventsLoop,
-    keys: Arc<AtomicKeys>,
-    messages: Sender<Message>,
+    shared: Shared,
 ) {
     use glium::glutin::{
         ControlFlow, ElementState as State, Event, KeyboardInput,
         VirtualKeyCode as Key, WindowEvent,
     };
 
-    // Mini helper function
-    let send_action = |action| {
-        messages.send(action)
-            .expect("failed to send input action: input thread will panic now");
-    };
-
     events_loop.run_forever(move |event| {
+        // Mini helper function
+        let send_action = |action| {
+            shared.messages.send(action)
+                .expect("failed to send input action: input thread will panic now");
+        };
+
+
         // First, we extract the inner window event as that's what we are
         // interested in.
         let event = match event {
@@ -229,6 +220,8 @@ fn input_thread(
                 input: KeyboardInput { virtual_keycode: Some(key), state, modifiers, .. },
                 ..
             } => {
+                let keys = &shared.state.keys;
+
                 match key {
                     // Button keys
                     Key::M if state == State::Pressed => keys.set_key(JoypadKey::Start),
@@ -270,8 +263,7 @@ fn input_thread(
 /// refresh rate.
 fn render_thread(
     context: WindowedContext<NotCurrent>,
-    gb_buffer: Arc<GbScreenBuffer>,
-    emulator_rate: Arc<Mutex<f64>>,
+    shared: Shared,
 ) -> Result<(), Error> {
     let display = Display::from_gl_window(context)?;
 
@@ -340,7 +332,8 @@ fn render_thread(
         // We map the pixel buffer and write directly to it.
         {
             let mut pixel_buffer = pixel_buffer.map_write();
-            let front = gb_buffer.front.lock().expect("failed to lock front buffer");
+            let front = shared.state.gb_screen.front.lock()
+                .expect("failed to lock front buffer");
             for (i, &PixelColor { r, g, b }) in front.iter().enumerate() {
                 pixel_buffer.set(i, (r, g, b));
             }
@@ -373,7 +366,7 @@ fn render_thread(
 
         // Potentially update the window title to show the current speed.
         if let Some(ogl_fps) = loop_helper.report_rate() {
-            let emu_fps = *emulator_rate.lock().unwrap();
+            let emu_fps = *shared.state.emulation_rate.lock().unwrap();
             let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
             let title = format!(
                 "{} (emulator: {:.1} FPS / {:3}%, openGL: {:.1} FPS)",
@@ -393,10 +386,7 @@ fn render_thread(
 /// unusual fashion, a `Quit` message is send to the main thread.
 fn emulator_thread(
     mut emulator: Emulator,
-    gb_buffer: Arc<GbScreenBuffer>,
-    keys: Arc<AtomicKeys>,
-    emulator_rate: Arc<Mutex<f64>>,
-    messages: Sender<Message>,
+    shared: Shared,
 ) {
     /// This is what we pass to the emulator.
     struct DesktopPeripherals<'a> {
@@ -425,19 +415,20 @@ fn emulator_thread(
         loop_helper.loop_start();
 
         // Lock the buffer for the whole emulation step.
-        let back = gb_buffer.back.lock().expect("[T-emu] failed to lock back buffer");
+        let back = shared.state.gb_screen.back.lock()
+            .expect("[T-emu] failed to lock back buffer");
 
         // Run the emulator
         let mut peripherals = DesktopPeripherals {
             back_buffer: back,
-            keys: &keys,
+            keys: &shared.state.keys,
         };
         let res = emulator.execute_frame(&mut peripherals, |_| false);
 
         // React to abnormal disruptions
         match res {
             Err(Disruption::Terminated) => {
-                messages.send(Message::Quit).unwrap();
+                shared.messages.send(Message::Quit).unwrap();
                 break;
             }
 
@@ -446,7 +437,7 @@ fn emulator_thread(
             Ok(true) => {
                 // Swap both buffers
                 {
-                    let mut front = gb_buffer.front.lock()
+                    let mut front = shared.state.gb_screen.front.lock()
                         .expect("[T-emu] failed to lock front buffer");
                     mem::swap(&mut *front, &mut *peripherals.back_buffer);
                 }
@@ -458,7 +449,7 @@ fn emulator_thread(
         drop(peripherals.back_buffer);
 
         if let Some(fps) = loop_helper.report_rate() {
-            *emulator_rate.lock().unwrap() = fps;
+            *shared.state.emulation_rate.lock().unwrap() = fps;
         }
 
         loop_helper.loop_sleep();
@@ -538,4 +529,28 @@ impl GbScreenBuffer {
             back: Mutex::new(buf),
         }
     }
+}
+
+
+
+#[derive(Clone)]
+struct Shared {
+    /// A channel to send messages to the main thread.
+    messages: Sender<Message>,
+
+    /// Several different things.
+    state: Arc<SharedState>,
+}
+
+struct SharedState {
+    /// The Gameboy keys currently being pressed.
+    keys: AtomicKeys,
+
+    /// Front and back buffer for the gameboy screen (has nothing to do with
+    /// OpenGL).
+    gb_screen: GbScreenBuffer,
+
+    /// The current rate of emulation in FPS. Should be `TARGET_FPS` or at
+    /// least very close to it.
+    emulation_rate: Mutex<f64>,
 }
