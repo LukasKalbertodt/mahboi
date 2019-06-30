@@ -21,7 +21,7 @@ mod mbc5;
 /// This part of the cartridge controls all writes and reads to and from ROM
 /// and external RAM. Usually, some kind of banking strategy is used to store
 /// more than `0x8000` bytes on the cartridge.
-pub(crate) trait Mbc {
+pub(crate) trait Mbc: Send + Sync {
     /// Loads one byte from the cartridge ROM. The `addr` has to be between `0`
     /// and `0x8000`.
     fn load_rom_byte(&self, addr: Word) -> Byte;

@@ -532,6 +532,11 @@ pub struct PixelColor {
 }
 
 impl PixelColor {
+    /// Returns an instance that represents the black color.
+    pub fn black() -> Self {
+        Self::new(0, 0, 0)
+    }
+
     /// Decodes the color in the word, which is encoded like this:
     ///
     /// - Bit 0 - 4: Red
