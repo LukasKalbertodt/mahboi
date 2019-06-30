@@ -61,16 +61,18 @@ impl Emulator {
         &self.machine
     }
 
-    /// Executes until the end of one frame (in most cases exactly 17,556 cycles)
+    /// Executes until V-Blank is entered, but at most 17,556 cycles.
     ///
-    /// After executing this once, the emulator has written a new frame via the display
-    /// (defined as peripherals) and the display buffer can be written to the actual display.
+    /// Returns `true` if this function stopped due to reaching V-Blank (most
+    /// of the case). If `false` is reached that means that the LCD was
+    /// recently disabled. The screen buffer of the peripherals should only be
+    /// written to the actual display if `true` is returned.
     #[inline(never)]
     pub fn execute_frame(
         &mut self,
         peripherals: &mut impl Peripherals,
         mut should_pause: impl FnMut(&Machine) -> bool,
-    ) -> Result<(), Disruption> {
+    ) -> Result<bool, Disruption> {
         let mut cycles = 0;
         loop {
             if should_pause(&self.machine) {
@@ -108,7 +110,7 @@ impl Emulator {
             // If we just entered V-Blank, we will return. This is here to get
             // the PPU and real Display synchronized.
             if !vblank_before && self.machine.ppu.regs().mode() == Mode::VBlank {
-                break;
+                return Ok(true);
             }
 
             // This is just a fallback for the case that the LCD is disabled
@@ -117,11 +119,9 @@ impl Emulator {
             // return after a fixed number of cycles regardless.
             cycles += cycles_spent as u64;
             if cycles >= CYCLES_PER_FRAME {
-                break;
+                return Ok(false);
             }
         }
-
-        Ok(())
     }
 }
 

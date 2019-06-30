@@ -424,13 +424,8 @@ fn emulator_thread(
     loop {
         loop_helper.loop_start();
 
-        let mut back = gb_buffer.back.lock().expect("[T-emu] failed to lock back buffer");
-
-        // Swap both buffers
-        {
-            let mut front = gb_buffer.front.lock().expect("[T-emu] failed to lock front buffer");
-            mem::swap(&mut *front, &mut *back);
-        }
+        // Lock the buffer for the whole emulation step.
+        let back = gb_buffer.back.lock().expect("[T-emu] failed to lock back buffer");
 
         // Run the emulator
         let mut peripherals = DesktopPeripherals {
@@ -445,8 +440,22 @@ fn emulator_thread(
                 messages.send(Message::Quit).unwrap();
                 break;
             }
+
+            // This means that the emulator reached V-Blank and we want to
+            // present the buffer we just wrote to the actual display.
+            Ok(true) => {
+                // Swap both buffers
+                {
+                    let mut front = gb_buffer.front.lock()
+                        .expect("[T-emu] failed to lock front buffer");
+                    mem::swap(&mut *front, &mut *peripherals.back_buffer);
+                }
+            }
             _ => {}
         }
+
+        // Release the lock as soon as possible.
+        drop(peripherals.back_buffer);
 
         if let Some(fps) = loop_helper.report_rate() {
             *emulator_rate.lock().unwrap() = fps;
