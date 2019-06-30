@@ -15,6 +15,7 @@ use glium::{
     implement_vertex, uniform,
     glutin::{
         ContextBuilder, EventsLoop, WindowBuilder, WindowedContext, NotCurrent,
+        dpi::PhysicalSize,
     },
     index::NoIndices,
     program::ProgramCreationInput,
@@ -119,8 +120,22 @@ fn run() -> Result<(), Error> {
         thread::spawn(move || {
             // Create the main events loop, a window and a context.
             let events_loop = EventsLoop::new();
+
+            // Configure window
+            //
+            // TODO: this might be wrong when the window is not created on the
+            // primary monitor. No idea if that can happen.
+            let dpi_factor = events_loop.get_primary_monitor().get_hidpi_factor();
+            let size = PhysicalSize::new(
+                SCREEN_WIDTH as f64 * shared.state.args.scale,
+                SCREEN_HEIGHT as f64 * shared.state.args.scale,
+            );
             let wb = WindowBuilder::new()
+                .with_dimensions(size.to_logical(dpi_factor))
+                .with_resizable(true)
                 .with_title(WINDOW_TITLE);
+
+            // Configure and GL context
             let cb = ContextBuilder::new()
                 .with_vsync(true);
             let context = cb.build_windowed(wb, &events_loop);

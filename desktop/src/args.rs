@@ -17,15 +17,14 @@ use mahboi::{
 /// used to speed up the emulation.
 #[derive(Debug, StructOpt)]
 pub(crate) struct Args {
-    /// Set the scale factor for the window: 1, 2, 4, 8, 16, 32 or 'fit'
-    /// (automatically chooses the largest scale factor that still fits on the
-    /// screen).
+    /// Set the scale factor for the window. You can still resize the window
+    /// when the application is running. Value has to be greater than 0.
     #[structopt(
         long = "--scale",
         default_value = "4",
+        raw(validator = "check_scale"),
     )]
-    // TODO: add validator to have this positive!
-    pub(crate) scale: f32,
+    pub(crate) scale: f64,
 
     /// Start in debugging mode (a TUI debugger). Not usable on Windows!
     #[structopt(
@@ -127,5 +126,13 @@ fn parse_bios_kind(src: &str) -> Result<BiosKind, &'static str> {
         "original" => Ok(BiosKind::Original),
         "minimal" => Ok(BiosKind::Minimal),
         _ => Err("invalid bios kind (valid values: 'original' and 'minimal')"),
+    }
+}
+
+fn check_scale(src: String) -> Result<(), String> {
+    match src.parse::<f64>() {
+        Err(e) => Err(format!("failed to parse '{}' as `f64`: {}", src, e)),
+        Ok(v) if v > 0.0 => Ok(()),
+        Ok(v) => Err(format!("has to be greater than 0, but {} is not", v)),
     }
 }
