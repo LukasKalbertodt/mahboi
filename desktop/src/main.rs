@@ -305,8 +305,8 @@ fn render_thread(
     let display = Display::from_gl_window(context)?;
 
     // Create the pixel buffer and initialize all pixels with black.
-    let mut pixel_buffer = PixelBuffer::new_empty(&display, SCREEN_WIDTH * SCREEN_HEIGHT);
-    pixel_buffer.write(&vec![(0, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT]);
+    let pixel_buffer = PixelBuffer::new_empty(&display, SCREEN_WIDTH * SCREEN_HEIGHT);
+    pixel_buffer.write(&vec![(0u8, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT]);
 
     // Create an empty, uninitialized texture
     let texture = UnsignedTexture2d::empty_with_format(
@@ -368,12 +368,9 @@ fn render_thread(
 
         // We map the pixel buffer and write directly to it.
         {
-            let mut pixel_buffer = pixel_buffer.map_write();
             let front = shared.state.gb_screen.front.lock()
                 .expect("failed to lock front buffer");
-            for (i, &PixelColor { r, g, b }) in front.iter().enumerate() {
-                pixel_buffer.set(i, (r, g, b));
-            }
+            pixel_buffer.write(&**front);
         }
 
         // We update the texture data by uploading our pixel buffer.
@@ -444,7 +441,7 @@ fn emulator_thread(
 ) {
     /// This is what we pass to the emulator.
     struct DesktopPeripherals<'a> {
-        back_buffer: MutexGuard<'a, Vec<PixelColor>>,
+        back_buffer: MutexGuard<'a, Vec<(u8, u8, u8)>>,
         keys: &'a AtomicKeys,
     }
 
@@ -456,7 +453,9 @@ fn emulator_thread(
         fn write_lcd_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]) {
             let start = line_idx as usize * SCREEN_WIDTH;
             let end = start + SCREEN_WIDTH;
-            self.back_buffer[start..end].copy_from_slice(pixels);
+            for (src, dst) in pixels.iter().zip(&mut self.back_buffer[start..end]) {
+                *dst = (src.r, src.g, src.b);
+            }
         }
     }
 
@@ -575,16 +574,16 @@ enum Message {
 /// whenever the host system can render a new frame.
 struct GbScreenBuffer {
     /// The buffer the render thread reads from.
-    front: Mutex<Vec<PixelColor>>,
+    front: Mutex<Vec<(u8, u8, u8)>>,
 
     /// The buffer the emulation thread writes into.
-    back: Mutex<Vec<PixelColor>>,
+    back: Mutex<Vec<(u8, u8, u8)>>,
 }
 
 impl GbScreenBuffer {
     /// Two black buffers.
     fn new() -> Self {
-        let buf = vec![PixelColor::black(); SCREEN_WIDTH * SCREEN_HEIGHT];
+        let buf = vec![(0, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT];
         Self {
             front: Mutex::new(buf.clone()),
             back: Mutex::new(buf),
