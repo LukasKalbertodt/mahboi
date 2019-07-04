@@ -25,6 +25,7 @@ pub mod input;
 mod timer;
 
 
+#[derive(Debug)]
 pub struct Machine {
     pub cpu: Cpu,
 

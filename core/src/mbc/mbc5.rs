@@ -9,6 +9,7 @@ use super::Mbc;
 ///
 /// With this controller, the cartridge can have up to 8MiB of ROM and up to
 /// 128KiB of external RAM.
+#[derive(Debug, Clone)]
 pub(crate) struct Mbc5 {
     rom: Box<[Byte]>,
     ram: Box<[Byte]>,

@@ -11,6 +11,7 @@ use super::Mbc;
 /// are completely ignored.
 ///
 /// These cartridges might have extern RAM, though (however, at most 8KiB).
+#[derive(Debug, Clone)]
 pub(crate) struct NoMbc {
     rom: Box<[Byte]>,
     ram: Box<[Byte]>,

@@ -6,6 +6,7 @@ use crate::{
 
 
 /// Manages the input from the Joypad. This is mapped to 0xFF00 in the Memory.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct InputController {
     // TODO: Implement Joypad Interrupt
     register: Byte,

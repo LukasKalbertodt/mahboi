@@ -3,6 +3,7 @@ use crate::primitives::{Byte, Word};
 
 /// Manages the IE and IF register as well as the IME flag. This type is also responsible for
 /// requesting interrupts and giving information about when an interrupt should be executed.
+#[derive(Debug, Clone, Copy)]
 pub struct InterruptController {
     /// Register to enable certain interrupts. The bits in the register belong to the following
     /// interrupts:

@@ -465,6 +465,7 @@ impl Display for Word {
 
 
 /// A chunk of Gameboy memory. Can be indexed by `Word`.
+#[derive(Debug, Clone)]
 pub struct Memory(Box<[Byte]>);
 
 impl Memory {
