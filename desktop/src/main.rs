@@ -9,7 +9,7 @@ use std::{
     thread,
 };
 
-use failure::{Error, ResultExt};
+use failure::{bail, Error, ResultExt};
 use glium::{
     Display, Program, VertexBuffer, Surface,
     implement_vertex, uniform,
@@ -307,6 +307,19 @@ fn render_thread(
 ) -> Result<(), Error> {
     let display = Display::from_gl_window(context)?;
 
+    // We need to load some raw OpenGL functions that we are gonna use later.
+    // Of course, glium already loaded everything, but it does not let us
+    // access those, so we need to use `gl`.
+    unsafe {
+        display.exec_in_context(|| {
+            let mut loader = |symbol| display.gl_window().get_proc_address(symbol) as *const _;
+            gl::GetError::load_with(&mut loader);
+            gl::GetIntegerv::load_with(&mut loader);
+            gl::ReadBuffer::load_with(&mut loader);
+            gl::ReadPixels::load_with(&mut loader);
+        });
+    }
+
     // Create the pixel buffer and initialize all pixels with black.
     let pixel_buffer = PixelBuffer::new_empty(&display, SCREEN_WIDTH * SCREEN_HEIGHT);
     pixel_buffer.write(&vec![(0u8, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT]);
@@ -433,20 +446,54 @@ fn render_thread(
             &uniforms,
             &Default::default(),
         )?;
-        display.finish();
 
 
         wait!();
         let after_draw = Instant::now();
 
+        // We swap buffers to present the finished framebuffer.
+        //
+        // But there is a little problem. We want OpenGL to wait now until
+        // vblank (on the host system) has happened, i.e. we want this function
+        // to block. But even with vsync enabled, it doesn't. We could also
+        // call `glFinish` which promises to block until all OpenGL operations
+        // are done, but this function is incorrectly implemented in many
+        // drivers! Usually, `glFinish` is a bad idea beause it hurts rendering
+        // performance. But we don't care about this, we mostly care about
+        // latency. So we really want to block here.
+        //
+        // The most reliable way to do that is to read from the front buffer.
+        // That forces OpenGL to wait until that every operation that was
+        // submitted before this read has completed. We only read a single
+        // pixel and do not use that value, but this forces synchronization.
         target.finish()?;
-        let pixels: Vec<Vec<(u8, u8, u8, u8)>> = display.read_front_buffer().unwrap();
-        println!("{} after swap, front buffer = {:?}", shared.state.timer, pixels[0][0]);
+        // glium::SyncFence::new(&display).unwrap().wait();
+        // let pixels: Vec<Vec<(u8, u8, u8, u8)>> = display.read_front_buffer().unwrap();
+        let pixel = unsafe {
+            display.exec_in_context(|| {
+                // Get the currently bound `READ_BUFFER`
+                let mut read_buffer_before: gl::types::GLint = 0;
+                gl::GetIntegerv(gl::READ_BUFFER, &mut read_buffer_before);
 
-        // We try really hard to make OpenGL sync here. We want to avoid OpenGL
-        // rendering several frames in advance as this drives up the input lag.
-        glium::SyncFence::new(&display).unwrap().wait();
-        // display.finish();
+                // Bind the front buffer and read one pixel from it
+                gl::ReadBuffer(gl::FRONT);
+                let mut pixel = [0u8; 4];
+                let out_ptr = &mut pixel as *mut _ as *mut std::ffi::c_void;
+                gl::ReadPixels(0, 0, 1, 1, gl::RGBA, gl::UNSIGNED_BYTE, out_ptr);
+
+                // Bind the old buffer again (glium requires us to)
+                gl::ReadBuffer(read_buffer_before as gl::types::GLenum);
+
+                // There shouldn't be an error, but let's make sure.
+                let e = gl::GetError();
+                if e != 0 {
+                    bail!("unexpected OpenGL error {}", e);
+                }
+
+                Ok(pixel)
+            })?
+        };
+        println!("{} after swap, front buffer = {:?}", shared.state.timer, pixel);
 
         let after_finish = Instant::now();
 
