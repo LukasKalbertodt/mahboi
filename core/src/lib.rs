@@ -2,6 +2,8 @@
 
 #![feature(exclusive_range_pattern)]
 
+#![deny(missing_debug_implementations)]
+
 
 use crate::{
     env::Peripherals,
@@ -44,6 +46,7 @@ pub enum BiosKind {
 }
 
 
+#[derive(Debug)]
 pub struct Emulator {
     machine: Machine,
 }
@@ -127,6 +130,7 @@ impl Emulator {
 
 
 /// Describes the special situation when the emulator stops unexpectedly.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Disruption {
     /// The emulator was paused, usually due to hitting a breakpoint. This
     /// means the emulator can be resumed.

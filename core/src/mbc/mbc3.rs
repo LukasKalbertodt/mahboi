@@ -9,6 +9,7 @@ use super::Mbc;
 
 /// Third version of the memory bank controller. In contrast to all other MBCs,
 /// this one can have a real time clock (RTC).
+#[derive(Debug, Clone)]
 pub(crate) struct Mbc3 {
     rom: Box<[Byte]>,
     ram: Box<[Byte]>,
@@ -213,6 +214,7 @@ impl Mbc for Mbc3 {
 
 
 /// Everything related to the real time clock (RTC).
+#[derive(Debug, Clone, Copy)]
 struct RtcRegisters {
     /// Range 0 -- 59
     secs: Byte,

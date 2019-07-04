@@ -6,6 +6,7 @@ use crate::{
 
 /// Manages four timer registers and is responsible for triggering the timer
 /// interrupt.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Timer {
     /// FF04 DIV: Counting up at a rate of 16384Hz.
     divider: Byte,

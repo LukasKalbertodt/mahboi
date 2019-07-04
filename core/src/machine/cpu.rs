@@ -3,6 +3,7 @@ use crate::{
 };
 
 
+#[derive(Debug, Clone, Copy)]
 pub struct Cpu {
     /// Accumulator
     pub a: Byte,

@@ -34,6 +34,7 @@ const SPRITE_WIDTH: u8 = 8;
 
 
 /// The (public) registers inside of the PPU.
+#[derive(Debug, Clone, Copy)]
 pub struct PpuRegisters {
     /// `0xFF40`: LCD control. All bits can be written.
     ///
@@ -237,6 +238,7 @@ impl PpuRegisters {
 
 /// The memory area in VRAM where a tile map is stored (the index into the tile
 /// data array).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileMapArea {
     /// Stored in `0x9800` - `0x9BFF`.
     Low,
@@ -272,6 +274,7 @@ impl fmt::Display for TileMapArea {
 
 /// The memory area in VRAM where tile data is stored (the actual pixel data
 /// for the 8x8 tiles).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileDataArea {
     /// Stored in `0x8000` - `0x8FFF`.
     Low,
@@ -320,6 +323,7 @@ impl fmt::Display for TileDataArea {
 }
 
 /// Pixel processing unit.
+#[derive(Debug, Clone)]
 pub struct Ppu {
     pub vram: Memory,
     pub oam: Memory,

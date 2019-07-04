@@ -4,7 +4,10 @@
 //! all instructions. It is stored in two 256-element long arrays -- one for
 //! the main instructions and one for all PREFIX CB instructions.
 
-use std::ops::Index;
+use std::{
+    fmt,
+    ops::Index,
+};
 
 use crate::primitives::Byte;
 
@@ -77,12 +80,19 @@ impl Instr {
 
 /// Simple wrapper to make the static array indexable with `Byte` instead of
 /// `usize`.
+#[derive(Clone)]
 pub struct InstrDb<T>([T; 256]);
 
 impl<T> Index<Byte> for InstrDb<T> {
     type Output = T;
     fn index(&self, idx: Byte) -> &Self::Output {
         &self.0[idx.get() as usize]
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for InstrDb<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_list().entries(self.0.iter()).finish()
     }
 }
 
