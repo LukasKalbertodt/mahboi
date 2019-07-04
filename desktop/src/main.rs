@@ -381,11 +381,11 @@ fn render_thread(
 
     macro_rules! wait {
         () => {
-            // glium::SyncFence::new(&display).unwrap().wait();
+            glium::SyncFence::new(&display).unwrap().wait();
+            display.finish();
         };
     }
 
-    use std::time::Instant;
 
     println!(
         "{: >10} {: >10} {: >10} {: >10}",
@@ -404,7 +404,7 @@ fn render_thread(
             let front = shared.state.gb_screen.front.lock()
                 .expect("failed to lock front buffer");
             pixel_buffer.write(&**front);
-            println!("{} wrote to PBO (color = {:?})", shared.state.timer, front[0]);
+            // println!("{} wrote to PBO (color = {:?})", shared.state.timer, front[0]);
         }
         wait!();
         let after_pbo = Instant::now();
@@ -493,17 +493,17 @@ fn render_thread(
                 Ok(pixel)
             })?
         };
-        println!("{} after swap, front buffer = {:?}", shared.state.timer, pixel);
+        // println!("{} after swap, front buffer = {:?}", shared.state.timer, pixel);
+
 
         let after_finish = Instant::now();
-
-        // println!(
-        //     "{: >10} {: >10} {: >10} {: >10}",
-        //     format!("{:.2?}", after_pbo - start),
-        //     format!("{:.2?}", after_upload - after_pbo),
-        //     format!("{:.2?}", after_draw - after_upload),
-        //     format!("{:.2?}", after_finish - after_draw),
-        // );
+        println!(
+            "{: >10} {: >10} {: >10} {: >10}",
+            format!("{:.2?}", after_pbo - start),
+            format!("{:.2?}", after_upload - after_pbo),
+            format!("{:.2?}", after_draw - after_upload),
+            format!("{:.2?}", after_finish - after_draw),
+        );
 
         // Potentially update the window title to show the current speed.
         if let Some(ogl_fps) = loop_helper.report_rate() {
@@ -569,22 +569,22 @@ fn emulator_thread(
             .expect("[T-emu] failed to lock back buffer");
 
         // Run the emulator
-        println!(
-            "{} about to emulate frame, keys = {:08b}",
-            shared.state.timer,
-            shared.state.keys.as_keys().0,
-        );
+        // println!(
+        //     "{} about to emulate frame, keys = {:08b}",
+        //     shared.state.timer,
+        //     shared.state.keys.as_keys().0,
+        // );
         let mut peripherals = DesktopPeripherals {
             back_buffer: back,
             keys: &shared.state.keys,
         };
         let res = emulator.execute_frame(&mut peripherals, |_| false);
-        println!(
-            "{} done emulating frame, res = {:?}, back buf = {:?}",
-            shared.state.timer,
-            res,
-            peripherals.back_buffer[0],
-        );
+        // println!(
+        //     "{} done emulating frame, res = {:?}, back buf = {:?}",
+        //     shared.state.timer,
+        //     res,
+        //     peripherals.back_buffer[0],
+        // );
 
         // React to abnormal disruptions
         match res {
