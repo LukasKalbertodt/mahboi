@@ -103,6 +103,8 @@ fn run() -> Result<(), Error> {
             // Dummy values that are overwritten later
             window_dpi_factor: Mutex::new(1.0),
             window_size: Mutex::new(LogicalSize::new(1.0, 1.0)),
+
+            timer: Timer::new(),
         }),
     };
 
@@ -254,6 +256,7 @@ fn input_thread(
                 ..
             } => {
                 let keys = &shared.state.keys;
+                println!("{} key {:?} {:?}", shared.state.timer, key, state);
 
                 match key {
                     // Button keys
@@ -388,6 +391,7 @@ fn render_thread(
             let front = shared.state.gb_screen.front.lock()
                 .expect("failed to lock front buffer");
             pixel_buffer.write(&**front);
+            println!("{} wrote to PBO (color = {:?})", shared.state.timer, front[0]);
         }
         wait!();
         let after_pbo = Instant::now();
@@ -437,6 +441,7 @@ fn render_thread(
 
         target.finish()?;
         let pixels: Vec<Vec<(u8, u8, u8, u8)>> = display.read_front_buffer().unwrap();
+        println!("{} after swap, front buffer = {:?}", shared.state.timer, pixels[0][0]);
 
         // We try really hard to make OpenGL sync here. We want to avoid OpenGL
         // rendering several frames in advance as this drives up the input lag.
@@ -517,11 +522,22 @@ fn emulator_thread(
             .expect("[T-emu] failed to lock back buffer");
 
         // Run the emulator
+        println!(
+            "{} about to emulate frame, keys = {:08b}",
+            shared.state.timer,
+            shared.state.keys.as_keys().0,
+        );
         let mut peripherals = DesktopPeripherals {
             back_buffer: back,
             keys: &shared.state.keys,
         };
         let res = emulator.execute_frame(&mut peripherals, |_| false);
+        println!(
+            "{} done emulating frame, res = {:?}, back buf = {:?}",
+            shared.state.timer,
+            res,
+            peripherals.back_buffer[0],
+        );
 
         // React to abnormal disruptions
         match res {
@@ -665,4 +681,29 @@ struct SharedState {
     /// The current logical size of the window. This value is updated by the
     /// input thread.
     window_size: Mutex<LogicalSize>,
+
+    timer: Timer,
+}
+
+use std::time::Instant;
+use std::fmt;
+
+struct Timer {
+    start: Instant,
+}
+
+impl Timer {
+    fn new() -> Self {
+        Self {
+            start: Instant::now(),
+        }
+    }
+}
+
+impl fmt::Display for Timer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let millis = self.start.elapsed().as_micros() as f64 / 1000.0;
+        let out = format!("{:.3} ms", millis);
+        write!(f, "[{: >14}]", out)
+    }
 }
