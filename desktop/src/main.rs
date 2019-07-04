@@ -363,7 +363,24 @@ fn render_thread(
         .report_interval_s(0.25)
         .build_without_target_rate();
 
+    macro_rules! wait {
+        () => {
+            // glium::SyncFence::new(&display).unwrap().wait();
+        };
+    }
+
+    use std::time::Instant;
+
+    println!(
+        "{: >10} {: >10} {: >10} {: >10}",
+        "copy",
+        "upload",
+        "draw",
+        "finish",
+    );
+
     loop {
+        let start = Instant::now();
         loop_helper.loop_start();
 
         // We map the pixel buffer and write directly to it.
@@ -372,6 +389,8 @@ fn render_thread(
                 .expect("failed to lock front buffer");
             pixel_buffer.write(&**front);
         }
+        wait!();
+        let after_pbo = Instant::now();
 
         // We update the texture data by uploading our pixel buffer.
         texture.main_level().raw_upload_from_pixel_buffer(
@@ -380,6 +399,8 @@ fn render_thread(
             0..SCREEN_HEIGHT as u32,
             0..1,
         );
+        wait!();
+        let after_upload = Instant::now();
 
         // We need to find out the current physical window size to know how to
         // stretch the texture.
@@ -400,6 +421,7 @@ fn render_thread(
             scale_factor: scale_factor,
             tex: &texture,
         };
+
         target.draw(
             &vertex_buffer,
             &indices,
@@ -407,13 +429,29 @@ fn render_thread(
             &uniforms,
             &Default::default(),
         )?;
+        display.finish();
+
+
+        wait!();
+        let after_draw = Instant::now();
+
         target.finish()?;
+        let pixels: Vec<Vec<(u8, u8, u8, u8)>> = display.read_front_buffer().unwrap();
 
         // We try really hard to make OpenGL sync here. We want to avoid OpenGL
         // rendering several frames in advance as this drives up the input lag.
-        let fence = glium::SyncFence::new(&display).unwrap();
-        fence.wait();
-        display.finish();
+        glium::SyncFence::new(&display).unwrap().wait();
+        // display.finish();
+
+        let after_finish = Instant::now();
+
+        // println!(
+        //     "{: >10} {: >10} {: >10} {: >10}",
+        //     format!("{:.2?}", after_pbo - start),
+        //     format!("{:.2?}", after_upload - after_pbo),
+        //     format!("{:.2?}", after_draw - after_upload),
+        //     format!("{:.2?}", after_finish - after_draw),
+        // );
 
         // Potentially update the window title to show the current speed.
         if let Some(ogl_fps) = loop_helper.report_rate() {
