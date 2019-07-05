@@ -70,6 +70,7 @@ fn run() -> Result<(), Error> {
     // Initialize logger
     let mut builder = env_logger::Builder::from_default_env();
     builder.filter_module("mahboi", args.log_level);
+    builder.default_format_timestamp_nanos(true);
     builder.init();
 
 
