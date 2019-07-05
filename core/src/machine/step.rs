@@ -14,7 +14,7 @@ impl Machine {
     pub(crate) fn step(&mut self) -> Result<u8, Disruption> {
         // Check if an interrupt was requested
         if let Some(interrupt) = self.interrupt_controller.should_interrupt() {
-            debug!("Interrupt triggered: {:?}", interrupt);
+            trace!("Interrupt triggered: {:?}", interrupt);
             return Ok(self.isr(interrupt) / 4);
         }
 
@@ -23,7 +23,7 @@ impl Machine {
             // If no interrupt was triggered (otherwise we wouldn't have gotten here) but at least
             // one interrupt was requested -> exit HALT mode.
             if self.interrupt_controller.is_interrupt_requested() {
-                debug!("Interrupt in HALT mode: CPU woke up");
+                trace!("Interrupt in HALT mode: CPU woke up");
                 self.state = State::Normal;
             }
 
@@ -780,7 +780,7 @@ impl Machine {
             opcode!("DI") => self.interrupt_controller.ime = false,
             opcode!("EI") => self.enable_interrupts_next_step = true,
             opcode!("HALT") => {
-                debug!("Executed HALT: CPU entering HALT mode");
+                trace!("Executed HALT: CPU entering HALT mode");
                 self.state = State::Halted;
             },
             opcode!("STOP") => {
