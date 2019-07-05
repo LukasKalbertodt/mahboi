@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    time::Duration,
+};
 
 use log::LevelFilter;
 use structopt::StructOpt;
@@ -93,6 +96,33 @@ pub(crate) struct Args {
         parse(try_from_str = "parse_bios_kind"),
     )]
     pub(crate) bios: BiosKind,
+
+    /// In order to reduce input lag, the OpenGL drawing is done as close to
+    /// the next host v-blank as possible. But since the time for drawing can
+    /// change a bit from frame to frame, there should be some time buffer
+    /// after drawin to avoid missing a v-blank. This argument specifies that
+    /// buffer in milliseconds. In other words: this is the time we want OpenGL
+    /// to block when swapping buffers. If you do not reliably get 60 FPS,
+    /// increase this value. If this value is the frame time (e.g. 16.6ms for
+    /// 60FPS), we won't wait before drawing.
+    #[structopt(
+        long = "--sleep-margin",
+        default_value = "1.5",
+        parse(try_from_str = "parse_sleep_margin"),
+    )]
+    pub(crate) sleep_margin: Duration,
+
+    /// How quickly the sleeping delay adjusts to the measured optimum. A value
+    /// close to 0 means slower adjustments and a sleep time more stable
+    /// against outliers. A value close to 1 means faster reaction to changes
+    /// in measure performance, but is more vulnerable to outliers. You most
+    /// certainly can keep it at the default value.
+    #[structopt(
+        long = "--sleep-learn-rate",
+        default_value = "0.1",
+        raw(validator = "check_learn_rate"),
+    )]
+    pub(crate) sleep_learn_rate: f32,
 }
 
 
@@ -134,5 +164,25 @@ fn check_scale(src: String) -> Result<(), String> {
         Err(e) => Err(format!("failed to parse '{}' as `f64`: {}", src, e)),
         Ok(v) if v > 0.0 => Ok(()),
         Ok(v) => Err(format!("has to be greater than 0, but {} is not", v)),
+    }
+}
+
+fn parse_sleep_margin(src: &str) -> Result<Duration, String> {
+    match src.parse::<f64>() {
+        Err(e) => Err(format!("invalid float: {}", e)),
+        Ok(v) if v > 100.0 => {
+            Err("a sleep margin larger than the frame time does not make sense".into())
+        },
+        Ok(v) if v < 0.0 => Err("sleep margin cannot be negative".into()),
+        Ok(v) if v.is_nan() => Err("sleep margin cannot be NaN".into()),
+        Ok(v) => Ok(Duration::from_nanos((v * 1_000_000.0) as u64)),
+    }
+}
+
+fn check_learn_rate(src: String) -> Result<(), String> {
+    match src.parse::<f32>() {
+        Ok(v) if v >= 0.0 && v <= 1.0 => Ok(()),
+        Ok(v) => Err(format!("has to be between 0 and 1, but {} is not", v)),
+        Err(e) => Err(format!("failed to parse '{}' as `f32`: {}", src, e)),
     }
 }

@@ -7,6 +7,7 @@ use std::{
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
     thread,
+    time::{Duration, Instant},
 };
 
 use failure::{bail, Error, ResultExt};
@@ -376,8 +377,33 @@ fn render_thread(
         .report_interval_s(0.25)
         .build_without_target_rate();
 
+    // We want to delay drawing the buffer with OpenGL to reduce input lag. It
+    // is difficult to figure out how long we should wait with drawing, though!
+    // Visualizing frame timing:
+    //
+    //  V-Blank                        V-Blank                        V-Blank
+    //     |                              |                              |
+    //      [     sleep    ][draw][margin] [     sleep    ][draw][margin]
+    //
+    // We do this by trying to sync OpenGL to the CPU after issuing the last
+    // draw command. Then we measure the time from the buffer swap command
+    // until we read a pixel from the front buffer. This should be
+    // approximately the time OpenGL waited for V-Blank to happen. In theory,
+    // that's exactly the time we could sleep before drawing. However, drawing
+    // time is not always the same and can vary from frame to frame. Also,
+    // swapping the buffer still takes some time, even if V-Blank is right
+    // around the corner. That's why we insert a 'margin' that we want OpenGL
+    // to block waiting for V-Blank. Otherwise, we would often drop a frame.
+    //
+    // The draw delay starts at 0, but is continiously changed further down.
+    let mut draw_delay = Duration::from_millis(0);
+
     loop {
         loop_helper.loop_start();
+
+        // We sleep before doing anything with OpenGL.
+        trace!("sleeping {:.2?} before drawing", draw_delay);
+        spin_sleep::sleep(draw_delay);
 
         // We map the pixel buffer and write directly to it.
         {
@@ -421,21 +447,32 @@ fn render_thread(
             &Default::default(),
         )?;
 
+        // We do our best to sync OpenGL to the CPU here. We issue a fence into
+        // the command stream and then even call `glFinish()`. To really force
+        // the driver to sync here, we could read from the back buffer, I
+        // assume. But so far, it works fine.
+        glium::SyncFence::new(&display).unwrap().wait();
+        display.finish();
+        let after_draw = Instant::now();
+
         // We swap buffers to present the finished framebuffer.
         //
         // But there is a little problem. We want OpenGL to wait now until
-        // vblank (on the host system) has happened, i.e. we want this function
-        // to block. But even with vsync enabled, it doesn't. We could also
-        // call `glFinish` which promises to block until all OpenGL operations
-        // are done, but this function is incorrectly implemented in many
-        // drivers! Usually, `glFinish` is a bad idea beause it hurts rendering
-        // performance. But we don't care about this, we mostly care about
-        // latency. So we really want to block here.
+        // V-Blank (on the host system) has happened, i.e. we want this
+        // function to block. But even with vsync enabled, it often doesn't
+        // (depending on the driver). We could also call `glFinish` which
+        // promises to block until all OpenGL operations are done, but this
+        // function is incorrectly implemented in many drivers, too! Usually,
+        // `glFinish` is a bad idea beause it hurts rendering performance. But
+        // we don't care about this, we mostly care about latency. So we really
+        // want to block here.
         //
         // The most reliable way to do that is to read from the front buffer.
         // That forces OpenGL to wait until that every operation that was
         // submitted before this read has completed. We only read a single
-        // pixel and do not use that value, but this forces synchronization.
+        // pixel and do not use that value, but this forces synchronization. We
+        // need to use raw OpenGL here, because glium does not offer the
+        // ability to read a single pixel from the front buffer.
         target.finish()?;
         let pixel = unsafe {
             display.exec_in_context(|| {
@@ -462,6 +499,31 @@ fn render_thread(
             })?
         };
         trace!("swapped buffers, pixel at (0, 0) -> {:?}", pixel);
+        let after_finish = Instant::now();
+
+        // Calculate new draw delay.
+        draw_delay = {
+            // How long OpenGL waited for V-Blank.
+            let vblank_wait = after_finish - after_draw;
+
+            // The theoretical new duration we could sleep.
+            let new_value = draw_delay + vblank_wait;
+
+            // Subtract the sleep margin from the theoretical value. That is to
+            // avoid frame drops and account for draw time fluctuations.
+            let new_value = if new_value > shared.state.args.sleep_margin {
+                new_value - shared.state.args.sleep_margin
+            } else {
+                Duration::from_millis(0)
+            };
+
+            // Combine new value with the old one, depending on the learning
+            // rate.
+            let learn_rate = shared.state.args.sleep_learn_rate as f64;
+            let new_delay = (1.0 - learn_rate) * draw_delay.as_nanos() as f64
+                + learn_rate * new_value.as_nanos() as f64;
+            Duration::from_nanos(new_delay as u64)
+        };
 
         // Potentially update the window title to show the current speed.
         if let Some(ogl_fps) = loop_helper.report_rate() {
