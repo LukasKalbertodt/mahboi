@@ -20,7 +20,7 @@ use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
 };
-use crate::{Shared, WINDOW_TITLE, TARGET_FPS};
+use crate::{DurationExt, Shared, WINDOW_TITLE, TARGET_FPS};
 
 
 
@@ -238,11 +238,7 @@ pub(crate) fn render_thread(
 
             // Subtract the sleep margin from the theoretical value. That is to
             // avoid frame drops and account for draw time fluctuations.
-            let new_value = if new_value > shared.state.args.sleep_margin {
-                new_value - shared.state.args.sleep_margin
-            } else {
-                Duration::from_millis(0)
-            };
+            let new_value = new_value.saturating_sub(shared.state.args.sleep_margin);
 
             // Combine new value with the old one, depending on the learning
             // rate.

@@ -5,6 +5,7 @@ use std::{
         mpsc::{channel, Sender},
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
+    time::Duration,
     thread,
 };
 
@@ -304,4 +305,16 @@ struct SharedState {
     /// The current logical size of the window. This value is updated by the
     /// input thread.
     window_size: Mutex<LogicalSize>,
+trait DurationExt {
+    fn saturating_sub(self, rhs: Self) -> Self;
+}
+
+impl DurationExt for Duration {
+    fn saturating_sub(self, rhs: Self) -> Self {
+        if self > rhs {
+            self - rhs
+        } else {
+            Duration::from_millis(0)
+        }
+    }
 }
