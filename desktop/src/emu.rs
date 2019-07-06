@@ -4,17 +4,19 @@ use std::{
         MutexGuard,
         atomic::Ordering,
     },
+    time::{Duration, Instant},
 };
 
 use spin_sleep::LoopHelper;
 
 use mahboi::{
     Emulator, Disruption, SCREEN_WIDTH,
+    log::*,
     env::Peripherals,
     primitives::PixelColor,
     machine::input::Keys,
 };
-use crate::{AtomicKeys, Message, Shared, TARGET_FPS};
+use crate::{AtomicKeys, DurationExt, Message, Shared, TARGET_FPS};
 
 /// Drives the emulation. The emulator writes into the `gb_buffer` back buffer.
 /// Both of those buffers are swapped after each Gameboy frame. The emulator
@@ -49,6 +51,10 @@ pub(crate) fn emulator_thread(
         .report_interval_s(0.25)
         .build_with_target_rate(TARGET_FPS);
 
+    // We start with a dummy value, assuming the host CPU is exactly as fast as
+    // the Gameboy CPU.
+    let mut required_emulation_time = Duration::from_micros((1_000_000.0 / TARGET_FPS) as u64);
+
     loop {
         let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
             shared.state.args.turbo_mode_factor * TARGET_FPS
@@ -59,16 +65,68 @@ pub(crate) fn emulator_thread(
 
         loop_helper.loop_start();
 
+        // We might want to sleep a bit to reduce input lag.
+        let emu_delay = {
+            use std::cmp::min;
+
+            let render_timing = *shared.state.render_timing.lock().unwrap();
+            let target_iteration_time = Duration::from_micros(
+                (1_000_000.0 / loop_helper.target_rate()) as u64
+            );
+
+            // We have several factors which limit how long we can delay
+            // emulation. We start with the user specified value for an upper
+            // wait limit.
+            let delay = shared.state.args.emu_max_delay;
+
+            // TODO: make this buffer user specified
+            let assumed_emulation_time = required_emulation_time + Duration::from_millis(1);
+
+            // Next, we have to finish emulation before the OpenGL thread
+            // starts drawing.
+            let time_left_before_draw = render_timing.draw_delay
+                .saturating_sub(render_timing.last_host_frame_start.elapsed())
+                .saturating_sub(required_emulation_time);
+
+            // Finally, if we emulate at a rate that is faster then the host
+            // refresh rate, we also have to take care not to sleep when that
+            // time is required for emulation. We take the time we have for
+            // each emulation loop iteration and subtract the time we expect to
+            // need for emulation.
+            let time_left_for_iteration = target_iteration_time
+                .saturating_sub(assumed_emulation_time);
+
+            // Pick the minimum of all these three limits
+            let delay = min(delay, time_left_before_draw);
+            let delay = min(delay, time_left_for_iteration);
+
+            delay
+        };
+
+        trace!("about to sleep for {:.2?} before emulating", emu_delay);
+        spin_sleep::sleep(emu_delay);
+
+
         // Lock the buffer for the whole emulation step.
         let back = shared.state.gb_screen.back.lock()
             .expect("[T-emu] failed to lock back buffer");
 
-        // Run the emulator
+        // Run the emulator for one frame
         let mut peripherals = DesktopPeripherals {
             back_buffer: back,
             keys: &shared.state.keys,
         };
+        let before_emulation = Instant::now();
         let res = emulator.execute_frame(&mut peripherals, |_| false);
+        required_emulation_time = {
+            let frame_time = before_emulation.elapsed();
+            let learn_rate = shared.state.args.emu_delay_learn_rate as f64;
+
+            let new_delay = (1.0 - learn_rate) * required_emulation_time.as_nanos() as f64
+                + learn_rate * frame_time.as_nanos() as f64;
+            Duration::from_nanos(new_delay as u64)
+        };
+
 
         // React to abnormal disruptions
         match res {

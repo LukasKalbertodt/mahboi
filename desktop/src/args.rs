@@ -112,17 +112,40 @@ pub(crate) struct Args {
     )]
     pub(crate) host_block_margin: Duration,
 
-    /// How quickly the sleeping delay adjusts to the measured optimum. A value
-    /// close to 0 means slower adjustments and a sleep time more stable
-    /// against outliers. A value close to 1 means faster reaction to changes
-    /// in measure performance, but is more vulnerable to outliers. You most
-    /// certainly can keep it at the default value.
+    /// How quickly the sleeping delay for the rendering thread adjusts to the
+    /// measured optimum. A value close to 0 means slower adjustments and a
+    /// sleep time more stable against outliers. A value close to 1 means
+    /// faster reaction to changes in measure performance, but is more
+    /// vulnerable to outliers. You most certainly can keep it at the default
+    /// value.
     #[structopt(
         long = "--host-delay-learn-rate",
         default_value = "0.1",
         raw(validator = "check_learn_rate"),
     )]
     pub(crate) host_delay_learn_rate: f32,
+
+    /// In order to reduce input lag, an emulation step might get delayed to be
+    /// closer to a host V-Blank. This parameter controls how much the
+    /// emulation can be delayed at most.
+    #[structopt(
+        long = "--emu-max-delay",
+        default_value = "8",
+        parse(try_from_str = "parse_emu_max_delay"),
+    )]
+    pub(crate) emu_max_delay: Duration,
+
+    /// How quickly the emulation delay adjusts to the measured optimum. A
+    /// value close to 0 means slower adjustments and a sleep time more stable
+    /// against outliers. A value close to 1 means faster reaction to changes
+    /// in measure performance, but is more vulnerable to outliers. You most
+    /// certainly can keep it at the default value.
+    #[structopt(
+        long = "--emu-sleep-learn-rate",
+        default_value = "0.1",
+        raw(validator = "check_learn_rate"),
+    )]
+    pub(crate) emu_delay_learn_rate: f32,
 }
 
 
@@ -184,5 +207,14 @@ fn check_learn_rate(src: String) -> Result<(), String> {
         Ok(v) if v >= 0.0 && v <= 1.0 => Ok(()),
         Ok(v) => Err(format!("has to be between 0 and 1, but {} is not", v)),
         Err(e) => Err(format!("failed to parse '{}' as `f32`: {}", src, e)),
+    }
+}
+
+fn parse_emu_max_delay(src: &str) -> Result<Duration, String> {
+    match src.parse::<f64>() {
+        Err(e) => Err(format!("invalid float: {}", e)),
+        Ok(v) if v < 0.0 => Err("must not be negative".into()),
+        Ok(v) if v.is_nan() => Err("must not be NaN".into()),
+        Ok(v) => Ok(Duration::from_nanos((v * 1_000_000.0) as u64)),
     }
 }
