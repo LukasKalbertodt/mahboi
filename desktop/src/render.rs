@@ -243,11 +243,11 @@ pub(crate) fn render_thread(
 
             // Subtract the sleep margin from the theoretical value. That is to
             // avoid frame drops and account for draw time fluctuations.
-            let new_value = new_value.saturating_sub(shared.state.args.sleep_margin);
+            let new_value = new_value.saturating_sub(shared.state.args.host_block_margin);
 
             // Combine new value with the old one, depending on the learning
             // rate.
-            let learn_rate = shared.state.args.sleep_learn_rate as f64;
+            let learn_rate = shared.state.args.host_delay_learn_rate as f64;
             let new_delay = (1.0 - learn_rate) * draw_delay.as_nanos() as f64
                 + learn_rate * new_value.as_nanos() as f64;
             Duration::from_nanos(new_delay as u64)

@@ -98,19 +98,19 @@ pub(crate) struct Args {
     pub(crate) bios: BiosKind,
 
     /// In order to reduce input lag, the OpenGL drawing is done as close to
-    /// the next host v-blank as possible. But since the time for drawing can
+    /// the next host V-Blank as possible. But since the time for drawing can
     /// change a bit from frame to frame, there should be some time buffer
-    /// after drawin to avoid missing a v-blank. This argument specifies that
+    /// after drawin to avoid missing a V-Blank. This argument specifies that
     /// buffer in milliseconds. In other words: this is the time we want OpenGL
     /// to block when swapping buffers. If you do not reliably get 60 FPS,
     /// increase this value. If this value is the frame time (e.g. 16.6ms for
     /// 60FPS), we won't wait before drawing.
     #[structopt(
-        long = "--sleep-margin",
+        long = "--host-block-margin",
         default_value = "1.5",
-        parse(try_from_str = "parse_sleep_margin"),
+        parse(try_from_str = "parse_block_margin"),
     )]
-    pub(crate) sleep_margin: Duration,
+    pub(crate) host_block_margin: Duration,
 
     /// How quickly the sleeping delay adjusts to the measured optimum. A value
     /// close to 0 means slower adjustments and a sleep time more stable
@@ -118,11 +118,11 @@ pub(crate) struct Args {
     /// in measure performance, but is more vulnerable to outliers. You most
     /// certainly can keep it at the default value.
     #[structopt(
-        long = "--sleep-learn-rate",
+        long = "--host-delay-learn-rate",
         default_value = "0.1",
         raw(validator = "check_learn_rate"),
     )]
-    pub(crate) sleep_learn_rate: f32,
+    pub(crate) host_delay_learn_rate: f32,
 }
 
 
@@ -167,14 +167,14 @@ fn check_scale(src: String) -> Result<(), String> {
     }
 }
 
-fn parse_sleep_margin(src: &str) -> Result<Duration, String> {
+fn parse_block_margin(src: &str) -> Result<Duration, String> {
     match src.parse::<f64>() {
         Err(e) => Err(format!("invalid float: {}", e)),
         Ok(v) if v > 100.0 => {
-            Err("a sleep margin larger than the frame time does not make sense".into())
+            Err("a block margin larger than the frame time does not make sense".into())
         },
-        Ok(v) if v < 0.0 => Err("sleep margin cannot be negative".into()),
-        Ok(v) if v.is_nan() => Err("sleep margin cannot be NaN".into()),
+        Ok(v) if v < 0.0 => Err("block margin cannot be negative".into()),
+        Ok(v) if v.is_nan() => Err("block margin cannot be NaN".into()),
         Ok(v) => Ok(Duration::from_nanos((v * 1_000_000.0) as u64)),
     }
 }
