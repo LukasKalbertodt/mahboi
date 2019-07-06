@@ -1,16 +1,13 @@
 use std::{
     mem,
-    sync::{
-        MutexGuard,
-        atomic::Ordering,
-    },
+    sync::atomic::Ordering,
     time::{Duration, Instant},
 };
 
 use spin_sleep::LoopHelper;
 
 use mahboi::{
-    Emulator, Disruption, SCREEN_WIDTH,
+    Emulator, Disruption, SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
     env::Peripherals,
     primitives::PixelColor,
@@ -28,7 +25,7 @@ pub(crate) fn emulator_thread(
 ) {
     /// This is what we pass to the emulator.
     struct DesktopPeripherals<'a> {
-        back_buffer: MutexGuard<'a, Vec<(u8, u8, u8)>>,
+        back_buffer: &'a mut [(u8, u8, u8)],
         keys: &'a AtomicKeys,
     }
 
@@ -54,6 +51,10 @@ pub(crate) fn emulator_thread(
     // We start with a dummy value, assuming the host CPU is exactly as fast as
     // the Gameboy CPU.
     let mut required_emulation_time = Duration::from_micros((1_000_000.0 / TARGET_FPS) as u64);
+
+    // The emulator writes into this buffer. After one frame, this is swapped
+    // with the front buffer accessible to the render thread.
+    let mut back_buffer = vec![(0, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
     loop {
         let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
@@ -113,7 +114,7 @@ pub(crate) fn emulator_thread(
 
         // Run the emulator for one frame
         let mut peripherals = DesktopPeripherals {
-            back_buffer: back,
+            back_buffer: &mut back_buffer,
             keys: &shared.state.keys,
         };
         let before_emulation = Instant::now();
@@ -140,16 +141,14 @@ pub(crate) fn emulator_thread(
             Ok(true) => {
                 // Swap both buffers
                 {
-                    let mut front = shared.state.gb_screen.front.lock()
-                        .expect("[T-emu] failed to lock front buffer");
-                    mem::swap(&mut *front, &mut *peripherals.back_buffer);
+                    let mut frame = shared.state.gb_frame.lock()
+                        .expect("failed to lock front buffer");
+                    mem::swap(&mut frame.buffer, &mut back_buffer);
+                    frame.timestamp = before_emulation;
                 }
             }
             _ => {}
         }
-
-        // Release the lock as soon as possible.
-        drop(peripherals.back_buffer);
 
         if let Some(fps) = loop_helper.report_rate() {
             *shared.state.emulation_rate.lock().unwrap() = fps;

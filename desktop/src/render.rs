@@ -138,11 +138,12 @@ pub(crate) fn render_thread(
         spin_sleep::sleep(draw_delay);
 
         // We map the pixel buffer and write directly to it.
-        {
-            let front = shared.state.gb_screen.front.lock()
+        let frame_birth_time = {
+            let frame = shared.state.gb_frame.lock()
                 .expect("failed to lock front buffer");
-            pixel_buffer.write(&**front);
-        }
+            pixel_buffer.write(&*frame.buffer);
+            frame.timestamp
+        };
 
         // We update the texture data by uploading our pixel buffer.
         texture.main_level().raw_upload_from_pixel_buffer(
@@ -232,6 +233,7 @@ pub(crate) fn render_thread(
         };
         trace!("swapped buffers, pixel at (0, 0) -> {:?}", pixel);
         let after_finish = Instant::now();
+        let emu_to_display_delay = frame_birth_time.elapsed();
 
         // Calculate new draw delay.
         draw_delay = {
@@ -258,11 +260,12 @@ pub(crate) fn render_thread(
             let emu_fps = *shared.state.emulation_rate.lock().unwrap();
             let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
             let title = format!(
-                "{} (emulator: {:.1} FPS / {:3}%, openGL: {:.1} FPS)",
+                "{} (emulator: {:.1} FPS / {:3}%, OpenGL: {:.1} FPS, delay: {:.1?})",
                 WINDOW_TITLE,
                 emu_fps,
                 emu_percent.round(),
                 ogl_fps,
+                emu_to_display_delay,
             );
             display.gl_window().window().set_title(&title);
         }
