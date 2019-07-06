@@ -20,7 +20,7 @@ use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
     log::*,
 };
-use crate::{DurationExt, Shared, WINDOW_TITLE, TARGET_FPS};
+use crate::{DurationExt, Shared, RenderTiming, WINDOW_TITLE, TARGET_FPS};
 
 
 
@@ -127,6 +127,11 @@ pub(crate) fn render_thread(
 
     loop {
         loop_helper.loop_start();
+
+        *shared.state.render_timing.lock().unwrap() = RenderTiming {
+            last_host_frame_start: Instant::now(),
+            draw_delay: draw_delay,
+        };
 
         // We sleep before doing anything with OpenGL.
         trace!("sleeping {:.2?} before drawing", draw_delay);

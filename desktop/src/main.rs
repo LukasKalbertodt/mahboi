@@ -5,7 +5,7 @@ use std::{
         mpsc::{channel, Sender},
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
     thread,
 };
 
@@ -99,6 +99,13 @@ fn run() -> Result<(), Error> {
             // Dummy values that are overwritten later
             window_dpi_factor: Mutex::new(1.0),
             window_size: Mutex::new(LogicalSize::new(1.0, 1.0)),
+
+            // It's fine to use an instant that is "earlier" than a real value
+            // would be.
+            render_timing: Mutex::new(RenderTiming {
+                last_host_frame_start: Instant::now(),
+                draw_delay: Duration::from_secs(0),
+            }),
         }),
     };
 
@@ -305,6 +312,24 @@ struct SharedState {
     /// The current logical size of the window. This value is updated by the
     /// input thread.
     window_size: Mutex<LogicalSize>,
+
+    /// This is written by the render thread each frame. It is mostly used by
+    /// the emulator thread to synchronize sleeping.
+    render_timing: Mutex<RenderTiming>,
+}
+
+/// Information about the timing of the rendering thread.
+#[derive(Debug, Clone, Copy)]
+struct RenderTiming {
+    /// The instant the last host (OpenGL) frame was started. Started means
+    /// directly becore the `draw_delay` sleep.
+    last_host_frame_start: Instant,
+
+    /// How much the render thread currently sleeps before starting to draw
+    /// anything.
+    draw_delay: Duration,
+}
+
 trait DurationExt {
     fn saturating_sub(self, rhs: Self) -> Self;
 }
