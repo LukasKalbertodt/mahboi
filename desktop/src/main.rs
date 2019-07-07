@@ -101,10 +101,10 @@ fn run() -> Result<(), Error> {
             window_size: Mutex::new(LogicalSize::new(1.0, 1.0)),
 
             // It's fine to use an instant that is "earlier" than a real value
-            // would be.
+            // would be. The duration also doesn't need to be exact.
             render_timing: Mutex::new(RenderTiming {
-                last_host_frame_start: Instant::now(),
-                draw_delay: Duration::from_secs(0),
+                next_draw_start: Instant::now(),
+                frame_time: Duration::from_millis(16),
             }),
         }),
     };
@@ -319,21 +319,32 @@ struct SharedState {
 /// Information about the timing of the rendering thread.
 #[derive(Debug, Clone, Copy)]
 struct RenderTiming {
-    /// The instant the last host (OpenGL) frame was started. Started means
-    /// directly becore the `draw_delay` sleep.
-    last_host_frame_start: Instant,
+    /// Approximately when the render thread will start drawing next.
+    next_draw_start: Instant,
 
-    /// How much the render thread currently sleeps before starting to draw
-    /// anything.
-    draw_delay: Duration,
+    /// The duration of one host frame.
+    frame_time: Duration,
 }
 
 trait DurationExt {
-    fn saturating_sub(self, rhs: Self) -> Self;
+    type Out;
+    fn saturating_sub(self, rhs: Self) -> Self::Out;
 }
 
 impl DurationExt for Duration {
-    fn saturating_sub(self, rhs: Self) -> Self {
+    type Out = Self;
+    fn saturating_sub(self, rhs: Self) -> Self::Out {
+        if self > rhs {
+            self - rhs
+        } else {
+            Duration::from_millis(0)
+        }
+    }
+}
+
+impl DurationExt for Instant {
+    type Out = Duration;
+    fn saturating_sub(self, rhs: Self) -> Self::Out {
         if self > rhs {
             self - rhs
         } else {

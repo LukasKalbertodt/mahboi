@@ -101,7 +101,7 @@ pub(crate) fn render_thread(
     )?;
 
     let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(0.25)
+        .report_interval_s(0.5)
         .build_without_target_rate();
 
     // We want to delay drawing the buffer with OpenGL to reduce input lag. It
@@ -125,17 +125,20 @@ pub(crate) fn render_thread(
     // The draw delay starts at 0, but is continiously changed further down.
     let mut draw_delay = Duration::from_millis(0);
 
+    // TODO: do not hardcode, but get from system
+    let frame_time = Duration::from_micros(16_667);
+
     loop {
         loop_helper.loop_start();
-
-        *shared.state.render_timing.lock().unwrap() = RenderTiming {
-            last_host_frame_start: Instant::now(),
-            draw_delay: draw_delay,
-        };
 
         // We sleep before doing anything with OpenGL.
         trace!("sleeping {:.2?} before drawing", draw_delay);
         spin_sleep::sleep(draw_delay);
+
+        *shared.state.render_timing.lock().unwrap() = RenderTiming {
+            next_draw_start: Instant::now() + frame_time,
+            frame_time,
+        };
 
         // We map the pixel buffer and write directly to it.
         let frame_birth_time = {
@@ -231,9 +234,13 @@ pub(crate) fn render_thread(
                 Ok(pixel)
             })?
         };
-        trace!("swapped buffers, pixel at (0, 0) -> {:?}", pixel);
         let after_finish = Instant::now();
-        let emu_to_display_delay = frame_birth_time.elapsed();
+        let emu_to_display_delay = after_finish - frame_birth_time;
+        trace!(
+            "swapped buffers, delay {:.2?}, pixel at (0, 0) -> {:?}",
+            emu_to_display_delay,
+            pixel,
+        );
 
         // Calculate new draw delay.
         draw_delay = {

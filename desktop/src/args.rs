@@ -125,15 +125,16 @@ pub(crate) struct Args {
     )]
     pub(crate) host_delay_learn_rate: f32,
 
-    /// In order to reduce input lag, an emulation step might get delayed to be
-    /// closer to a host V-Blank. This parameter controls how much the
-    /// emulation can be delayed at most.
+    /// In order to reduce input lag, an emulation step might get executed a
+    /// bit earlier or a bit later than the regular rate would dictate. This
+    /// parameter controls how much the time of emulation may differ from the
+    /// strict tick rate.
     #[structopt(
-        long = "--emu-max-delay",
-        default_value = "8",
-        parse(try_from_str = "parse_emu_max_delay"),
+        long = "--max-emu-deviation",
+        default_value = "4",
+        parse(try_from_str = "parse_max_emu_deviation"),
     )]
-    pub(crate) emu_max_delay: Duration,
+    pub(crate) max_emu_deviation: Duration,
 
     /// How quickly the emulation delay adjusts to the measured optimum. A
     /// value close to 0 means slower adjustments and a sleep time more stable
@@ -210,7 +211,7 @@ fn check_learn_rate(src: String) -> Result<(), String> {
     }
 }
 
-fn parse_emu_max_delay(src: &str) -> Result<Duration, String> {
+fn parse_max_emu_deviation(src: &str) -> Result<Duration, String> {
     match src.parse::<f64>() {
         Err(e) => Err(format!("invalid float: {}", e)),
         Ok(v) if v < 0.0 => Err("must not be negative".into()),

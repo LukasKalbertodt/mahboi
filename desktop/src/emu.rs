@@ -1,4 +1,5 @@
 use std::{
+    cmp::{max, min},
     mem,
     sync::atomic::Ordering,
     time::{Duration, Instant},
@@ -45,8 +46,8 @@ pub(crate) fn emulator_thread(
 
     // Run forever, until an error occurs.
     let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(0.25)
-        .build_with_target_rate(TARGET_FPS);
+        .report_interval_s(0.5)
+        .build_without_target_rate();
 
     // We start with a dummy value, assuming the host CPU is exactly as fast as
     // the Gameboy CPU.
@@ -56,61 +57,15 @@ pub(crate) fn emulator_thread(
     // with the front buffer accessible to the render thread.
     let mut back_buffer = vec![(0, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT];
 
-    loop {
-        let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
-            shared.state.args.turbo_mode_factor * TARGET_FPS
-        } else {
-            TARGET_FPS
-        };
-        loop_helper.set_target_rate(target_rate);
+    // This is the time the emulation in this loop should start according to
+    // the standard rate.
+    let mut regular = Instant::now();
 
+    loop {
         loop_helper.loop_start();
 
-        // We might want to sleep a bit to reduce input lag.
-        let emu_delay = {
-            use std::cmp::min;
 
-            let render_timing = *shared.state.render_timing.lock().unwrap();
-            let target_iteration_time = Duration::from_micros(
-                (1_000_000.0 / loop_helper.target_rate()) as u64
-            );
-
-            // We have several factors which limit how long we can delay
-            // emulation. We start with the user specified value for an upper
-            // wait limit.
-            let delay = shared.state.args.emu_max_delay;
-
-            // TODO: make this buffer user specified
-            let assumed_emulation_time = required_emulation_time + Duration::from_millis(1);
-
-            // Next, we have to finish emulation before the OpenGL thread
-            // starts drawing.
-            let time_left_before_draw = render_timing.draw_delay
-                .saturating_sub(render_timing.last_host_frame_start.elapsed())
-                .saturating_sub(required_emulation_time);
-
-            // Finally, if we emulate at a rate that is faster then the host
-            // refresh rate, we also have to take care not to sleep when that
-            // time is required for emulation. We take the time we have for
-            // each emulation loop iteration and subtract the time we expect to
-            // need for emulation.
-            let time_left_for_iteration = target_iteration_time
-                .saturating_sub(assumed_emulation_time);
-
-            // Pick the minimum of all these three limits
-            let delay = min(delay, time_left_before_draw);
-            let delay = min(delay, time_left_for_iteration);
-
-            delay
-        };
-
-        trace!("about to sleep for {:.2?} before emulating", emu_delay);
-        spin_sleep::sleep(emu_delay);
-
-
-        // Lock the buffer for the whole emulation step.
-        let back = shared.state.gb_screen.back.lock()
-            .expect("[T-emu] failed to lock back buffer");
+        // ===== Run emulator ====================================================================
 
         // Run the emulator for one frame
         let mut peripherals = DesktopPeripherals {
@@ -150,10 +105,100 @@ pub(crate) fn emulator_thread(
             _ => {}
         }
 
+
+        // ===== Sleep ===========================================================================
+
+        let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
+            shared.state.args.turbo_mode_factor * TARGET_FPS
+        } else {
+            TARGET_FPS
+        };
+        let target_iteration_time = Duration::from_micros(
+            (1_000_000.0 / target_rate) as u64
+        );
+        let next_regular = regular + target_iteration_time;
+
+        // We might want to sleep a bit to reduce input lag.
+        let emu_delay = {
+            // The user can control the maximum deviation from the standard
+            // tick rate.
+            let max_deviation = shared.state.args.max_emu_deviation;
+
+            // Emulation time can vary. Thus we add a margin of 0.5.
+            let assumed_emulation_time = required_emulation_time + required_emulation_time / 2;
+
+            // This visualizes the timing situation (not to scale, obviously):
+            //
+            //    o   <- `now`
+            //    |
+            //    |
+            //    |
+            //    |
+            //    o   <- `earliest`: we are not allowed to start emulating
+            //    |                  before this point
+            //    |
+            //    o   <- `regular`: following the normal emulation rate, here
+            //    |                 is where we should emulate
+            //    |
+            //    o   <- `latest`: we are not allowed to start emulating after
+            //    |                this point
+            //    |
+            //    |
+            //    |
+            //    o   <- `draw_time`: at this point, the render thread will
+            //    |                   start drawing. If possible, we should
+            //    |                   finish emulation before this point
+            //    |
+            //    o   <- `next_regular`: at this point the next emulation step
+            //                           is scheduled. Thus, we need to finish
+            //                           before.
+            //
+
+            let now = Instant::now();
+            let earliest = max(now, regular - max_deviation);
+            let latest = regular + max_deviation;
+            let earliest_finish = earliest + assumed_emulation_time;
+
+            // Figure out the next draw time that we can manage to finish
+            // emulation before. The loop won't iterate very often, as
+            // `next_draw_start` is updated by the render thread and is fairly
+            // close to the current time.
+            let next_draw_time = {
+                let render_timing = *shared.state.render_timing.lock().unwrap();
+                let mut draw_time = render_timing.next_draw_start;
+
+                while draw_time < earliest_finish {
+                    draw_time += render_timing.frame_time;
+                }
+
+                draw_time
+            };
+
+            // We need to be finished by the time the render thread starts
+            // drawing. But we also need to finish before the next `regular`
+            // instant of emulation to not waste time sleeping that is required
+            // for emulation.
+            let need_to_be_finished_by = min(next_regular, next_draw_time);
+
+            // We want to start such that we finish right before the point
+            // where we need to be finished. But we must not start after
+            // `latest`.
+            let sleep_till = min(latest, need_to_be_finished_by - assumed_emulation_time);
+            sleep_till.saturating_sub(now)
+        };
+
+        trace!("about to sleep for {:.2?} before emulating", emu_delay);
+        spin_sleep::sleep(emu_delay);
+
+
         if let Some(fps) = loop_helper.report_rate() {
             *shared.state.emulation_rate.lock().unwrap() = fps;
         }
 
-        loop_helper.loop_sleep();
+        // If our emulation cannot keep up (with high turbo mode factors), we
+        // don't want the `regular` time to fall much behind. Otherwise when
+        // disabling turbo mode, we need to catch up, resulting in turbo mode
+        // speed for some time.
+        regular = max(Instant::now(), next_regular);
     }
 }
