@@ -1,5 +1,6 @@
 use std::{
     path::PathBuf,
+    str::FromStr,
     time::Duration,
 };
 
@@ -147,6 +148,18 @@ pub(crate) struct Args {
         raw(validator = "check_learn_rate"),
     )]
     pub(crate) emu_delay_learn_rate: f32,
+
+    /// If specified, all available, suitable physical Vulkan devices are
+    /// listed on startup. This is useful to select a device via `--device`
+    /// afterwards.
+    #[structopt(long = "--list-devices")]
+    pub(crate) list_devices: bool,
+
+    /// Specifies which physical Vulkan device to use. Can be either an index
+    /// or a hex-encoded UUID. Note that in theory, the index of devices can
+    /// change while the UUID stays fixed. In practice, the index is fine.
+    #[structopt(long = "--device")]
+    pub(crate) device: Option<VulkanDevice>,
 }
 
 
@@ -217,5 +230,27 @@ fn parse_max_emu_deviation(src: &str) -> Result<Duration, String> {
         Ok(v) if v < 0.0 => Err("must not be negative".into()),
         Ok(v) if v.is_nan() => Err("must not be NaN".into()),
         Ok(v) => Ok(Duration::from_nanos((v * 1_000_000.0) as u64)),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum VulkanDevice {
+    Index(u32),
+    Uuid([u8; 16]),
+}
+
+impl FromStr for VulkanDevice {
+    type Err = String;
+    fn from_str(src: &str) -> Result<Self, Self::Err> {
+        let src = src.trim();
+        if src.len() == 32 {
+            let uuid = <[u8; 16] as hex::FromHex>::from_hex(src)
+                .map_err(|e| format!("could not parse hex string: {}", e))?;
+            Ok(VulkanDevice::Uuid(uuid))
+        } else {
+            let index = src.parse::<u32>()
+                .map_err(|e| format!("invalid 'u32' index: {}", e))?;
+            Ok(VulkanDevice::Index(index))
+        }
     }
 }
