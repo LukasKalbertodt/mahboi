@@ -1,5 +1,6 @@
 use std::{
     time::{Duration, Instant},
+    sync::atomic::Ordering,
 };
 
 use failure::{bail, Error};
@@ -28,7 +29,7 @@ use crate::{DurationExt, Shared, RenderTiming, WINDOW_TITLE, TARGET_FPS};
 /// refresh rate.
 pub(crate) fn render_thread(
     context: WindowedContext<NotCurrent>,
-    shared: Shared,
+    shared: &Shared,
 ) -> Result<(), Error> {
     let display = Display::from_gl_window(context)?;
 
@@ -131,18 +132,23 @@ pub(crate) fn render_thread(
     loop {
         loop_helper.loop_start();
 
+        // Check if the application is shutting down.
+        if shared.should_quit.load(Ordering::SeqCst) {
+            break;
+        }
+
         // We sleep before doing anything with OpenGL.
         trace!("sleeping {:.2?} before drawing", draw_delay);
         spin_sleep::sleep(draw_delay);
 
-        *shared.state.render_timing.lock().unwrap() = RenderTiming {
+        *shared.render_timing.lock().unwrap() = RenderTiming {
             next_draw_start: Instant::now() + frame_time,
             frame_time,
         };
 
         // We map the pixel buffer and write directly to it.
         let frame_birth_time = {
-            let frame = shared.state.gb_frame.lock()
+            let frame = shared.gb_frame.lock()
                 .expect("failed to lock front buffer");
             pixel_buffer.write(&*frame.buffer);
             frame.timestamp
@@ -158,8 +164,8 @@ pub(crate) fn render_thread(
 
         // We need to find out the current physical window size to know how to
         // stretch the texture.
-        let dpi_factor = *shared.state.window_dpi_factor.lock().unwrap();
-        let logical_size = *shared.state.window_size.lock().unwrap();
+        let dpi_factor = *shared.window_dpi_factor.lock().unwrap();
+        let logical_size = *shared.window_size.lock().unwrap();
         let physical_size = logical_size.to_physical(dpi_factor);
         let scale_x = physical_size.width / SCREEN_WIDTH as f64;
         let scale_y = physical_size.height / SCREEN_HEIGHT as f64;
@@ -252,11 +258,11 @@ pub(crate) fn render_thread(
 
             // Subtract the sleep margin from the theoretical value. That is to
             // avoid frame drops and account for draw time fluctuations.
-            let new_value = new_value.saturating_sub(shared.state.args.host_block_margin);
+            let new_value = new_value.saturating_sub(shared.args.host_block_margin);
 
             // Combine new value with the old one, depending on the learning
             // rate.
-            let learn_rate = shared.state.args.host_delay_learn_rate as f64;
+            let learn_rate = shared.args.host_delay_learn_rate as f64;
             let new_delay = (1.0 - learn_rate) * draw_delay.as_nanos() as f64
                 + learn_rate * new_value.as_nanos() as f64;
             Duration::from_nanos(new_delay as u64)
@@ -264,7 +270,7 @@ pub(crate) fn render_thread(
 
         // Potentially update the window title to show the current speed.
         if let Some(ogl_fps) = loop_helper.report_rate() {
-            let emu_fps = *shared.state.emulation_rate.lock().unwrap();
+            let emu_fps = *shared.emulation_rate.lock().unwrap();
             let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
             let title = format!(
                 "{} (emulator: {:.1} FPS / {:3}%, OpenGL: {:.1} FPS, delay: {:.1?})",
@@ -277,4 +283,6 @@ pub(crate) fn render_thread(
             display.gl_window().window().set_title(&title);
         }
     }
+
+    Ok(())
 }

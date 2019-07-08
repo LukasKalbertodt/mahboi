@@ -14,15 +14,15 @@ use mahboi::{
     primitives::PixelColor,
     machine::input::Keys,
 };
-use crate::{AtomicKeys, DurationExt, Message, Shared, TARGET_FPS};
+use crate::{AtomicKeys, DurationExt, Shared, TARGET_FPS};
 
 /// Drives the emulation. The emulator writes into the `gb_buffer` back buffer.
 /// Both of those buffers are swapped after each Gameboy frame. The emulator
 /// additionally reads from `keys`. Lastly, if the emulator terminates in an
-/// unusual fashion, a `Quit` message is send to the main thread.
+/// unusual fashion, a quit request is sent to the main thread.
 pub(crate) fn emulator_thread(
     mut emulator: Emulator,
-    shared: Shared,
+    shared: &Shared,
 ) {
     /// This is what we pass to the emulator.
     struct DesktopPeripherals<'a> {
@@ -64,19 +64,24 @@ pub(crate) fn emulator_thread(
     loop {
         loop_helper.loop_start();
 
+        // Check if the application is shutting down.
+        if shared.should_quit.load(Ordering::SeqCst) {
+            break;
+        }
+
 
         // ===== Run emulator ====================================================================
 
         // Run the emulator for one frame
         let mut peripherals = DesktopPeripherals {
             back_buffer: &mut back_buffer,
-            keys: &shared.state.keys,
+            keys: &shared.keys,
         };
         let before_emulation = Instant::now();
         let res = emulator.execute_frame(&mut peripherals, |_| false);
         required_emulation_time = {
             let frame_time = before_emulation.elapsed();
-            let learn_rate = shared.state.args.emu_delay_learn_rate as f64;
+            let learn_rate = shared.args.emu_delay_learn_rate as f64;
 
             let new_delay = (1.0 - learn_rate) * required_emulation_time.as_nanos() as f64
                 + learn_rate * frame_time.as_nanos() as f64;
@@ -87,7 +92,7 @@ pub(crate) fn emulator_thread(
         // React to abnormal disruptions
         match res {
             Err(Disruption::Terminated) => {
-                shared.messages.send(Message::Quit).unwrap();
+                shared.request_quit();
                 break;
             }
 
@@ -96,7 +101,7 @@ pub(crate) fn emulator_thread(
             Ok(true) => {
                 // Swap both buffers
                 {
-                    let mut frame = shared.state.gb_frame.lock()
+                    let mut frame = shared.gb_frame.lock()
                         .expect("failed to lock front buffer");
                     mem::swap(&mut frame.buffer, &mut back_buffer);
                     frame.timestamp = before_emulation;
@@ -108,8 +113,8 @@ pub(crate) fn emulator_thread(
 
         // ===== Sleep ===========================================================================
 
-        let target_rate = if shared.state.turbo_mode.load(Ordering::SeqCst) {
-            shared.state.args.turbo_mode_factor * TARGET_FPS
+        let target_rate = if shared.turbo_mode.load(Ordering::SeqCst) {
+            shared.args.turbo_mode_factor * TARGET_FPS
         } else {
             TARGET_FPS
         };
@@ -122,7 +127,7 @@ pub(crate) fn emulator_thread(
         let emu_delay = {
             // The user can control the maximum deviation from the standard
             // tick rate.
-            let max_deviation = shared.state.args.max_emu_deviation;
+            let max_deviation = shared.args.max_emu_deviation;
 
             // Emulation time can vary. Thus we add a margin of 0.5.
             let assumed_emulation_time = required_emulation_time + required_emulation_time / 2;
@@ -164,7 +169,7 @@ pub(crate) fn emulator_thread(
             // `next_draw_start` is updated by the render thread and is fairly
             // close to the current time.
             let next_draw_time = {
-                let render_timing = *shared.state.render_timing.lock().unwrap();
+                let render_timing = *shared.render_timing.lock().unwrap();
                 let mut draw_time = render_timing.next_draw_start;
 
                 while draw_time < earliest_finish {
@@ -192,7 +197,7 @@ pub(crate) fn emulator_thread(
 
 
         if let Some(fps) = loop_helper.report_rate() {
-            *shared.state.emulation_rate.lock().unwrap() = fps;
+            *shared.emulation_rate.lock().unwrap() = fps;
         }
 
         // If our emulation cannot keep up (with high turbo mode factors), we

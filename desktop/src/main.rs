@@ -2,7 +2,6 @@ use std::{
     fs,
     sync::{
         Arc, Mutex,
-        mpsc::{channel, Sender},
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
     time::{Duration, Instant},
@@ -12,7 +11,7 @@ use std::{
 use failure::{Error, ResultExt};
 use glium::{
     glutin::{
-        ContextBuilder, EventsLoop, WindowBuilder,
+        ContextBuilder, EventsLoop, EventsLoopProxy, WindowBuilder,
         dpi::{LogicalSize, PhysicalSize},
     },
 };
@@ -27,7 +26,7 @@ use mahboi::{
 use crate::{
     args::Args,
     emu::emulator_thread,
-    input::input_thread,
+    input::handle_event,
     render::render_thread,
 };
 
@@ -84,120 +83,95 @@ fn run() -> Result<(), Error> {
     };
 
 
-    // ----- Input Thread ----------------------------------------------------
-    // These three instances are shared across all threads.
-    let (messages, incoming_messages) = channel();
-    let shared = Shared {
-        messages,
-        state: Arc::new(SharedState {
-            args,
-            keys: AtomicKeys::none(),
-            gb_frame: Mutex::new(GbFrame::new()),
-            emulation_rate: Mutex::new(TARGET_FPS),
-            turbo_mode: AtomicBool::new(false),
+    // ----- Window ----------------------------------------------------------
+    // The events loop is the core interface to the OS regarding events.
+    let mut events_loop = EventsLoop::new();
 
-            // Dummy values that are overwritten later
-            window_dpi_factor: Mutex::new(1.0),
-            window_size: Mutex::new(LogicalSize::new(1.0, 1.0)),
+    // Configure window
+    //
+    // TODO: this might be wrong when the window is not created on the
+    // primary monitor. No idea if that can happen.
+    let window_dpi_factor = events_loop.get_primary_monitor().get_hidpi_factor();
+    let window_size = PhysicalSize::new(
+        SCREEN_WIDTH as f64 * args.scale,
+        SCREEN_HEIGHT as f64 * args.scale,
+    );
+    let window_size = window_size.to_logical(window_dpi_factor);
 
-            // It's fine to use an instant that is "earlier" than a real value
-            // would be. The duration also doesn't need to be exact.
-            render_timing: Mutex::new(RenderTiming {
-                next_draw_start: Instant::now(),
-                frame_time: Duration::from_millis(16),
-            }),
+    let wb = WindowBuilder::new()
+        .with_dimensions(window_size)
+        .with_resizable(true)
+        .with_title(WINDOW_TITLE);
+
+    // Configure and GL context
+    let cb = ContextBuilder::new()
+        .with_vsync(true);
+    let context = cb.build_windowed(wb, &events_loop)?;
+    info!("[desktop] Opened window");
+
+
+    // Create values that are shared across all threads.
+    let shared = Arc::new(Shared {
+        args,
+
+        event_thread: events_loop.create_proxy(),
+        should_quit: AtomicBool::new(false),
+
+        keys: AtomicKeys::none(),
+        gb_frame: Mutex::new(GbFrame::new()),
+        emulation_rate: Mutex::new(TARGET_FPS),
+        turbo_mode: AtomicBool::new(false),
+
+        window_dpi_factor: Mutex::new(window_dpi_factor),
+        window_size: Mutex::new(window_size),
+
+        // It's fine to use an instant that is "earlier" than a real value
+        // would be. The duration also doesn't need to be exact.
+        render_timing: Mutex::new(RenderTiming {
+            next_draw_start: Instant::now(),
+            frame_time: Duration::from_millis(16),
         }),
-    };
+    });
 
-    // Here we start the input thread. It's a bit awkward because the input
-    // thread needs the `EventsLoop`, but this type cannot be sent to new
-    // thread. So we have to already create it in the correct thread.
-    // Furthermore, it is needed to create the `glium` display later, which
-    // also cannot be transferred across threads. Luckily, we can build a
-    // glutin context already and transfer it across threads.
-    let context = {
-        // Create a new handle to the shared values.
-        let shared = shared.clone();
-
-        // Even more awkward: to send the glutin context back to the main
-        // thread, we cannot just return it, because the input thread runs
-        // forever. Thus, we need a one-time channel here.
-        let (tx, rx) = channel();
-
-        thread::spawn(move || {
-            // Create the main events loop, a window and a context.
-            let events_loop = EventsLoop::new();
-
-            // Configure window
-            //
-            // TODO: this might be wrong when the window is not created on the
-            // primary monitor. No idea if that can happen.
-            let dpi_factor = events_loop.get_primary_monitor().get_hidpi_factor();
-            let size = PhysicalSize::new(
-                SCREEN_WIDTH as f64 * shared.state.args.scale,
-                SCREEN_HEIGHT as f64 * shared.state.args.scale,
-            );
-            let size = size.to_logical(dpi_factor);
-            *shared.state.window_dpi_factor.lock().unwrap() = dpi_factor;
-            *shared.state.window_size.lock().unwrap() = size;
-
-            let wb = WindowBuilder::new()
-                .with_dimensions(size)
-                .with_resizable(true)
-                .with_title(WINDOW_TITLE);
-
-            // Configure and GL context
-            let cb = ContextBuilder::new()
-                .with_vsync(true);
-            let context = cb.build_windowed(wb, &events_loop);
-            info!("[desktop] Opened window");
-
-            // The context is not needed in the input thread anymore, but it's
-            // needed in the main thread. So send it back.
-            tx.send(context).unwrap();
-
-            // Start polling input events (forever)
-            input_thread(events_loop, shared);
-        });
-
-        // Receive the context from the thread.
-        rx.recv().unwrap()?
-    };
 
 
     // ----- Render Thread ---------------------------------------------------
-    {
+    let render_thread = {
         // Create a new handle to the shared values.
         let shared = shared.clone();
 
-        thread::spawn(move || {
-            // There could actually go something wrong in the render thread. If
-            // that's the case, we send an action to the main thread.
-            let result = render_thread(context, shared.clone());
-            if let Err(e) = result {
-                shared.messages.send(Message::RenderError(e)).unwrap();
-            }
-        });
-    }
+        thread::spawn(move || render_thread(context, &shared))
+    };
 
     // ----- Emulator Thread -------------------------------------------------
-    thread::spawn(move || emulator_thread(emulator, shared));
+    let emulator_thread = {
+        // Create a new handle to the shared values.
+        let shared = shared.clone();
+
+        thread::spawn(move || emulator_thread(emulator, &shared))
+    };
 
 
 
     // =======================================================================
-    // ===== Let everything run ==============================================
+    // ===== Handle events ===================================================
     // =======================================================================
 
-    // All the real work is done in threads. We just listen to messages that
-    // come from the thread. The main thread will just wait almost all of the
-    // time.
-    for msg in incoming_messages {
-        match msg {
-            Message::Quit => break,
-            Message::RenderError(e) => return Err(e.context("error in render thread"))?,
-        }
-    }
+    events_loop.run_forever(move |event| {
+        handle_event(&event, &shared)
+    });
+
+    // When we reached this point, the `run_forever` call returned because
+    // `handle_event` returned `ControlFlow::Break`. This only happens if some
+    // part of this application requests a "quit". This is stored in
+    // `shared.should_quit`.
+    //
+    // The other threads will end themselves, so we just need to wait for them.
+    // We actually have to since the render thread could return an error, which
+    // we want to print. We also want to check if any thread panicked.
+    debug!("Application shutting down: waiting for threads to finish");
+    emulator_thread.join().map_err(|_| failure::err_msg("emulator thread panicked"))?;
+    render_thread.join().map_err(|_| failure::err_msg("render thread panicked"))??;
 
     Ok(())
 }
@@ -242,16 +216,6 @@ impl AtomicKeys {
     }
 }
 
-/// Messages that the worker threads can generate for the main thread.
-enum Message {
-    /// The application should exit.
-    Quit,
-
-    /// An error occured in the rendering thread. This will also exit the
-    /// application.
-    RenderError(Error),
-}
-
 /// A Gameboy frame generated by the emulator.
 ///
 /// The emulation thread constantly renders into its own back buffer and swaps
@@ -276,19 +240,15 @@ impl GbFrame {
 }
 
 
-
-#[derive(Clone)]
 struct Shared {
-    /// A channel to send messages to the main thread.
-    messages: Sender<Message>,
-
-    /// Several different things.
-    state: Arc<SharedState>,
-}
-
-struct SharedState {
     /// The command line arguments.
     args: Args,
+
+    /// A handle to send a message to the main thread to wake up.
+    event_thread: EventsLoopProxy,
+
+    /// Whether the application should quit.
+    should_quit: AtomicBool,
 
     /// The Gameboy keys currently being pressed.
     keys: AtomicKeys,
@@ -314,6 +274,14 @@ struct SharedState {
     /// This is written by the render thread each frame. It is mostly used by
     /// the emulator thread to synchronize sleeping.
     render_timing: Mutex<RenderTiming>,
+}
+
+impl Shared {
+    fn request_quit(&self) {
+        self.should_quit.store(true, Ordering::SeqCst);
+        self.event_thread.wakeup()
+            .expect("event thread unexpectedly already finished");
+    }
 }
 
 /// Information about the timing of the rendering thread.
