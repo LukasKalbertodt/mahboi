@@ -6,6 +6,7 @@ use std::{
 
 use log::LevelFilter;
 use structopt::StructOpt;
+use vulkano::swapchain::PresentMode;
 
 use mahboi::{
     BiosKind,
@@ -160,6 +161,16 @@ pub(crate) struct Args {
     /// change while the UUID stays fixed. In practice, the index is fine.
     #[structopt(long = "--device")]
     pub(crate) device: Option<VulkanDevice>,
+
+    /// Vulkan present mode: 'immediate', 'mailbox', 'fifo' or 'relaxed'. Check
+    /// the Vulkan documentation for the meaning of those modes. Only FIFO is
+    /// always supported. If this is not specified, Mahboi uses mailbox, if
+    /// available, and falls back to FIFO.
+    #[structopt(
+        long = "--present-mode",
+        parse(try_from_str = "parse_mode"),
+    )]
+    pub(crate) present_mode: Option<PresentMode>,
 }
 
 
@@ -253,4 +264,16 @@ impl FromStr for VulkanDevice {
             Ok(VulkanDevice::Index(index))
         }
     }
+}
+
+fn parse_mode(s: &str) -> Result<PresentMode, &'static str> {
+    use self::PresentMode::*;
+
+    Ok(match s {
+        "immediate" => Immediate,
+        "mailbox" => Mailbox,
+        "fifo" => Fifo,
+        "relaxed" => Relaxed,
+        _ => Err("invalid present mode")?,
+    })
 }

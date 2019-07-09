@@ -134,6 +134,7 @@ pub(crate) fn create_context(
     // Create swapchain
     let (swapchain, swapchain_images) = {
         let caps = surface.capabilities(physical)?;
+        trace!("Surface capabilities: {:#?}", caps);
 
         // We basically only use it as color attachment, but it doesn't hurt to
         // just take everything it supports. TODO: or should we just take the
@@ -154,11 +155,24 @@ pub(crate) fn create_context(
         }
         let format = Format::B8G8R8A8Unorm;
 
+        // Get window dimensions
         let dimensions: (u32, u32) = window.get_inner_size()
             .ok_or(failure::err_msg("window unexpectedly closed"))?
             .to_physical(window.get_hidpi_factor())
             .into();
         let initial_dimensions = [dimensions.0, dimensions.1];
+
+        // Decide for present mode
+        let present_mode = if let Some(user_choice) = args.present_mode {
+            user_choice
+        } else {
+            if caps.present_modes.mailbox {
+                PresentMode::Mailbox
+            } else {
+                PresentMode::Fifo
+            }
+        };
+        debug!("Using present mode {:?}", present_mode);
 
         // Finally create swapchain
         Swapchain::new(
@@ -172,7 +186,7 @@ pub(crate) fn create_context(
             &queue,
             SurfaceTransform::Identity,
             alpha,
-            PresentMode::Fifo, // TODO: make user defined
+            present_mode,
             true, // clipped: our shaders do not have side effects, so allow
             None, // old swapchain
         )?
