@@ -11,11 +11,22 @@ use std::{
 use failure::{bail, Error, ResultExt};
 use spin_sleep::LoopHelper;
 use vulkano::{
+    buffer::{BufferUsage, ImmutableBuffer},
+    command_buffer::{AutoCommandBufferBuilder, DynamicState},
+    device::{Device, DeviceExtensions, Queue},
     format::Format,
+    framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
     image::swapchain::SwapchainImage,
     instance::{Instance, PhysicalDevice},
-    device::{Device, DeviceExtensions, Queue},
-    swapchain::{ColorSpace, PresentMode, Surface, SurfaceTransform, Swapchain},
+    pipeline::{
+        GraphicsPipeline,
+        viewport::Viewport,
+    },
+    swapchain::{
+        self, AcquireError, ColorSpace, PresentMode, Surface, SurfaceTransform,
+        Swapchain, SwapchainCreationError,
+    },
+    sync::{FlushError, GpuFuture},
 };
 use vulkano_win::VkSurfaceBuild;
 use winit::{
@@ -156,11 +167,7 @@ pub(crate) fn create_context(
         let format = Format::B8G8R8A8Unorm;
 
         // Get window dimensions
-        let dimensions: (u32, u32) = window.get_inner_size()
-            .ok_or(failure::err_msg("window unexpectedly closed"))?
-            .to_physical(window.get_hidpi_factor())
-            .into();
-        let initial_dimensions = [dimensions.0, dimensions.1];
+        let initial_dimensions = inner_size(&window)?;
 
         // Decide for present mode
         let present_mode = if let Some(user_choice) = args.present_mode {
@@ -200,9 +207,91 @@ pub(crate) fn create_context(
 /// Renders the front buffer of `gb_buffer` to the host screen at the host
 /// refresh rate.
 pub(crate) fn render_thread(
-    context: VulkanContext,
+    VulkanContext { surface, device, queue, mut swapchain, swapchain_images }: VulkanContext,
     shared: &Shared,
 ) -> Result<(), Error> {
+    #[derive(Copy, Clone, Default)]
+    struct Vertex {
+        position: [f32; 2],
+        tex_coords: [f32; 2],
+    }
+    vulkano::impl_vertex!(Vertex, position, tex_coords);
+
+    // Create vertex buffer with a full screen quad
+    let (vertex_buffer, vertex_buffer_init_future) = {
+
+        let data = [
+            Vertex { position: [-1.0, -1.0], tex_coords: [0.0, 1.0] },
+            Vertex { position: [-1.0,  1.0], tex_coords: [0.0, 0.0] },
+            Vertex { position: [ 1.0, -1.0], tex_coords: [1.0, 1.0] },
+            Vertex { position: [ 1.0,  1.0], tex_coords: [1.0, 0.0] },
+        ];
+
+        ImmutableBuffer::from_iter(
+            data.iter().cloned(),
+            BufferUsage::vertex_buffer(),
+            queue.clone(),
+        )?
+    };
+
+
+    // Load shaders
+    mod fs {
+        vulkano_shaders::shader!{
+            ty: "fragment",
+            path: "src/shader/simple.frag"
+        }
+    }
+
+    mod vs {
+        vulkano_shaders::shader!{
+            ty: "vertex",
+            path: "src/shader/simple.vert"
+        }
+    }
+
+    let vs = vs::Shader::load(device.clone())?;
+    let fs = fs::Shader::load(device.clone())?;
+
+
+    // Create renderpass
+    let render_pass = vulkano::single_pass_renderpass!(
+        device.clone(),
+        attachments: {
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.format(),
+                samples: 1,
+            }
+        },
+        pass: {
+            color: [color],
+            depth_stencil: {}
+        }
+    )?;
+    let render_pass = Arc::new(render_pass);
+
+    // Create Pipeline
+    let pipeline = GraphicsPipeline::start()
+        .vertex_input_single_buffer::<Vertex>()
+        .vertex_shader(vs.main_entry_point(), ())
+        .triangle_strip()
+        .viewports_dynamic_scissors_irrelevant(1)
+        .fragment_shader(fs.main_entry_point(), ())
+        .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+        .build(device.clone())?;
+    let pipeline = Arc::new(pipeline);
+
+    let mut dynamic_state = DynamicState { line_width: None, viewports: None, scissors: None };
+    let mut framebuffers = create_framebuffers(
+        &swapchain_images,
+        render_pass.clone(),
+        &mut dynamic_state,
+    )?;
+
+    let mut recreate_swapchain = false;
+
 //     // Create the pixel buffer and initialize all pixels with black.
 //     let pixel_buffer = PixelBuffer::new_empty(&display, SCREEN_WIDTH * SCREEN_HEIGHT);
 //     pixel_buffer.write(&vec![(0u8, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT]);
@@ -216,47 +305,10 @@ pub(crate) fn render_thread(
 //         SCREEN_HEIGHT as u32,
 //     )?;
 
+    // Before we can start rendering, we have to wait until the vertex buffer
+    // was completely initialized.
+    drop(vertex_buffer_init_future);
 
-//     #[derive(Copy, Clone)]
-//     struct Vertex {
-//         position: [f32; 2],
-//         tex_coords: [f32; 2],
-//     }
-
-//     implement_vertex!(Vertex, position, tex_coords);
-
-//     // Create the full screen quad
-//     let shape = vec![
-//         Vertex { position: [-1.0, -1.0], tex_coords: [0.0, 1.0] },
-//         Vertex { position: [-1.0,  1.0], tex_coords: [0.0, 0.0] },
-//         Vertex { position: [ 1.0, -1.0], tex_coords: [1.0, 1.0] },
-//         Vertex { position: [ 1.0,  1.0], tex_coords: [1.0, 0.0] },
-//     ];
-
-//     let vertex_buffer = VertexBuffer::new(&display, &shape)?;
-//     let indices = NoIndices(glium::index::PrimitiveType::TriangleStrip);
-
-
-//     // Compile program. We have to do it via `ProgramCreationInput` to set
-//     // `outputs_srgb` to `true`. This is an ugly workaround for a bug
-//     // somewhere in the window creation stack. The framebuffer is
-//     // incorrectly created as sRGB and glium then automatically converts
-//     // all values returned by the fragment shader into sRGB. We don't want
-//     // a conversion, so we just tell glium we already output sRGB (which we
-//     // don't).
-//     let program = Program::new(
-//         &display,
-//         ProgramCreationInput::SourceCode {
-//             vertex_shader: include_str!("shader/simple.vert"),
-//             tessellation_control_shader: None,
-//             tessellation_evaluation_shader: None,
-//             geometry_shader: None,
-//             fragment_shader: include_str!("shader/simple.frag"),
-//             transform_feedback_varyings: None,
-//             outputs_srgb: true,
-//             uses_point_size: false,
-//         }
-//     )?;
 
     let mut loop_helper = LoopHelper::builder()
         .report_interval_s(0.5)
@@ -294,6 +346,29 @@ pub(crate) fn render_thread(
             break;
         }
 
+        if recreate_swapchain {
+            let dimensions = inner_size(surface.window())?;
+
+            let (new_swapchain, new_images) = match swapchain.recreate_with_dimension(dimensions) {
+                Ok(r) => r,
+                Err(SwapchainCreationError::UnsupportedDimensions) => {
+                    // TODO: handle this in a better way
+                    println!("oops {:?}", dimensions);
+                    continue;
+                }
+                Err(err) => panic!("{:?}", err)
+            };
+
+            swapchain = new_swapchain;
+            framebuffers = create_framebuffers(
+                &new_images,
+                render_pass.clone(),
+                &mut dynamic_state,
+            )?;
+
+            recreate_swapchain = false;
+        }
+
 //         // We sleep before doing anything with OpenGL.
 //         trace!("sleeping {:.2?} before drawing", draw_delay);
 //         spin_sleep::sleep(draw_delay);
@@ -310,6 +385,48 @@ pub(crate) fn render_thread(
 //             pixel_buffer.write(&*frame.buffer);
             frame.timestamp
         };
+
+
+
+        let (image_idx, acquire_future) = {
+            let aquire_res = swapchain::acquire_next_image(swapchain.clone(), None);
+            match aquire_res {
+                Ok(r) => r,
+                Err(AcquireError::OutOfDate) => {
+                    // TODO: is `continue` correct here regarding timing?
+                    recreate_swapchain = true;
+                    continue;
+                },
+                Err(e) => Err(e)?,
+            }
+        };
+
+        // Build command buffer
+        let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into());
+        let command_buffer
+            = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())?
+            .begin_render_pass(framebuffers[image_idx].clone(), false, clear_values)?
+            .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())?
+            .end_render_pass()?
+            .build()?;
+
+        let future = acquire_future
+            .then_execute(queue.clone(), command_buffer)?
+            .then_swapchain_present(queue.clone(), swapchain.clone(), image_idx)
+            .then_signal_fence_and_flush();
+
+
+        match future {
+            Ok(future) => {
+                // Block until complete
+                // TODO: call `cleanup_finished?`
+                drop(future);
+            }
+            Err(FlushError::OutOfDate) => {
+                recreate_swapchain = true;
+            }
+            Err(e) => Err(e)?,
+        }
 
 //         // We update the texture data by uploading our pixel buffer.
 //         texture.main_level().raw_upload_from_pixel_buffer(
@@ -332,19 +449,11 @@ pub(crate) fn render_thread(
 
 //         // Draw the fullscreenquad to the framebuffer
 //         let mut target = display.draw();
-//         target.clear_color_srgb(0.0, 0.0, 0.0, 0.0);
 
 //         let uniforms = uniform! {
 //             scale_factor: scale_factor,
 //             tex: &texture,
 //         };
-//         target.draw(
-//             &vertex_buffer,
-//             &indices,
-//             &program,
-//             &uniforms,
-//             &Default::default(),
-//         )?;
 
 //         // We do our best to sync OpenGL to the CPU here. We issue a fence into
 //         // the command stream and then even call `glFinish()`. To really force
@@ -430,16 +539,48 @@ pub(crate) fn render_thread(
             let emu_fps = *shared.emulation_rate.lock().unwrap();
             let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
             let title = format!(
-                "{} (emulator: {:.1} FPS / {:3}%, OpenGL: {:.1} FPS, delay: {:.1?})",
+                "{} (emulator: {:.1} FPS / {:3}%, Vulkan: {:.1} FPS, delay: {:.1?})",
                 WINDOW_TITLE,
                 emu_fps,
                 emu_percent.round(),
                 ogl_fps,
                 emu_to_display_delay,
             );
-            // display.gl_window().window().set_title(&title);
+            surface.window().set_title(&title);
         }
     }
 
     Ok(())
+}
+
+fn create_framebuffers(
+    swapchain_images: &[Arc<SwapchainImage<Window>>],
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    dynamic_state: &mut DynamicState,
+) -> Result<Vec<Arc<dyn FramebufferAbstract + Send + Sync>>, Error> {
+    let dimensions = swapchain_images[0].dimensions();
+
+    let viewport = Viewport {
+        origin: [0.0, 0.0],
+        dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+        depth_range: 0.0 .. 1.0,
+    };
+    dynamic_state.viewports = Some(vec!(viewport));
+
+    swapchain_images.iter().map(|image| {
+        let fb = Framebuffer::start(render_pass.clone())
+            .add(image.clone())?
+            .build()?;
+
+        Ok(Arc::new(fb) as Arc<dyn FramebufferAbstract + Send + Sync>)
+    }).collect()
+}
+
+fn inner_size(window: &Window) -> Result<[u32; 2], Error> {
+    let dimensions: (u32, u32) = window.get_inner_size()
+        .ok_or(failure::err_msg("window unexpectedly closed"))?
+        .to_physical(window.get_hidpi_factor())
+        .into();
+
+    Ok([dimensions.0, dimensions.1])
 }
