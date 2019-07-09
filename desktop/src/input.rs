@@ -2,7 +2,7 @@ use std::{
     sync::atomic::Ordering,
 };
 
-use glium::glutin::{
+use winit::{
     ControlFlow, Event, KeyboardInput, WindowEvent,
     ElementState as State,
     VirtualKeyCode as Key,

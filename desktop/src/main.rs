@@ -9,13 +9,11 @@ use std::{
 };
 
 use failure::{Error, ResultExt};
-use glium::{
-    glutin::{
-        ContextBuilder, EventsLoop, EventsLoopProxy, WindowBuilder,
-        dpi::{LogicalSize, PhysicalSize},
-    },
-};
 use structopt::StructOpt;
+use winit::{
+    EventsLoop, EventsLoopProxy,
+    dpi::{LogicalSize, PhysicalSize},
+};
 
 use mahboi::{
     Emulator, SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -27,7 +25,7 @@ use crate::{
     args::Args,
     emu::emulator_thread,
     input::handle_event,
-    render::render_thread,
+    render::{create_context, render_thread},
 };
 
 
@@ -98,17 +96,8 @@ fn run() -> Result<(), Error> {
     );
     let window_size = window_size.to_logical(window_dpi_factor);
 
-    let wb = WindowBuilder::new()
-        .with_dimensions(window_size)
-        .with_resizable(true)
-        .with_title(WINDOW_TITLE);
-
-    // Configure and GL context
-    let cb = ContextBuilder::new()
-        .with_vsync(true);
-    let context = cb.build_windowed(wb, &events_loop)?;
-    info!("[desktop] Opened window");
-
+    // Create Vulkan "context"
+    let context = create_context(&args, &events_loop, &window_size)?;
 
     // Create values that are shared across all threads.
     let shared = Arc::new(Shared {
