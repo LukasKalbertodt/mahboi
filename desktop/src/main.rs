@@ -1,5 +1,6 @@
 use std::{
     fs,
+    panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -129,7 +130,11 @@ fn run() -> Result<(), Error> {
         // Create a new handle to the shared values.
         let shared = shared.clone();
 
-        thread::spawn(move || render_thread(context, &shared))
+        thread::spawn(move || {
+            let res = catch_unwind(AssertUnwindSafe(|| render_thread(context, &shared)));
+            shared.request_quit();
+            res.unwrap_or_else(|e| resume_unwind(e))
+        })
     };
 
     // ----- Emulator Thread -------------------------------------------------
@@ -137,7 +142,11 @@ fn run() -> Result<(), Error> {
         // Create a new handle to the shared values.
         let shared = shared.clone();
 
-        thread::spawn(move || emulator_thread(emulator, &shared))
+        thread::spawn(move || {
+            let res = catch_unwind(AssertUnwindSafe(|| emulator_thread(emulator, &shared)));
+            shared.request_quit();
+            res.unwrap_or_else(|e| resume_unwind(e))
+        })
     };
 
 
