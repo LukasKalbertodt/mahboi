@@ -187,6 +187,10 @@ pub(crate) fn create_context(
             if caps.present_modes.mailbox {
                 PresentMode::Mailbox
             } else {
+                warn!(
+                    "Present mode 'mailbox' is not available. Falling back to 'fifo'. \
+                        Input lag could be increased due to this."
+                );
                 PresentMode::Fifo
             }
         };

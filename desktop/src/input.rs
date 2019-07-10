@@ -3,7 +3,7 @@ use std::{
 };
 
 use winit::{
-    ControlFlow, Event, KeyboardInput, WindowEvent,
+    ControlFlow, Event, KeyboardInput, ModifiersState, WindowEvent,
     ElementState as State,
     VirtualKeyCode as Key,
 };
@@ -84,7 +84,7 @@ pub(crate) fn handle_event(event: &Event, shared: &Shared) -> ControlFlow {
                 Key::D if state == State::Released => keys.unset_key(JoypadKey::Right),
 
                 // Other non-Gameboy related functions
-                Key::Q if state == State::Pressed && modifiers.ctrl => {
+                Key::Q if state == State::Pressed && is_control_pressed(modifiers) => {
                     shared.request_quit();
                     return ControlFlow::Break;
                 }
@@ -100,4 +100,14 @@ pub(crate) fn handle_event(event: &Event, shared: &Shared) -> ControlFlow {
     }
 
     ControlFlow::Continue
+}
+
+#[cfg(target_os = "macos")]
+fn is_control_pressed(modifiers: &ModifiersState) -> bool {
+    modifiers.logo
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_control_pressed(modifiers: &ModifiersState) -> bool {
+    modifiers.ctrl
 }
