@@ -3,7 +3,7 @@ use std::{
     iter,
     time::{Duration, Instant},
     sync::{
-        Arc,
+        Arc, Condvar,
         atomic::Ordering,
     },
 };
@@ -368,6 +368,10 @@ pub(crate) fn render_thread(
         .report_interval_s(0.5)
         .build_without_target_rate();
 
+    let present_mode = swapchain.present_mode();
+    let immediate_present = present_mode == PresentMode::Immediate
+        || present_mode == PresentMode::Mailbox;
+
 //     // We want to delay drawing the buffer with OpenGL to reduce input lag. It
 //     // is difficult to figure out how long we should wait with drawing, though!
 //     // Visualizing frame timing:
@@ -432,17 +436,34 @@ pub(crate) fn render_thread(
 //             frame_time,
 //         };
 
+
         // We map the Vulkan buffer and write directly to it.
         let frame_birth_time = {
-            let frame = shared.gb_frame.lock()
+            let mut frame = shared.gb_frame.lock()
                 .expect("failed to lock front buffer");
 
+            // If the swapchain swap is immediate, we will limit this thread by
+            // waiting until a new frame was rendered by the emulator thread.
+            if immediate_present {
+                while !shared.should_quit.load(Ordering::SeqCst) && frame.num_finished == 0 {
+                    frame = shared.frame_finished_event.wait(frame)
+                        .expect("frame mutex got poisioned");
+                }
+            }
+
+            // Write GB screen to Vulkan buffer
             let mut write = screen_buffer.write()?;
             for (chunk, pixels) in write.chunks_mut(4).zip(&frame.buffer) {
                 chunk[0] = pixels.0;
                 chunk[1] = pixels.1;
                 chunk[2] = pixels.2;
             }
+
+            // Check for droppped frames
+            if frame.num_finished > 1 {
+                shared.dropped_frames.fetch_add(frame.num_finished - 1, Ordering::SeqCst);
+            }
+            frame.num_finished = 0;
 
             frame.timestamp
         };
@@ -593,12 +614,13 @@ pub(crate) fn render_thread(
             let emu_fps = *shared.emulation_rate.lock().unwrap();
             let emu_percent = (emu_fps / TARGET_FPS) * 100.0;
             let title = format!(
-                "{} (emulator: {:.1} FPS / {:3}%, Vulkan: {:.1} FPS, delay: {:.1?})",
+                "{} (emu: {:.1} FPS / {:3}%, Vulkan: {:.1} FPS, delay: {:.1?}, dropped: {})",
                 WINDOW_TITLE,
                 emu_fps,
                 emu_percent.round(),
                 ogl_fps,
                 emu_to_display_delay,
+                shared.dropped_frames.load(Ordering::SeqCst),
             );
             *shared.window_title.lock().unwrap() = title;
             shared.event_thread.wakeup()?;

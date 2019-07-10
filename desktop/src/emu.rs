@@ -105,6 +105,8 @@ pub(crate) fn emulator_thread(
                         .expect("failed to lock front buffer");
                     mem::swap(&mut frame.buffer, &mut back_buffer);
                     frame.timestamp = before_emulation;
+                    frame.num_finished += 1;
+                    shared.frame_finished_event.notify_one();
                 }
             }
             _ => {}

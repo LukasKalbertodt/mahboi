@@ -2,8 +2,8 @@ use std::{
     fs,
     panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
     thread,
@@ -109,6 +109,7 @@ fn run() -> Result<(), Error> {
 
         keys: AtomicKeys::none(),
         gb_frame: Mutex::new(GbFrame::new()),
+        frame_finished_event: Condvar::new(),
         emulation_rate: Mutex::new(TARGET_FPS),
         turbo_mode: AtomicBool::new(false),
 
@@ -122,6 +123,7 @@ fn run() -> Result<(), Error> {
             next_draw_start: Instant::now(),
             frame_time: Duration::from_millis(16),
         }),
+        dropped_frames: AtomicU64::new(0),
     });
 
 
@@ -227,6 +229,10 @@ struct GbFrame {
 
     /// The instant the emulation creating this buffer was started.
     timestamp: Instant,
+
+    /// Incremented by the emulator thread each time it has finished a frame.
+    /// Reset to 0 by the render thread when it receives and displays a frame.
+    num_finished: u64,
 }
 
 impl GbFrame {
@@ -235,6 +241,7 @@ impl GbFrame {
         Self {
             buffer: vec![(0, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT],
             timestamp: Instant::now(),
+            num_finished: 0,
         }
     }
 }
@@ -255,6 +262,10 @@ struct Shared {
 
     /// Front buffer for the gameboy screen (has nothing to do with OpenGL).
     gb_frame: Mutex<GbFrame>,
+
+    /// A condition variable that is notified by the emulator thread whenever a
+    /// frame is finished.
+    frame_finished_event: Condvar,
 
     /// The current rate of emulation in FPS. Should be `TARGET_FPS` or at
     /// least very close to it.
@@ -279,6 +290,10 @@ struct Shared {
     /// This is written by the render thread each frame. It is mostly used by
     /// the emulator thread to synchronize sleeping.
     render_timing: Mutex<RenderTiming>,
+
+    /// We count the number of frames that were created by the emulator but not
+    /// shown by the render thread.
+    dropped_frames: AtomicU64,
 }
 
 impl Shared {
@@ -286,6 +301,7 @@ impl Shared {
         self.should_quit.store(true, Ordering::SeqCst);
         self.event_thread.wakeup()
             .expect("event thread unexpectedly already finished");
+        self.frame_finished_event.notify_one();
     }
 }
 
