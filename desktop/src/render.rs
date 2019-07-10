@@ -353,7 +353,7 @@ pub(crate) fn render_thread(
                 Ok(r) => r,
                 Err(SwapchainCreationError::UnsupportedDimensions) => {
                     // TODO: handle this in a better way
-                    println!("oops {:?}", dimensions);
+                    warn!("Could not create swapchain with dimension {:?}", dimensions);
                     continue;
                 }
                 Err(err) => panic!("{:?}", err)
@@ -401,12 +401,25 @@ pub(crate) fn render_thread(
             }
         };
 
+        // We need to find out the current physical window size to know how to
+        // stretch the texture.
+        let dpi_factor = *shared.window_dpi_factor.lock().unwrap();
+        let logical_size = *shared.window_size.lock().unwrap();
+        let physical_size = logical_size.to_physical(dpi_factor);
+        let scale_x = physical_size.width / SCREEN_WIDTH as f64;
+        let scale_y = physical_size.height / SCREEN_HEIGHT as f64;
+        let scale = if scale_x > scale_y { scale_y } else { scale_x };
+
+        let push_constants = vs::ty::PushConstants {
+            scale_factor: [(scale_x / scale) as f32, (scale_y / scale) as f32],
+        };
+
         // Build command buffer
         let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into());
         let command_buffer
             = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())?
             .begin_render_pass(framebuffers[image_idx].clone(), false, clear_values)?
-            .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), ())?
+            .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), push_constants)?
             .end_render_pass()?
             .build()?;
 
@@ -435,17 +448,6 @@ pub(crate) fn render_thread(
 //             0..SCREEN_HEIGHT as u32,
 //             0..1,
 //         );
-
-//         // We need to find out the current physical window size to know how to
-//         // stretch the texture.
-//         let dpi_factor = *shared.window_dpi_factor.lock().unwrap();
-//         let logical_size = *shared.window_size.lock().unwrap();
-//         let physical_size = logical_size.to_physical(dpi_factor);
-//         let scale_x = physical_size.width / SCREEN_WIDTH as f64;
-//         let scale_y = physical_size.height / SCREEN_HEIGHT as f64;
-//         let scale = if scale_x > scale_y { scale_y } else { scale_x };
-//         let scale_factor = [(scale_x / scale) as f32, (scale_y / scale) as f32];
-
 
 //         // Draw the fullscreenquad to the framebuffer
 //         let mut target = display.draw();
