@@ -11,17 +11,19 @@ use std::{
 use failure::{bail, Error, ResultExt};
 use spin_sleep::LoopHelper;
 use vulkano::{
-    buffer::{BufferUsage, ImmutableBuffer},
+    buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer},
     command_buffer::{AutoCommandBufferBuilder, DynamicState},
+    descriptor::descriptor_set::PersistentDescriptorSet,
     device::{Device, DeviceExtensions, Queue},
-    format::Format,
+    format::{self, Format},
     framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass},
-    image::swapchain::SwapchainImage,
+    image::{Dimensions, ImageUsage, StorageImage, SwapchainImage},
     instance::{Instance, PhysicalDevice},
     pipeline::{
         GraphicsPipeline,
         viewport::Viewport,
     },
+    sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode},
     swapchain::{
         self, AcquireError, ColorSpace, PresentMode, Surface, SurfaceTransform,
         Swapchain, SwapchainCreationError,
@@ -221,10 +223,10 @@ pub(crate) fn render_thread(
     let (vertex_buffer, vertex_buffer_init_future) = {
 
         let data = [
-            Vertex { position: [-1.0, -1.0], tex_coords: [0.0, 1.0] },
-            Vertex { position: [-1.0,  1.0], tex_coords: [0.0, 0.0] },
-            Vertex { position: [ 1.0, -1.0], tex_coords: [1.0, 1.0] },
-            Vertex { position: [ 1.0,  1.0], tex_coords: [1.0, 0.0] },
+            Vertex { position: [-1.0, -1.0], tex_coords: [0.0, 0.0] },
+            Vertex { position: [-1.0,  1.0], tex_coords: [0.0, 1.0] },
+            Vertex { position: [ 1.0, -1.0], tex_coords: [1.0, 0.0] },
+            Vertex { position: [ 1.0,  1.0], tex_coords: [1.0, 1.0] },
         ];
 
         ImmutableBuffer::from_iter(
@@ -292,23 +294,55 @@ pub(crate) fn render_thread(
 
     let mut recreate_swapchain = false;
 
-//     // Create the pixel buffer and initialize all pixels with black.
-//     let pixel_buffer = PixelBuffer::new_empty(&display, SCREEN_WIDTH * SCREEN_HEIGHT);
-//     pixel_buffer.write(&vec![(0u8, 0, 0); SCREEN_WIDTH * SCREEN_HEIGHT]);
+    // Create a buffer that holds the gameboy screen. This buffer will be
+    // written by the CPU side. And on the GPU we will transfer data from this
+    // buffer into the image created below.
+    let screen_buffer = CpuAccessibleBuffer::from_iter(
+        device.clone(),
+        BufferUsage {
+            transfer_source: true,
+            .. BufferUsage::none()
+        },
+        vec![0u8; SCREEN_WIDTH * SCREEN_HEIGHT * 4].into_iter(),
+    )?;
 
-//     // Create an empty, uninitialized texture
-//     let texture = UnsignedTexture2d::empty_with_format(
-//         &display,
-//         UncompressedUintFormat::U8U8U8,
-//         MipmapsOption::NoMipmap,
-//         SCREEN_WIDTH as u32,
-//         SCREEN_HEIGHT as u32,
-//     )?;
+    // Create an image that is used as texture on the fullscreen quad. It will
+    // be filled with the buffer above.
+    let tex = StorageImage::with_usage(
+        device.clone(),
+        Dimensions::Dim2d { width: SCREEN_WIDTH as u32, height: SCREEN_HEIGHT as u32 },
+        format::R8G8B8A8Uint, // TODO: check if supported?
+        ImageUsage {
+            transfer_destination: true,
+            sampled: true,
+            .. ImageUsage::none()
+        },
+        Some(queue.family()),
+    )?;
+
+    // Sampler to sample the texture in the shader
+    let sampler = Sampler::new(
+        device.clone(),
+        Filter::Nearest,
+        Filter::Nearest,
+        MipmapMode::Nearest,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        0.0, // mip_lod_bias
+        1.0, // max_anisotropy
+        0.0, // min_lod
+        0.0, // max_lod
+    )?;
+
+    let descriptor_set = PersistentDescriptorSet::start(pipeline.clone(), 0)
+        .add_sampled_image(tex.clone(), sampler.clone())?
+        .build()?;
+    let descriptor_set = Arc::new(descriptor_set);
 
     // Before we can start rendering, we have to wait until the vertex buffer
     // was completely initialized.
     drop(vertex_buffer_init_future);
-
 
     let mut loop_helper = LoopHelper::builder()
         .report_interval_s(0.5)
@@ -378,11 +412,18 @@ pub(crate) fn render_thread(
 //             frame_time,
 //         };
 
-//         // We map the pixel buffer and write directly to it.
+        // We map the Vulkan buffer and write directly to it.
         let frame_birth_time = {
             let frame = shared.gb_frame.lock()
                 .expect("failed to lock front buffer");
-//             pixel_buffer.write(&*frame.buffer);
+
+            let mut write = screen_buffer.write()?;
+            for (chunk, pixels) in write.chunks_mut(4).zip(&frame.buffer) {
+                chunk[0] = pixels.0;
+                chunk[1] = pixels.1;
+                chunk[2] = pixels.2;
+            }
+
             frame.timestamp
         };
 
@@ -418,8 +459,15 @@ pub(crate) fn render_thread(
         let clear_values = vec!([0.0, 0.0, 0.0, 1.0].into());
         let command_buffer
             = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())?
+            .copy_buffer_to_image(screen_buffer.clone(), tex.clone())?
             .begin_render_pass(framebuffers[image_idx].clone(), false, clear_values)?
-            .draw(pipeline.clone(), &dynamic_state, vertex_buffer.clone(), (), push_constants)?
+            .draw(
+                pipeline.clone(),
+                &dynamic_state,
+                vertex_buffer.clone(),
+                descriptor_set.clone(),
+                push_constants,
+            )?
             .end_render_pass()?
             .build()?;
 
@@ -440,22 +488,6 @@ pub(crate) fn render_thread(
             }
             Err(e) => Err(e)?,
         }
-
-//         // We update the texture data by uploading our pixel buffer.
-//         texture.main_level().raw_upload_from_pixel_buffer(
-//             pixel_buffer.as_slice(),
-//             0..SCREEN_WIDTH as u32,
-//             0..SCREEN_HEIGHT as u32,
-//             0..1,
-//         );
-
-//         // Draw the fullscreenquad to the framebuffer
-//         let mut target = display.draw();
-
-//         let uniforms = uniform! {
-//             scale_factor: scale_factor,
-//             tex: &texture,
-//         };
 
 //         // We do our best to sync OpenGL to the CPU here. We issue a fence into
 //         // the command stream and then even call `glFinish()`. To really force

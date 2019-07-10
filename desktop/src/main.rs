@@ -44,7 +44,7 @@ const WINDOW_TITLE: &str = "Mahboi";
 fn main() {
     // We just catch potential errors here and pretty print them.
     if let Err(e) = run() {
-        println!("ERROR: {}", e);
+        println!("ERROR: {} ({:?}", e, e);
 
         for cause in e.iter_causes() {
             println!("  ... caused by: {}", cause);
