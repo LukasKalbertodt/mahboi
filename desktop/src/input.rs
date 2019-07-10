@@ -3,13 +3,12 @@ use std::{
 };
 
 use winit::{
-    ControlFlow, Event, KeyboardInput, ModifiersState, WindowEvent,
+    ControlFlow, Event, KeyboardInput, ModifiersState, Window, WindowEvent,
     ElementState as State,
     VirtualKeyCode as Key,
 };
 
 use mahboi::{
-    log::*,
     machine::input::JoypadKey,
 };
 use crate::Shared;
@@ -18,21 +17,26 @@ use crate::Shared;
 
 /// Listens for input events and handles them by either updating `keys` or
 /// sending messages to the main thread.
-pub(crate) fn handle_event(event: &Event, shared: &Shared) -> ControlFlow {
+pub(crate) fn handle_event(event: &Event, shared: &Shared, window: &Window) -> ControlFlow {
     // First, we extract the inner window event as that's what we are
     // interested in.
     let event = match event {
         // That's what we want!
         Event::WindowEvent { event, .. } => event,
 
-        // When the main thread wakes us up, we just stop this thread.
+        // When the main thread wakes us up, another thread wants something
+        // from the main thread.
         Event::Awakened => {
+            // Either some thread requested to shut down the application. In
+            // that case, we just stop.
             if shared.should_quit.load(Ordering::SeqCst) {
                 return ControlFlow::Break;
-            } else {
-                warn!("woke up event thread, but `should_quit` not set (that's strange)");
-                return ControlFlow::Continue;
             }
+
+            // Or it is time to update the window title
+            window.set_title(&*shared.window_title.lock().unwrap());
+
+            return ControlFlow::Continue;
         }
 
         // We ignore all other events (device events).

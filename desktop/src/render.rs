@@ -48,12 +48,19 @@ use crate::{
 
 /// A Vulkan "context". That word has no real meaning with Vulkan (unlike
 /// OpenGL), but we use it for the collection of all "central" Vulkan objects.
+#[derive(Clone)]
 pub(crate) struct VulkanContext {
     surface: Arc<Surface<Window>>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     swapchain: Arc<Swapchain<Window>>,
     swapchain_images: Vec<Arc<SwapchainImage<Window>>>,
+}
+
+impl VulkanContext {
+    pub(crate) fn window(&self) -> &Window {
+        self.surface.window()
+    }
 }
 
 
@@ -593,7 +600,8 @@ pub(crate) fn render_thread(
                 ogl_fps,
                 emu_to_display_delay,
             );
-            surface.window().set_title(&title);
+            *shared.window_title.lock().unwrap() = title;
+            shared.event_thread.wakeup()?;
         }
     }
 

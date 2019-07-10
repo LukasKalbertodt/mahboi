@@ -114,6 +114,7 @@ fn run() -> Result<(), Error> {
 
         window_dpi_factor: Mutex::new(window_dpi_factor),
         window_size: Mutex::new(window_size),
+        window_title: Mutex::new(WINDOW_TITLE.into()),
 
         // It's fine to use an instant that is "earlier" than a real value
         // would be. The duration also doesn't need to be exact.
@@ -129,6 +130,7 @@ fn run() -> Result<(), Error> {
     let render_thread = {
         // Create a new handle to the shared values.
         let shared = shared.clone();
+        let context = context.clone();
 
         thread::spawn(move || {
             let res = catch_unwind(AssertUnwindSafe(|| render_thread(context, &shared)));
@@ -155,8 +157,8 @@ fn run() -> Result<(), Error> {
     // ===== Handle events ===================================================
     // =======================================================================
 
-    events_loop.run_forever(move |event| {
-        handle_event(&event, &shared)
+    events_loop.run_forever(|event| {
+        handle_event(&event, &shared, context.window())
     });
 
     // When we reached this point, the `run_forever` call returned because
@@ -268,6 +270,11 @@ struct Shared {
     /// The current logical size of the window. This value is updated by the
     /// input thread.
     window_size: Mutex<LogicalSize>,
+
+    /// The title of the window. Usually set by the render thread and read by
+    /// the main thread. The render thread cannot directly set the title
+    /// because all window interaction on MacOS has to be in the main thread.
+    window_title: Mutex<String>,
 
     /// This is written by the render thread each frame. It is mostly used by
     /// the emulator thread to synchronize sleeping.
