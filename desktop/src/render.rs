@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use failure::{bail, Error, ResultExt};
+use failure::{bail, format_err, Error, ResultExt};
 use spin_sleep::LoopHelper;
 use vulkano::{
     buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer},
@@ -160,13 +160,22 @@ pub(crate) fn create_context(
             .next()
             .ok_or(failure::err_msg("window surface does not support any alpha mode"))?;
 
-        // Choosing the format of swapchain images. TODO: this should probably
-        // be smarter.
-        if !caps.supported_formats.contains(&(Format::B8G8R8A8Unorm, ColorSpace::SrgbNonLinear)) {
-            println!("{:#?}", caps.supported_formats);
-            bail!("surface does not support image format `B8G8R8A8Unorm` in sRGB");
-        }
-        let format = Format::B8G8R8A8Unorm;
+        // Choosing the format of swapchain images. There is only a very small
+        // number of devices that do not support either of those formats,
+        // according to https://vulkan.gpuinfo.org/listsurfaceformats.php
+        let acceptable_formats = [
+            (Format::B8G8R8A8Unorm, ColorSpace::SrgbNonLinear),
+            (Format::R8G8B8A8Unorm, ColorSpace::SrgbNonLinear),
+        ];
+        let format = acceptable_formats.iter()
+            .find(|&pref| caps.supported_formats.contains(pref))
+            .ok_or(format_err!(
+                "surface does not support any formats acceptable for Mahboi \
+                    (acceptable: {:?}, supported: {:?})",
+                acceptable_formats,
+                caps.supported_formats,
+            ))?;
+        debug!("Using format {:?}", format);
 
         // Get window dimensions
         let initial_dimensions = inner_size(&window)?;
@@ -188,7 +197,7 @@ pub(crate) fn create_context(
             device.clone(),
             surface.clone(),
             caps.min_image_count,
-            format,
+            format.0,
             initial_dimensions,
             1, // number of layers
             usage,
