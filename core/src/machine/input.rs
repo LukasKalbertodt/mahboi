@@ -143,6 +143,10 @@ pub enum JoypadKey {
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        SCREEN_WIDTH,
+        primitives::PixelColor,
+    };
     use super::*;
 
 
@@ -150,13 +154,17 @@ mod test {
         keys: Vec<JoypadKey>,
     }
 
-    impl Input for DummyInput {
+    impl Peripherals for DummyInput {
         fn get_pressed_keys(&self) -> Keys {
             let mut out = Keys::none();
             for &key in &self.keys {
-                out = out.set_key(key, true);
+                out.set_key(key);
             }
             out
+        }
+
+        fn write_lcd_line(&mut self, _: u8, _: &[PixelColor; SCREEN_WIDTH]) {
+            unimplemented!()
         }
     }
 
