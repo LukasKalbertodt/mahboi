@@ -1,7 +1,10 @@
 [package]
 name = "mahboi"
 version = "0.1.0"
-authors = ["Lukas Kalbertodt <lukas.kalbertodt@gmail.com>"]
+authors = [
+    "Lukas Kalbertodt <lukas.kalbertodt@gmail.com>",
+    "Johan M. von Behren <johan@vonbehren.eu>",
+]
 edition = "2018"
 
 [dependencies]
