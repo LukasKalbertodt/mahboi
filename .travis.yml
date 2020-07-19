@@ -21,21 +21,3 @@ matrix:
         - cargo test --verbose -p mahboi -p mahboi-desktop
       # speeds up travis build
       cache: cargo
-    - name: "Compile & Test WASM"
-      language: rust
-      rust: nightly
-      env:
-        - RUSTFLAGS="--deny warnings"
-      before_script:
-        - sudo apt-get install xorg-dev nodejs npm
-        - hash cargo-script 2>/dev/null || cargo install -f cargo-script
-        - hash wasm-bindgen 2>/dev/null || cargo install -f wasm-bindgen-cli --version "=0.2.17"
-        - rustup target add wasm32-unknown-unknown
-        - npm config set strict-ssl false # because some random NPM error... uhg
-        - sudo npm install -g typescript
-      script:
-        - cargo build --verbose -p mahboi -p mahboi-web
-        - cargo test --verbose  -p mahboi -p mahboi-web
-        - cd web && ./build-all.rs
-      # speeds up travis build
-      cache: cargo
