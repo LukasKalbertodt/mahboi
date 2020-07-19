@@ -79,10 +79,10 @@ impl Mbc for Mbc3 {
     fn load_rom_byte(&self, addr: Word) -> Byte {
         match addr.get() {
             // Always bank 0
-            0x0000..0x4000 => self.rom[addr.get() as usize],
+            0x0000..=0x3FFF => self.rom[addr.get() as usize],
 
             // Bank 1 to N
-            0x4000..0x8000 => {
+            0x4000..=0x7FFF => {
                 // Bank 0 cannot be mapped in this memory.
                 let bank = max(self.rom_bank, 1);
                 let bank_offset = bank as usize * 0x4000;
@@ -104,17 +104,17 @@ impl Mbc for Mbc3 {
     fn store_rom_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             // RAM enable
-            0x0000..0x2000 => self.ram_enabled = byte.get() & 0x0F == 0x0A,
+            0x0000..=0x1FFF => self.ram_enabled = byte.get() & 0x0F == 0x0A,
 
             // The ROM bank number
-            0x2000..0x4000 => {
+            0x2000..=0x3FFF => {
                 // In contrast to MBC1, all seven bits are written (including
                 // bit 0).
                 self.rom_bank = byte.get() & 0b0111_1111;
             }
 
             // RAM bank or RTC register
-            0x4000..0x6000 => {
+            0x4000..=0x5FFF => {
                 // Make sure a valid value is written.
                 let b = byte.get();
                 if (b <= 3) || (b >= 0x8 && b <= 0xC) {
@@ -126,7 +126,7 @@ impl Mbc for Mbc3 {
             }
 
             // RTC latch registers
-            0x6000..0x8000 => {
+            0x6000..=0x7FFF => {
                 if self.latch_rtc == Byte::zero() && byte == Byte::new(1) {
                     self.rtc_regs.latch();
                 }

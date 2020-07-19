@@ -1,7 +1,5 @@
 //! Mahboi!
 
-#![feature(exclusive_range_pattern)]
-
 
 use crate::{
     env::Peripherals,
