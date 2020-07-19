@@ -195,9 +195,9 @@ impl View for TabView {
         true
     }
 
-    fn call_on_any<'a>(&mut self, selector: &Selector, mut cb: AnyCb<'a>) {
+    fn call_on_any<'a>(&mut self, selector: &Selector, cb: AnyCb<'a>) {
         for tab in &mut self.tabs {
-            tab.body.call_on_any(selector, Box::new(|any| cb(any)));
+            tab.body.call_on_any(selector, &mut |any| cb(any));
         }
     }
 }
