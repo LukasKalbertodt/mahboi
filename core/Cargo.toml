@@ -9,4 +9,4 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-derive_more = "0.15.0"
+derive_more = "0.99.9"
