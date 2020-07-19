@@ -1,5 +1,5 @@
 use failure::{Error, ResultExt};
-use minifb::{Key, WindowOptions, Window};
+use minifb::{Key, ScaleMode, WindowOptions, Window};
 
 use mahboi::{
     SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -26,10 +26,10 @@ impl NativeWindow {
     /// Opens a window configured by `args`.
     pub(crate) fn open(args: &Args) -> Result<Self, Error> {
         let options = WindowOptions {
-            borderless: false,
-            title: true,
-            resize: false,
+            resize: true,
             scale: args.scale,
+            scale_mode: ScaleMode::AspectRatioStretch,
+            ..WindowOptions::default()
         };
 
         let win = Window::new(WINDOW_TITLE, SCREEN_WIDTH, SCREEN_HEIGHT, options)?;
@@ -53,7 +53,7 @@ impl NativeWindow {
     /// Updates the window with the internal buffer and handles new events.
     pub(crate) fn update(&mut self) -> Result<(), Error> {
         if !self.buf.buffer_up_to_date {
-            self.win.update_with_buffer(&self.buf.data)
+            self.win.update_with_buffer(&self.buf.data, SCREEN_WIDTH, SCREEN_HEIGHT)
                 .context("failed to update window buffer")?;
             self.buf.buffer_up_to_date = true;
         } else {
