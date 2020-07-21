@@ -2,7 +2,6 @@
 members = [
     "core",
     "desktop",
-    "web",
 ]
 
 [profile.dev]

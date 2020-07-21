@@ -17,27 +17,24 @@ use mahboi::{
 /// 'N' to the Select button and 'M' to the Start button. The button 'Q' can be
 /// used to speed up the emulation.
 #[derive(Debug, StructOpt)]
+#[structopt(author)]
 pub(crate) struct Args {
     /// Set the scale factor for the window: 1, 2, 4, 8, 16, 32 or 'fit'
     /// (automatically chooses the largest scale factor that still fits on the
     /// screen).
     #[structopt(
-        long = "--scale",
+        long,
         default_value = "4",
-        parse(try_from_str = "parse_scale"),
+        parse(try_from_str = parse_scale),
     )]
     pub(crate) scale: Scale,
 
     /// Start in debugging mode (a TUI debugger). Not usable on Windows!
-    #[structopt(
-        long = "--debug",
-    )]
+    #[structopt(long)]
     pub(crate) debug: bool,
 
     /// Path to the ROM that should be loaded into the emulator.
-    #[structopt(
-        parse(from_os_str),
-    )]
+    #[structopt(parse(from_os_str))]
     pub(crate) path_to_rom: PathBuf,
 
     /// Breakpoint that is added to the debugger at the very beginning.
@@ -46,8 +43,8 @@ pub(crate) struct Args {
     /// `--breakpoints` multiple times. Example: `--breakpoints 23 FF
     /// --breakpoints 10B`.
     #[structopt(
-        long = "--breakpoints",
-        parse(try_from_str = "parse_breakpoint"),
+        long,
+        parse(try_from_str = parse_breakpoint),
         requires = "debug",
     )]
     pub(crate) breakpoints: Vec<Word>,
@@ -55,19 +52,13 @@ pub(crate) struct Args {
     /// When starting in debugging mode, don't pause at the beginning, but
     /// start running right ahead (particularly useful in combination with
     /// `--breakpoints`)
-    #[structopt(
-        long = "--instant-start",
-        requires = "debug",
-    )]
+    #[structopt(long, requires = "debug")]
     pub(crate) instant_start: bool,
 
     /// Defines how much faster turbo mode (key Q) is than 100%. So, a value of
     /// `2` means double the speed, while `4` would mean 400% speed (= roughly
     /// 240FPS).
-    #[structopt(
-        long = "--turbo-mode-factor",
-        default_value = "4",
-    )]
+    #[structopt(long, default_value = "4")]
     pub(crate) turbo_mode_factor: f64,
 
     /// Specifies which log messages to display and which to supress. The
@@ -78,21 +69,17 @@ pub(crate) struct Args {
     /// 'trace'. Note that `trace` messages are statically disabled in release
     /// builds and cannot be reenabled by this flag. [default: 'trace' in
     /// `--debug` mode, 'error' otherwise]
-    #[structopt(
-        long = "--log-level",
-        short = "-l",
-        parse(try_from_str = "parse_log_level"),
-    )]
+    #[structopt(short, long, parse(try_from_str = parse_log_level))]
     pub(crate) log_level: Option<LevelFilter>,
 
     /// Specifies which BIOS (boot ROM) to load. The original BIOS scrolls in
     /// the Nintendo logo and plays a sound. The minimal one skips all that and
     /// you immediately see your game.
     #[structopt(
-        long = "--bios",
-        short = "-b",
+        long,
+        short,
         default_value = "minimal",
-        parse(try_from_str = "parse_bios_kind"),
+        parse(try_from_str = parse_bios_kind),
     )]
     pub(crate) bios: BiosKind,
 }

@@ -81,10 +81,10 @@ impl Mbc for Mbc1 {
     fn load_rom_byte(&self, addr: Word) -> Byte {
         match addr.get() {
             // Always bank 0
-            0x0000..0x4000 => self.rom[addr.get() as usize],
+            0x0000..=0x3FFF => self.rom[addr.get() as usize],
 
             // Bank 1 to N
-            0x4000..0x8000 => {
+            0x4000..=0x7FFF => {
                 let bank_offset = self.rom_bank() * 0x4000;
                 let relative_addr = addr.get() as usize - 0x4000;
 
@@ -104,23 +104,23 @@ impl Mbc for Mbc1 {
     fn store_rom_byte(&mut self, addr: Word, byte: Byte) {
         match addr.get() {
             // RAM enable
-            0x0000..0x2000 => self.ram_enabled = byte.get() & 0x0F == 0x0A,
+            0x0000..=0x1FFF => self.ram_enabled = byte.get() & 0x0F == 0x0A,
 
             // Lower 5 bits of ROM bank number
-            0x2000..0x4000 => {
+            0x2000..=0x3FFF => {
                 // Again, we can never write 0 to those bits.
                 let new = max(byte.get() & 0b0001_1111, 1);
                 self.current_bank = (self.current_bank & 0b1110_0000) | new;
             }
 
             // 2 Bits of ROM or RAM bank
-            0x4000..0x6000 => {
+            0x4000..=0x5FFF => {
                 let new = byte.get() & 0b0110_0000;
                 self.current_bank = (self.current_bank & 0b1001_1111) | new;
             }
 
             // Mode select
-            0x6000..0x8000 => self.ram_mode = byte.get() != 0,
+            0x6000..=0x7FFF => self.ram_mode = byte.get() != 0,
 
             _ => unreachable!(),
         }

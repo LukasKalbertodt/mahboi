@@ -11,12 +11,12 @@ use std::{
 };
 
 use cursive::{
-    Cursive,
+    Cursive, CursiveExt,
     theme::{Theme, BorderStyle, Effect, Color, BaseColor, Palette, PaletteColor, Style},
     view::{Boxable, Identifiable, Scrollable},
     views::{
-        OnEventView, ListView, BoxView, EditView, DummyView, Button, TextView,
-        LinearLayout, Dialog, ScrollView, IdView,
+        OnEventView, ListView, ResizedView, EditView, DummyView, Button, TextView,
+        LinearLayout, Dialog, ScrollView, NamedView,
     },
     utils::markup::StyledString,
 };
@@ -280,7 +280,7 @@ impl TuiDebugger {
         if self.update_needed {
             // We only update the ASM view if the emulator is paused
             if is_paused {
-                let mut asm_view = self.siv.find_id::<AsmView>("asm_view").unwrap();
+                let mut asm_view = self.siv.find_name::<AsmView>("asm_view").unwrap();
                 asm_view.update(machine);
                 let line = asm_view.get_active_line();
                 self.scroll_asm_view = Some(line.saturating_sub(10));
@@ -297,15 +297,15 @@ impl TuiDebugger {
         // If we're in pause mode, update elements in the debugging tab
         if is_paused {
             // If the memory dialog is opened, update it
-            if let Some(mut mem_view) = self.siv.find_id::<MemView>("mem_view") {
+            if let Some(mut mem_view) = self.siv.find_name::<MemView>("mem_view") {
                 mem_view.update(machine, self.update_needed);
             }
         }
 
         // Append all log messages that were pushed to the global buffer into
         // the corresponding log view.
-        self.siv.find_id::<LogView>("log_list").unwrap().update();
-        let discard = self.siv.find_id::<LogView>("log_list")
+        self.siv.find_name::<LogView>("log_list").unwrap().update();
+        let discard = self.siv.find_name::<LogView>("log_list")
             .unwrap()
             .ignore_trace_logs(&mut self.siv)
             && !self.pause_mode;
@@ -380,7 +380,7 @@ impl TuiDebugger {
 
         // Perform certain steps after the TUI has been drawn (re-layouted)
         if let Some(pos) = self.scroll_asm_view {
-            self.siv.find_id::<ScrollView<IdView<AsmView>>>("asm_view_scroll")
+            self.siv.find_name::<ScrollView<NamedView<AsmView>>>("asm_view_scroll")
                 .unwrap()
                 .set_offset((0, pos));
             self.scroll_asm_view = None;
@@ -398,12 +398,12 @@ impl TuiDebugger {
         LOGGER.discard_trace.store(false, Ordering::SeqCst);
 
         // Execution just got paused => select the debugging tab
-        self.siv.find_id::<TabView>("tab_view")
+        self.siv.find_name::<TabView>("tab_view")
             .unwrap()
             .set_selected(1);
 
         // Update the title
-        self.siv.find_id::<TextView>("main_title")
+        self.siv.find_name::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (paused)"));
 
@@ -416,13 +416,13 @@ impl TuiDebugger {
 
         self.pause_mode = false;
 
-        let discard = self.siv.find_id::<LogView>("log_list")
+        let discard = self.siv.find_name::<LogView>("log_list")
             .unwrap()
             .ignore_trace_logs(&mut self.siv);
         LOGGER.discard_trace.store(discard, Ordering::SeqCst);
 
         // Update the title
-        self.siv.find_id::<TextView>("main_title")
+        self.siv.find_name::<TextView>("main_title")
             .unwrap()
             .set_content(Self::make_main_title("Mahboi Debugger (running)"));
 
@@ -439,7 +439,7 @@ impl TuiDebugger {
             // The ASM view caches instructions and assumes the data in
             // 0..0x4000 never changes... which is almost true. But if the boot
             // ROM is disabled, we have to invalidate the cache for 0..0x100.
-            self.siv.find_id::<AsmView>("asm_view")
+            self.siv.find_name::<AsmView>("asm_view")
                 .unwrap()
                 .invalidate_cache(Word::new(0)..Word::new(0x100));
 
@@ -544,12 +544,12 @@ impl TuiDebugger {
             // .effect(Effect::Bold)
             .center()
             .no_wrap()
-            .with_id("main_title");
+            .with_name("main_title");
 
         let tabs = TabView::new()
             .tab("Event Log", log_tab)
             .tab("Debugger", self.debug_tab())
-            .with_id("tab_view");
+            .with_name("tab_view");
 
         let main_layout = LinearLayout::vertical()
             .child(main_title)
@@ -587,7 +587,7 @@ impl TuiDebugger {
             body.append_plain("\n");
         }
 
-        self.siv.find_id::<TextView>("stack_view").unwrap().set_content(body);
+        self.siv.find_name::<TextView>("stack_view").unwrap().set_content(body);
     }
 
     fn update_ppu_data(&mut self, ppu: &Ppu) {
@@ -711,7 +711,7 @@ impl TuiDebugger {
         body.append_plain("\n");
 
 
-        self.siv.find_id::<TextView>("ppu_data").unwrap().set_content(body);
+        self.siv.find_name::<TextView>("ppu_data").unwrap().set_content(body);
     }
 
     fn update_cpu_data(&mut self, cpu: &Cpu) {
@@ -769,7 +769,7 @@ impl TuiDebugger {
         body.append_plain("  C: ");
         body.append_styled((cpu.carry() as u8).to_string(), reg_style);
 
-        self.siv.find_id::<TextView>("cpu_data").unwrap().set_content(body);
+        self.siv.find_name::<TextView>("cpu_data").unwrap().set_content(body);
     }
 
     fn update_interrupt_data(&mut self, machine: &Machine) {
@@ -834,29 +834,29 @@ impl TuiDebugger {
         body.append_plain("\n");
 
 
-        self.siv.find_id::<TextView>("interrupt_view").unwrap().set_content(body);
+        self.siv.find_name::<TextView>("interrupt_view").unwrap().set_content(body);
     }
 
     /// Create the body of the debugging tab.
-    fn debug_tab(&self) -> OnEventView<BoxView<LinearLayout>> {
+    fn debug_tab(&self) -> OnEventView<ResizedView<LinearLayout>> {
         // Main body (left)
         let asm_view = AsmView::new(self.breakpoints.clone())
-            .with_id("asm_view")
+            .with_name("asm_view")
             .scrollable()
-            .with_id("asm_view_scroll");
+            .with_name("asm_view_scroll");
 
         // First right column
-        let cpu_body = TextView::new("no data yet").center().with_id("cpu_data");
+        let cpu_body = TextView::new("no data yet").center().with_name("cpu_data");
         let cpu_view = Dialog::around(cpu_body).title("CPU registers");
 
         let stack_body = TextView::new("no data yet")
-            .with_id("stack_view")
+            .with_name("stack_view")
             .scrollable()
             .fixed_height(8);
         let stack_view = Dialog::around(stack_body).title("Stack");
 
         let interrupt_body = TextView::new("no data yet")
-            .with_id("interrupt_view");
+            .with_name("interrupt_view");
         let interrupt_view = Dialog::around(interrupt_body).title("Interrupts");
 
         let first_right_panel = LinearLayout::vertical()
@@ -868,7 +868,7 @@ impl TuiDebugger {
             .fixed_width(30);
 
         // Second right column
-        let ppu_body = TextView::new("not implemented yet").with_id("ppu_data");
+        let ppu_body = TextView::new("not implemented yet").with_name("ppu_data");
         let ppu_view = Dialog::around(ppu_body).title("PPU");
 
         // Setup Buttons
@@ -932,7 +932,7 @@ impl TuiDebugger {
     fn open_breakpoints_dialog(siv: &mut Cursive, breakpoints: &Breakpoints) {
         // Setup list showing all breakpoints
         let bp_list = Self::create_breakpoint_list(breakpoints)
-            .with_id("breakpoint_list");
+            .with_name("breakpoint_list");
 
         // Setup the field to add a breakpoint
         let breakpoints = breakpoints.clone(); // clone for closure
@@ -945,7 +945,7 @@ impl TuiDebugger {
                         // Add it to the breakpoints collection and update the
                         // list view.
                         breakpoints.add(Word::new(addr));
-                        s.call_on_id("breakpoint_list", |list: &mut ListView| {
+                        s.call_on_name("breakpoint_list", |list: &mut ListView| {
                             *list = Self::create_breakpoint_list(&breakpoints);
                         });
                     },
@@ -987,7 +987,7 @@ impl TuiDebugger {
             let breakpoints = breakpoints.clone();
             let remove_button = Button::new("Remove", move |s| {
                 breakpoints.remove(bp);
-                s.call_on_id("breakpoint_list", |list: &mut ListView| {
+                s.call_on_name("breakpoint_list", |list: &mut ListView| {
                     *list = Self::create_breakpoint_list(&breakpoints);
                 });
             });
@@ -1007,7 +1007,7 @@ impl TuiDebugger {
                 match u16::from_str_radix(&input, 16) {
                     Ok(addr) => {
                         // Set cursor
-                        let mut mem_view = s.find_id::<MemView>("mem_view").unwrap();
+                        let mut mem_view = s.find_name::<MemView>("mem_view").unwrap();
                         mem_view.cursor = Word::new(addr);
                     },
                     Err(e) => {
@@ -1023,7 +1023,7 @@ impl TuiDebugger {
             .child(jump_to_edit);
 
         let mem_view = MemView::new()
-            .with_id("mem_view");
+            .with_name("mem_view");
 
         // Combine all elements
         let body = LinearLayout::vertical()

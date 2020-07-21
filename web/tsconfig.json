@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "target": "ES6",
-    "outDir": "./dist",
-    "strict": true,
-    "baseUrl": "./dist"
-  },
-  "files": ["src/main.ts", "src/mahboi.d.ts"]
-}

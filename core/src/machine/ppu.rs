@@ -871,11 +871,11 @@ impl Ppu {
             // can be clipped on the left or right side of the screen.
             let (start, end) = match x {
                 // Clipped left
-                0..8 => (SPRITE_WIDTH - x, SPRITE_WIDTH),
+                0..=7 => (SPRITE_WIDTH - x, SPRITE_WIDTH),
                 // Fully visible
-                8..161 => (0, SPRITE_WIDTH),
+                8..=160 => (0, SPRITE_WIDTH),
                 // Clipped right
-                161..169 => (0, SPRITE_WIDTH + SCREEN_WIDTH as u8 - x),
+                161..=168 => (0, SPRITE_WIDTH + SCREEN_WIDTH as u8 - x),
                 // Offscreen
                 _ => continue,
             };

@@ -66,7 +66,7 @@ impl LogView {
             .title("Filter Logs");
 
         let options_box = LinearLayout::vertical()
-            .child(Checkbox::new().checked().with_id("ignore_trace_box"))
+            .child(Checkbox::new().checked().with_name("ignore_trace_box"))
             .child(TextView::new("ignore TRACE while running"));
 
         let options_box = Dialog::around(options_box)
@@ -84,7 +84,7 @@ impl LogView {
             last_filter_level: LevelFilter::Trace,
         };
         let log_list = log_list
-            .with_id("log_list")
+            .with_name("log_list")
             .scrollable()
             .scroll_strategy(ScrollStrategy::StickToBottom);
 
@@ -94,7 +94,7 @@ impl LogView {
     }
 
     pub(crate) fn ignore_trace_logs(&self, siv: &mut Cursive) -> bool {
-        siv.find_id::<Checkbox>("ignore_trace_box").unwrap().is_checked()
+        siv.find_name::<Checkbox>("ignore_trace_box").unwrap().is_checked()
     }
 
     /// Updates the view and pulls the newest messages from the global buffer.
