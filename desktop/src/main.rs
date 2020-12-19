@@ -20,7 +20,7 @@ use mahboi::{
     log::*,
 };
 use crate::{
-    debug::{Action, TuiDebugger},
+    debug::{Action, TuiDebugger, WindowBuffer},
     args::Args,
 };
 
@@ -148,7 +148,11 @@ fn run() -> Result<(), Error> {
 
             // If we're in debug mode (and have a TUI debugger), let's update it.
             if let Some(debugger) = &mut debugger {
-                let action = debugger.update(is_paused, emulator.machine());
+                let action = debugger.update(
+                    is_paused,
+                    emulator.machine(),
+                    WindowBuffer(pixels.get_frame()),
+                );
                 match action {
                     Action::Quit => {
                         *control_flow = ControlFlow::Exit;

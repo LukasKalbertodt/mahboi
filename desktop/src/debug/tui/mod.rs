@@ -36,9 +36,8 @@ use mahboi::{
 };
 use crate::{
     args::Args,
-    // env::NativeWindow,
 };
-use super::{Action};
+use super::{Action, WindowBuffer};
 use self::{
     asm_view::AsmView,
     log_view::LogView,
@@ -265,7 +264,7 @@ impl TuiDebugger {
         &mut self,
         is_paused: bool,
         machine: &Machine,
-        // window: &mut NativeWindow,
+        mut window: WindowBuffer,
     ) -> Action {
         if !self.siv.is_running() {
             return Action::Quit;
@@ -364,9 +363,9 @@ impl TuiDebugger {
                         return Action::Continue;
                     }
                 }
-                // 'c' => {
-                //     window.reset_to_pink();
-                // }
+                'c' => {
+                    window.paint_pink();
+                }
                 _ => panic!("internal error: unexpected event"),
             }
         }
