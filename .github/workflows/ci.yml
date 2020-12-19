@@ -23,10 +23,6 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v2
-    - name: Install native libraries
-      run: |
-        sudo apt update
-        sudo apt install -y libxkbcommon-dev libwayland-cursor0 libwayland-dev libncurses-dev libncursesw6
     - name: Prepare cache key
       run: |
         cargo generate-lockfile
@@ -45,3 +41,13 @@ jobs:
       run: cargo build
     - name: Run tests
       run: cargo test
+
+  # We just want to make sure that the debugger, which doesn't work on Windows,
+  # is properly `#[cfg]` guarded.
+  check-windows:
+    name: 'Build on Windows'
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Cargo build
+      run: cargo build

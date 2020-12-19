@@ -5,23 +5,12 @@ use crate::{
 };
 
 pub trait Peripherals {
-    type Display: Display;
-    type Sound: Sound;
-    type Input: Input;
+    /// Write one line of pixels to the Gameboy's LCD. The `line_idx` parameter
+    /// determines the line (from 0 to 159 inclusive).
+    fn write_lcd_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]);
 
-    fn display(&mut self) -> &mut Self::Display;
-    fn sound(&mut self) -> &mut Self::Sound;
-    fn input(&mut self) -> &mut Self::Input;
-}
-
-pub trait Display {
-    fn set_line(&mut self, line_idx: u8, pixels: &[PixelColor; SCREEN_WIDTH]);
-}
-
-pub trait Sound {
-
-}
-
-pub trait Input {
+    /// Returns all currently pressed keys. The emulator calls this method
+    /// frequently, so the implementing type should "cache" key presses in some
+    /// way to allow fast access.
     fn get_pressed_keys(&self) -> Keys;
 }

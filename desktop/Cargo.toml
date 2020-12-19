@@ -12,10 +12,11 @@ failure = "0.1.2"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_debug"] }
 mahboi = { path = "../core" }
-minifb = "0.19"
+pixels = "0.2"
 structopt = "0.3"
 unicode-width = "0.1.5"
-spin_sleep = "1.0"
+winit = "0.24"
+winit_input_helper = "0.9"
 
 [target.'cfg(not(windows))'.dependencies]
 cursive = "0.15.0"

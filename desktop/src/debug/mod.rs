@@ -45,3 +45,16 @@ pub(crate) enum Action {
     /// Don't do anything special and keep running.
     Nothing,
 }
+
+pub(crate) struct WindowBuffer<'a>(pub(crate) &'a mut [u8]);
+
+impl WindowBuffer<'_> {
+    #[cfg_attr(windows, allow(dead_code))]
+    fn paint_pink(&mut self) {
+        for chunk in self.0.chunks_mut(4) {
+            chunk[0] = 0xFF;
+            chunk[1] = 0x69;
+            chunk[2] = 0xB4;
+        }
+    }
+}

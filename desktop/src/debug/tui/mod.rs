@@ -36,9 +36,8 @@ use mahboi::{
 };
 use crate::{
     args::Args,
-    env::NativeWindow,
 };
-use super::{Action};
+use super::{Action, WindowBuffer};
 use self::{
     asm_view::AsmView,
     log_view::LogView,
@@ -265,10 +264,10 @@ impl TuiDebugger {
         &mut self,
         is_paused: bool,
         machine: &Machine,
-        window: &mut NativeWindow,
-    ) -> Result<Action, Error> {
+        mut window: WindowBuffer,
+    ) -> Action {
         if !self.siv.is_running() {
-            return Ok(Action::Quit);
+            return Action::Quit;
         }
 
         // Check if the emulator got paused.
@@ -316,7 +315,7 @@ impl TuiDebugger {
             match c {
                 'p' => {
                     if !self.pause_mode {
-                        return Ok(Action::Pause);
+                        return Action::Pause;
                     }
                 }
                 'r' => {
@@ -326,7 +325,7 @@ impl TuiDebugger {
                         // breakpoint, we set this exception.
                         self.step_over = Some(machine.cpu.pc);
                         self.resume();
-                        return Ok(Action::Continue);
+                        return Action::Continue;
                     }
                 }
                 's' => {
@@ -337,7 +336,7 @@ impl TuiDebugger {
                         // avoid that, we also set the `step_over` exception to
                         // exectute one instruction.
                         self.step_over = Some(machine.cpu.pc);
-                        return Ok(Action::Continue);
+                        return Action::Continue;
                     }
                 }
                 'f' => {
@@ -345,7 +344,7 @@ impl TuiDebugger {
                         self.step_over = Some(machine.cpu.pc);
                         self.pause_on_ret = true;
                         self.resume();
-                        return Ok(Action::Continue);
+                        return Action::Continue;
                     }
                 }
                 'l' => {
@@ -353,7 +352,7 @@ impl TuiDebugger {
                         let next_line = (machine.ppu.regs().current_line.get() + 1) % 144;
                         self.pause_in_line = Some(next_line);
                         self.resume();
-                        return Ok(Action::Continue);
+                        return Action::Continue;
                     }
                 }
                 'k' => {
@@ -361,11 +360,11 @@ impl TuiDebugger {
                         self.waiting_for_vblank = true;
                         self.pause_in_line = Some(0);
                         self.resume();
-                        return Ok(Action::Continue);
+                        return Action::Continue;
                     }
                 }
                 'c' => {
-                    window.reset_to_pink();
+                    window.paint_pink();
                 }
                 _ => panic!("internal error: unexpected event"),
             }
@@ -386,7 +385,7 @@ impl TuiDebugger {
             self.scroll_asm_view = None;
         }
 
-        Ok(Action::Nothing)
+        Action::Nothing
     }
 
     /// Switch to pause mode.

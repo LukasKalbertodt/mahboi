@@ -1,6 +1,6 @@
 use crate::{
     primitives::Byte,
-    env::Input,
+    env::Peripherals,
     machine::interrupt::{Interrupt, InterruptController},
 };
 
@@ -39,10 +39,10 @@ impl InputController {
     /// Reacts to the input transmitted via the input parameter.
     pub(crate) fn handle_input(
         &mut self,
-        input: &impl Input,
+        peripherals: &impl Peripherals,
         interrupt_controller: &mut InterruptController,
     ) {
-        let pressed = input.get_pressed_keys();
+        let pressed = peripherals.get_pressed_keys();
         let keys = match (self.is_direction_selected(), self.is_button_selected()) {
             (false, false) => 0,
             (false, true) => pressed.get_button_keys(),
@@ -141,13 +141,17 @@ pub enum JoypadKey {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{
+        SCREEN_WIDTH,
+        primitives::PixelColor,
+    };
 
 
     struct DummyInput {
         keys: Vec<JoypadKey>,
     }
 
-    impl Input for DummyInput {
+    impl Peripherals for DummyInput {
         fn get_pressed_keys(&self) -> Keys {
             let mut out = Keys::none();
             for &key in &self.keys {
@@ -155,6 +159,8 @@ mod test {
             }
             out
         }
+
+        fn write_lcd_line(&mut self, _: u8, _: &[PixelColor; SCREEN_WIDTH]) {}
     }
 
     #[test]

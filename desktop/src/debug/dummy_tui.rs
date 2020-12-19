@@ -3,11 +3,8 @@
 use failure::{bail, Error};
 
 use mahboi::machine::Machine;
-use crate::{
-    args::Args,
-    env::NativeWindow,
-};
-use super::Action;
+use crate::args::Args;
+use super::{Action, WindowBuffer};
 
 
 pub(crate) enum TuiDebugger {}
@@ -21,8 +18,8 @@ impl TuiDebugger {
         &mut self,
         _: bool,
         _: &Machine,
-        _: &mut NativeWindow,
-    ) -> Result<Action, Error> {
+        _: WindowBuffer,
+    ) -> Action {
         unreachable!()
     }
     pub(crate) fn should_pause(&mut self, _: &Machine) -> bool {

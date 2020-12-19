@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     SCREEN_HEIGHT, SCREEN_WIDTH,
-    env::Display,
+    env::Peripherals,
     log::*,
     primitives::{Byte, Word, Memory, PixelColor},
 };
@@ -521,7 +521,7 @@ impl Ppu {
     /// Executes one machine cycle (1 Mhz).
     pub(crate) fn step(
         &mut self,
-        display: &mut impl Display,
+        peripherals: &mut impl Peripherals,
         interrupt_controller: &mut InterruptController,
     ) {
         // If the whole LCD is disabled, the PPU does nothing
@@ -571,7 +571,7 @@ impl Ppu {
             20 if line < SCREEN_HEIGHT as u8 => {
                 // TODO: trigger STAT interrupt here?
                 self.registers.set_mode(Mode::PixelTransfer);
-                let cycles = self.do_pixel_transfer(display);
+                let cycles = self.do_pixel_transfer(peripherals);
                 self.hblank_trigger = 20 + cycles;
             }
 
@@ -674,7 +674,7 @@ impl Ppu {
     /// number of sprites. This number is only an approximation as apparently
     /// no one exactly knows how to determine the number of cycles. It's
     /// between 43 and 72 cycles.
-    fn do_pixel_transfer(&self, display: &mut impl Display) -> u8 {
+    fn do_pixel_transfer(&self, peripherals: &mut impl Peripherals) -> u8 {
         // ===== Preparations ================================================
 
         /// Helper to fetch background and window tiles.
@@ -909,7 +909,7 @@ impl Ppu {
 
 
         // ===== Send the line to the actual display =========================
-        display.set_line(self.regs().current_line.get(), &line);
+        peripherals.write_lcd_line(self.regs().current_line.get(), &line);
 
         // TODO: make more precise
         43
