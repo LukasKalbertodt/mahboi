@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use log::LevelFilter;
-use minifb::Scale;
 use structopt::StructOpt;
 
 use mahboi::{
@@ -19,15 +18,15 @@ use mahboi::{
 #[derive(Debug, StructOpt)]
 #[structopt(author)]
 pub(crate) struct Args {
-    /// Set the scale factor for the window: 1, 2, 4, 8, 16, 32 or 'fit'
-    /// (automatically chooses the largest scale factor that still fits on the
-    /// screen).
+    /// Set the scale factor for the window. The native Gameboy resolution
+    /// 144x160 multiplied with the scale factor is the size of the window in
+    /// physical pixels. Between 1 and 16.
     #[structopt(
         long,
         default_value = "4",
-        parse(try_from_str = parse_scale),
+        validator(check_scale),
     )]
-    pub(crate) scale: Scale,
+    pub(crate) scale: u8,
 
     /// Start in debugging mode (a TUI debugger). Not usable on Windows!
     #[structopt(long)]
@@ -84,19 +83,6 @@ pub(crate) struct Args {
     pub(crate) bios: BiosKind,
 }
 
-fn parse_scale(src: &str) -> Result<Scale, &'static str> {
-    match src {
-        "1" => Ok(Scale::X1),
-        "2" => Ok(Scale::X2),
-        "4" => Ok(Scale::X4),
-        "8" => Ok(Scale::X8),
-        "16" => Ok(Scale::X16),
-        "32" => Ok(Scale::X32),
-        "fit" => Ok(Scale::FitScreen),
-        _ => Err("only '1', '2', '4', '8', '16', '32' or 'fit' are allowed"),
-    }
-}
-
 fn parse_breakpoint(src: &str) -> Result<Word, String> {
     u16::from_str_radix(src, 16)
         .map(Word::new)
@@ -127,5 +113,13 @@ fn parse_bios_kind(src: &str) -> Result<BiosKind, &'static str> {
         "original" => Ok(BiosKind::Original),
         "minimal" => Ok(BiosKind::Minimal),
         _ => Err("invalid bios kind (valid values: 'original' and 'minimal')"),
+    }
+}
+
+fn check_scale(src: String) -> Result<(), String> {
+    match src.parse::<u8>() {
+        Err(e) => Err(format!("failed to parse '{}' as `u8`: {}", src, e)),
+        Ok(v) if v >= 1 && v <= 16 => Ok(()),
+        Ok(v) => Err(format!("has to be >= 0 and <= 16, but {} is not", v)),
     }
 }
