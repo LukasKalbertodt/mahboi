@@ -95,6 +95,10 @@ fn run() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
+
+    // ============================================================================================
+    // ===== Main loop
+    // ============================================================================================
     // Setup loop timing.
     let mut timer = LoopTimer::new(&args);
 
@@ -117,74 +121,29 @@ fn run() -> Result<(), Error> {
                 return;
             }
 
+            // Handle other non-Gameboy input events.
             timer.set_turbo_mode(input.key_held(VirtualKeyCode::Q));
-
-            // Resize the window.
             if let Some(size) = input.window_resized() {
                 pixels.resize(size.width, size.height);
             }
 
             // Run the emulator.
             if !is_paused {
-                let keys = Keys::none()
-                    .set_key(JoypadKey::Up, input.key_held(VirtualKeyCode::W))
-                    .set_key(JoypadKey::Left, input.key_held(VirtualKeyCode::A))
-                    .set_key(JoypadKey::Down, input.key_held(VirtualKeyCode::S))
-                    .set_key(JoypadKey::Right, input.key_held(VirtualKeyCode::D))
-                    .set_key(JoypadKey::A, input.key_held(VirtualKeyCode::J))
-                    .set_key(JoypadKey::B, input.key_held(VirtualKeyCode::K))
-                    .set_key(JoypadKey::Select, input.key_held(VirtualKeyCode::N))
-                    .set_key(JoypadKey::Start, input.key_held(VirtualKeyCode::M));
-                let mut env = Env { keys, buffer: pixels.get_frame() };
+                let mut env = Env::new(&input, pixels.get_frame());
 
-                timer.drive_emulation(|| {
-                    let res = panic::catch_unwind(AssertUnwindSafe(|| {
-                        emulator.execute_frame(&mut env, |machine| {
-                            // If we have a TUI debugger, we ask it when to pause.
-                            // Otherwise, we never stop.
-                            if let Some(debugger) = &mut debugger {
-                                debugger.should_pause(machine)
-                            } else {
-                                false
-                            }
-                        })
-                    }));
-
-                    match res {
-                        Err(e) => {
-                            if let Some(s) = e.downcast_ref::<&str>() {
-                                warn!("Emulator panicked: {}", s);
-                            } else {
-                                warn!("Emulator panicked!");
-                            };
-
-                            if !args.debug {
-                                panic::resume_unwind(e);
-                            }
-
-                            is_paused = true;
-                        }
-                        Ok(disruption) => {
-                            // React to abnormal disruptions
-                            match disruption {
-                                Ok(_) => {},
-                                Err(Disruption::Paused) => is_paused = true,
-                                Err(Disruption::Terminated) => {
-                                    // If we are not in debug mode, we stop the program, as it
-                                    // doesn't make much sense to keep running. In debug mode,
-                                    // we just pause execution.
-                                    warn!("[desktop] Emulator was terminated");
-                                    if args.debug {
-                                        is_paused = true;
-                                    } else {
-                                        *control_flow = ControlFlow::Exit;
-                                        return;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                // Actually emulate!
+                let outcome = timer.drive_emulation(|| {
+                    emulate_frame(&mut emulator, &mut env, debugger.as_mut())
                 });
+
+                match outcome {
+                    Outcome::Continue => {}
+                    Outcome::Pause => is_paused = true,
+                    Outcome::Terminate => {
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                }
             }
 
             // If we're in debug mode (and have a TUI debugger), let's update it.
@@ -211,10 +170,88 @@ fn run() -> Result<(), Error> {
     });
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Outcome {
+    Continue,
+    Pause,
+    Terminate,
+}
+
+// Emulates one frame of the emulator and correctly handles the debugger and the
+// result of the emulation.
+fn emulate_frame(
+    emulator: &mut Emulator,
+    env: &mut Env,
+    mut debugger: Option<&mut TuiDebugger>,
+) -> Outcome {
+    let res = panic::catch_unwind(AssertUnwindSafe(|| {
+        emulator.execute_frame(env, |machine| {
+            // If we have a TUI debugger, we ask it when to pause.
+            // Otherwise, we never stop.
+            if let Some(debugger) = &mut debugger {
+                debugger.should_pause(machine)
+            } else {
+                false
+            }
+        })
+    }));
+
+    match res {
+        Err(e) => {
+            if let Some(s) = e.downcast_ref::<&str>() {
+                warn!("Emulator panicked: {}", s);
+            } else {
+                warn!("Emulator panicked!");
+            };
+
+            if debugger.is_none() {
+                panic::resume_unwind(e);
+            }
+
+            Outcome::Pause
+        }
+        Ok(disruption) => {
+            // React to abnormal disruptions
+            match disruption {
+                Ok(_) => Outcome::Continue,
+                Err(Disruption::Paused) => Outcome::Pause,
+                Err(Disruption::Terminated) => {
+                    // If we are not in debug mode, we stop the program, as it
+                    // doesn't make much sense to keep running. In debug mode,
+                    // we just pause execution.
+                    warn!("[desktop] Emulator was terminated");
+                    if debugger.is_some() {
+                        Outcome::Pause
+                    } else {
+                        Outcome::Terminate
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The environment of the Gameboy. Implements `Peripherals`.
 struct Env<'a> {
     keys: Keys,
     buffer: &'a mut [u8],
+}
+
+impl<'a> Env<'a> {
+    fn new(input: &WinitInputHelper, buffer: &'a mut [u8]) -> Self {
+        let keys = Keys::none()
+            .set_key(JoypadKey::Up, input.key_held(VirtualKeyCode::W))
+            .set_key(JoypadKey::Left, input.key_held(VirtualKeyCode::A))
+            .set_key(JoypadKey::Down, input.key_held(VirtualKeyCode::S))
+            .set_key(JoypadKey::Right, input.key_held(VirtualKeyCode::D))
+            .set_key(JoypadKey::A, input.key_held(VirtualKeyCode::J))
+            .set_key(JoypadKey::B, input.key_held(VirtualKeyCode::K))
+            .set_key(JoypadKey::Select, input.key_held(VirtualKeyCode::N))
+            .set_key(JoypadKey::Start, input.key_held(VirtualKeyCode::M));
+
+        Self { keys, buffer }
+    }
 }
 
 impl Peripherals for Env<'_> {
@@ -295,7 +332,7 @@ impl LoopTimer {
     /// Call once per host frame and pass a closure that emulates one frame of
     /// the gameboy. This method will make sure that `emulate_frame` is called
     /// an appropriate number of times to keep the target frame rate.
-    fn drive_emulation(&mut self, mut emulate_frame: impl FnMut()) {
+    fn drive_emulation(&mut self, mut emulate_frame: impl FnMut() -> Outcome) -> Outcome {
         let now = Instant::now();
         if let Some(last_host_frame) = self.last_host_frame {
             self.behind += now - last_host_frame;
@@ -325,10 +362,16 @@ impl LoopTimer {
         let mut slack = 1.0;
         while self.behind > target_frame_time.mul_f32(slack) {
             self.behind -= target_frame_time;
-            emulate_frame();
+            let outcome = emulate_frame();
+            if outcome != Outcome::Continue {
+                return outcome;
+            }
+
             slack = SLACK_MULTIPLIER;
             self.frames_since_last_report += 1;
         }
+
+        Outcome::Continue
     }
 
     fn target_frame_time(&self) -> Duration {
