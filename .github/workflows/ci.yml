@@ -45,3 +45,13 @@ jobs:
       run: cargo build
     - name: Run tests
       run: cargo test
+
+  # We just want to make sure that the debugger, which doesn't work on Windows,
+  # is properly `#[cfg]` guarded.
+  check-windows:
+    name: 'Build on Windows'
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Cargo build
+      run: cargo build
