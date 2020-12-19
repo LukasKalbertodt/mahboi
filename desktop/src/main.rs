@@ -159,7 +159,10 @@ fn run() -> Result<(), Error> {
                         return;
                     }
                     Action::Pause => is_paused = true,
-                    Action::Continue => is_paused = false,
+                    Action::Continue => {
+                        is_paused = false;
+                        timer.unpause();
+                    }
                     Action::Nothing => {}
                 }
             }
@@ -331,6 +334,14 @@ impl LoopTimer {
 
     fn set_turbo_mode(&mut self, turbo: bool) {
         self.turbo = turbo;
+    }
+
+    // Tells the timer the emulation has just been unpaused. This will reset a
+    // few values in the timer so that the timer doesn't think we just
+    // experienced a huge lag.
+    fn unpause(&mut self) {
+        self.behind = self.ideal_frame_time.mul_f32(1.5);
+        self.last_host_frame = None;
     }
 
     /// Call once per host frame and pass a closure that emulates one frame of
