@@ -60,6 +60,13 @@ pub(crate) struct Args {
     #[structopt(long, default_value = "4")]
     pub(crate) turbo_mode_factor: f64,
 
+    /// Defines the target framerate for the emulation. The original Gameboy
+    /// runs at approximately 59.7275 FPS.
+    // TODO: maybe change default to "smart": if the display FPS is 60, then 60,
+    // otherwise the original 59.7275?
+    #[structopt(long, default_value = "60")]
+    pub(crate) fps: f64,
+
     /// Specifies which log messages to display and which to supress. The
     /// specified value will show all log messages with the same level or any
     /// higher level. So `-l warn` will print errors and warnings and `-l
