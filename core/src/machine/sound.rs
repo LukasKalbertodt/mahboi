@@ -173,8 +173,11 @@ impl WaveChannel {
         self.freq_lo.get() as u16 + ((self.control_freq.get() as u16 & 0b111) << 8)
     }
 
-    fn period(&self) -> u16 {
-        (2048 - self.freq()) * 2
+    fn timer_reset_value(&self) -> u16 {
+        // The "correct" counter value is `(2048 - freq) * 2`, but that's for
+        // when the timer is decremented with 4Mhz. We only decrement with 1Mhz,
+        // so we divide that by 4.
+        (2048 - self.freq()) / 2
     }
 
     fn enabled(&self) -> bool {
@@ -214,14 +217,14 @@ impl WaveChannel {
     fn trigger(&mut self) {
         // TODO: "If length counter is zero, it is set to 64 (256 for wave channel)."
         self.position = 0;
-        self.timer = self.period();
+        self.timer = self.timer_reset_value();
     }
 
     fn step(&mut self) {
         if self.timer > 0 {
             self.timer -= 1;
         } else {
-            self.timer = self.period();
+            self.timer = self.timer_reset_value();
             self.position = (self.position + 1) % 32;
         }
     }
@@ -231,20 +234,22 @@ impl WaveChannel {
             return 0.0;
         }
 
-        let mut v = self.wave_table[Word::new(self.position as u16 / 2)].get();
-        if self.position % 2 == 0 {
-            v >>= 4
-        }
+        let b = self.wave_table[Word::new(self.position as u16 / 2)].get();
+        let v = if self.position % 2 == 0 {
+            b >> 4
+        } else {
+            b & 0xF
+        };
 
-        let volume_shift = match (self.volume.get() & 0b0110_0000) >> 5 {
-            0 => 4,
-            1 => 0,
-            2 => 1,
-            3 => 2,
+        let volume = match (self.volume.get() & 0b0110_0000) >> 5 {
+            0 => 0.0,
+            1 => 1.0,
+            2 => 0.5,
+            3 => 0.25,
             _ => unreachable!(),
         };
 
-        dac(v >> volume_shift)
+        dac(v) * volume
     }
 }
 

@@ -234,7 +234,10 @@ fn create_stream<T: Sample>(
                 let num_samples = out.len() / 2;
                 for (dst, src) in out.chunks_mut(2).zip(buffer.drain(..num_samples)) {
                     for channel in dst {
-                        *channel = T::from(&src);
+                        // TODO: random 0.2 here to make the volume slightly
+                        // more ok. With the original value, this destroys my
+                        // ears.
+                        *channel = T::from(&(src * 0.2));
                     }
                 }
             }
