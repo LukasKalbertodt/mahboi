@@ -35,6 +35,8 @@ pub(crate) struct SoundController {
     sound_on_off: Byte,
 
     wave: Memory,
+
+    counter: u16,
 }
 
 impl SoundController {
@@ -62,6 +64,8 @@ impl SoundController {
             selection_output: Byte::zero(),
             sound_on_off: Byte::zero(),
             wave: Memory::zeroed(Word::new(0x10)),
+
+            counter: 0,
         }
     }
 
@@ -141,7 +145,17 @@ impl SoundController {
 
             0x20..=0x2F => self.wave[addr - 0x20] = byte,
 
-            _ => unreachable!(),
+            _ => log::trace!("ignored write to {} in audio controller", addr),
         }
+    }
+
+    /// Executes one machine cycle (1,048,576 Hz) of the sound system. Returns
+    /// the current sound output.
+    pub(crate) fn step(&mut self) {
+        self.counter = (self.counter + 1) % 2u16.pow(13);
+    }
+
+    pub(crate) fn output(&self) -> f32 {
+        (self.counter as f32 * 2.0 * 3.1415926 / 2u16.pow(13) as f32).sin()
     }
 }

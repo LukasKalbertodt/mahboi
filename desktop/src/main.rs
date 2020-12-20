@@ -1,5 +1,12 @@
-use std::{fs, panic::{self, AssertUnwindSafe}, time::{Duration, Instant}};
+use std::{
+    fs,
+    mem,
+    panic::{self, AssertUnwindSafe},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
+use cpal::traits::{DeviceTrait, HostTrait};
 use failure::{Error, ResultExt};
 use pixels::{Pixels, SurfaceTexture};
 use structopt::StructOpt;
@@ -95,6 +102,79 @@ fn run() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
+    // Initialize sound stream
+    let device = cpal::default_host()
+        .default_output_device()
+        .ok_or(failure::format_err!("failed to find a default output device"))?;
+    let supported_config = device.default_output_config()
+        .context("no default sound output config")?;
+    let audio_buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut cycles_till_next_sample = 0.0;
+    let stream = {
+        let audio_buffer = audio_buffer.clone();
+        // let config: cpal::StreamConfig = supported_config.clone().into();
+        println!("{:?}", supported_config.sample_rate());
+        let config = cpal::StreamConfig {
+            channels: 2, // TODO
+            sample_rate: supported_config.sample_rate(),
+            buffer_size: cpal::BufferSize::Fixed(735), // TODO
+        };
+        let channels = config.channels;
+        let mut collected_enough = false;
+        device.build_output_stream_raw(
+            &config,
+            supported_config.sample_format(),
+            move |data: &mut cpal::Data, _: &cpal::OutputCallbackInfo| {
+
+                let mut buffer = audio_buffer.lock().unwrap();
+                if buffer.len() > 4000 {
+                    collected_enough = true;
+                } else if buffer.len() < 1500 {
+                    collected_enough = false;
+                }
+
+                // for v in &buffer {
+                //     println!("{}", v);
+                // }
+                // println!("----------------------------");
+
+                match data.sample_format() {
+                    cpal::SampleFormat::I16 => todo!(),
+                    cpal::SampleFormat::U16 => todo!(),
+                    cpal::SampleFormat::F32 => {
+                        let out = data.as_slice_mut::<f32>().unwrap();
+                        println!("out {} <-> src {}", out.len() / 2, buffer.len());
+
+                        if !collected_enough {
+                            for out in out {
+                                *out = 0.0;
+                            }
+                            return;
+                        }
+
+                        let num_samples = std::cmp::min(out.len() / 2, buffer.len());
+                        for (dst, src) in out.chunks_mut(channels as usize).zip(buffer.drain(..num_samples)) {
+                            // println!("{}", src);
+                            for channel in dst {
+                                *channel = src;
+                            }
+                        }
+                        // println!("-------------------");
+
+                        if buffer.len() < out.len() / channels as usize {
+                            println!("!!! Provided audio data shorter than the cpal buffer");
+
+                            for out in &mut out[buffer.len() * channels as usize..] {
+                                *out = 0.0;
+                            }
+                        }
+                    }
+                }
+            },
+            |e| eprintln!("audio error: {}", e),
+        )
+    };
+
 
     // ============================================================================================
     // ===== Main loop
@@ -129,7 +209,7 @@ fn run() -> Result<(), Error> {
 
             // Run the emulator.
             if !is_paused {
-                let mut env = Env::new(&input, pixels.get_frame());
+                let mut env = Env::new(&input, pixels.get_frame(), &audio_buffer, &mut cycles_till_next_sample);
 
                 // Actually emulate!
                 let outcome = timer.drive_emulation(|| {
@@ -243,10 +323,12 @@ fn emulate_frame(
 struct Env<'a> {
     keys: Keys,
     buffer: &'a mut [u8],
+    audio_buffer: &'a Mutex<Vec<f32>>,
+    cycles_till_next_sample: &'a mut f32,
 }
 
 impl<'a> Env<'a> {
-    fn new(input: &WinitInputHelper, buffer: &'a mut [u8]) -> Self {
+    fn new(input: &WinitInputHelper, buffer: &'a mut [u8], audio_buffer: &'a Mutex<Vec<f32>>, cycles_till_next_sample: &'a mut f32) -> Self {
         let keys = Keys::none()
             .set_key(JoypadKey::Up, input.key_held(VirtualKeyCode::W))
             .set_key(JoypadKey::Left, input.key_held(VirtualKeyCode::A))
@@ -257,7 +339,7 @@ impl<'a> Env<'a> {
             .set_key(JoypadKey::Select, input.key_held(VirtualKeyCode::N))
             .set_key(JoypadKey::Start, input.key_held(VirtualKeyCode::M));
 
-        Self { keys, buffer }
+        Self { keys, buffer, audio_buffer, cycles_till_next_sample }
     }
 }
 
@@ -275,6 +357,14 @@ impl Peripherals for Env<'_> {
             self.buffer[offset + 4 * col + 1] = g;
             self.buffer[offset + 4 * col + 2] = b;
         }
+    }
+
+    fn offer_sound_sample(&mut self, f: impl FnOnce() -> f32) {
+        if *self.cycles_till_next_sample <= 0.0 {
+            self.audio_buffer.lock().unwrap().push(f());
+            *self.cycles_till_next_sample += 23.777; // TODO
+        }
+        *self.cycles_till_next_sample -= 1.0;
     }
 }
 

@@ -30,6 +30,8 @@ pub const SCREEN_WIDTH: usize = 160;
 /// Height of the Game Boy screen in pixels.
 pub const SCREEN_HEIGHT: usize = 144;
 
+pub const MACHINE_CYCLES_PER_SECOND: u32 = 1_048_576;
+
 
 /// Different kinds of BIOS (boot ROMs) that can be loaded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +92,9 @@ impl Emulator {
 
                 // OAM DMA
                 self.machine.dma_step();
+
+                self.machine.sound_controller.step();
+                peripherals.offer_sound_sample(|| self.machine.sound_controller.output());
             }
 
             // Handle input

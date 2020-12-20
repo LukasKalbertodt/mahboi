@@ -13,4 +13,6 @@ pub trait Peripherals {
     /// frequently, so the implementing type should "cache" key presses in some
     /// way to allow fast access.
     fn get_pressed_keys(&self) -> Keys;
+
+    fn offer_sound_sample(&mut self, f: impl FnOnce() -> f32);
 }
