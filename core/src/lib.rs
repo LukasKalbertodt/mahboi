@@ -32,6 +32,8 @@ pub const SCREEN_HEIGHT: usize = 144;
 
 pub const MACHINE_CYCLES_PER_SECOND: u32 = 1_048_576;
 
+pub const FRAME_RATE: f64 = 59.727500569606;
+
 
 /// Different kinds of BIOS (boot ROMs) that can be loaded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
