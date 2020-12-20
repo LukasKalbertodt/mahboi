@@ -19,12 +19,6 @@ pub(crate) struct SoundController {
     channel2_frequency_lo: Byte,
     channel2_frequency_hi: Byte,
 
-    channel3_on_off: Byte,
-    channel3_length: Byte,
-    channel3_output_level: Byte,
-    channel3_frequency_lo: Byte,
-    channel3_frequency_hi: Byte,
-
     channel4_length: Byte,
     channel4_volume: Byte,
     channel4_polynomial_counter: Byte,
@@ -34,9 +28,7 @@ pub(crate) struct SoundController {
     selection_output: Byte,
     sound_on_off: Byte,
 
-    wave: Memory,
-
-    counter: u16,
+    wave: WaveChannel,
 }
 
 impl SoundController {
@@ -51,11 +43,6 @@ impl SoundController {
             channel2_volume: Byte::zero(),
             channel2_frequency_lo: Byte::zero(),
             channel2_frequency_hi: Byte::zero(),
-            channel3_on_off: Byte::zero(),
-            channel3_length: Byte::zero(),
-            channel3_output_level: Byte::zero(),
-            channel3_frequency_lo: Byte::zero(),
-            channel3_frequency_hi: Byte::zero(),
             channel4_length: Byte::zero(),
             channel4_volume: Byte::zero(),
             channel4_polynomial_counter: Byte::zero(),
@@ -63,9 +50,8 @@ impl SoundController {
             channel_control: Byte::zero(),
             selection_output: Byte::zero(),
             sound_on_off: Byte::zero(),
-            wave: Memory::zeroed(Word::new(0x10)),
 
-            counter: 0,
+            wave: WaveChannel::new(),
         }
     }
 
@@ -86,12 +72,6 @@ impl SoundController {
             0x08 => self.channel2_frequency_lo,
             0x09 => self.channel2_frequency_hi,
 
-            0x0A => self.channel3_on_off.mask_or(0b1000_0000),
-            0x0B => Byte::new(0xFF),
-            0x0C => self.channel3_output_level.mask_or(0b0110_0000),
-            0x0D => Byte::new(0xFF),
-            0x0E => self.channel3_frequency_hi.mask_or(0b1100_0111),
-
             // TODO: This is only a placeholder implementation
             0x10 => self.channel4_length,
             0x11 => self.channel4_volume,
@@ -103,7 +83,7 @@ impl SoundController {
             0x15 => self.selection_output,
             0x16 => self.sound_on_off,
 
-            0x20..=0x2F => self.wave[addr],
+            0x0A..=0x0E | 0x20..=0x2F => self.wave.load_byte(addr),
 
             _ => unreachable!(),
         }
@@ -126,12 +106,6 @@ impl SoundController {
             0x08 => self.channel2_frequency_lo = byte,
             0x09 => self.channel2_frequency_hi = byte,
 
-            0x0A => self.channel3_on_off = byte.mask_or(0b1000_0000),
-            0x0B => self.channel3_length = byte,
-            0x0C => self.channel3_output_level = byte.mask_or(0b0110_0000),
-            0x0D => self.channel3_frequency_lo = byte,
-            0x0E => self.channel3_frequency_hi = byte.mask_or(0b1100_0111),
-
             // TODO: This is only a placeholder implementation
             0x10 => self.channel4_length = byte,
             0x11 => self.channel4_volume = byte,
@@ -143,7 +117,7 @@ impl SoundController {
             0x15 => self.selection_output = byte,
             0x16 => self.sound_on_off = byte,
 
-            0x20..=0x2F => self.wave[addr - 0x20] = byte,
+            0x0A..=0x0E | 0x20..=0x2F => self.wave.store_byte(addr, byte),
 
             _ => log::trace!("ignored write to {} in audio controller", addr),
         }
@@ -152,10 +126,130 @@ impl SoundController {
     /// Executes one machine cycle (1,048,576 Hz) of the sound system. Returns
     /// the current sound output.
     pub(crate) fn step(&mut self) {
-        self.counter = (self.counter + 1) % 2u16.pow(13);
+        // self.counter = (self.counter + 1) % 2u16.pow(13);
+        self.wave.step();
     }
 
     pub(crate) fn output(&self) -> f32 {
-        (self.counter as f32 * 2.0 * 3.1415926 / 2u16.pow(13) as f32).sin()
+        // (self.counter as f32 * 2.0 * 3.1415926 / 2u16.pow(13) as f32).sin()
+        self.wave.output()
     }
+}
+
+// TODO:
+// - length
+// - reading and writing wave data when enabled
+struct WaveChannel {
+    enable: Byte,       // FF1A  E111_1111
+    length: Byte,       // FF1B
+    volume: Byte,       // FF1C  1VV1_1111
+    freq_lo: Byte,      // FF1D  FFFF_FFFF
+    control_freq: Byte, // FF1E  TL11_1FFF
+    wave_table: Memory, // FF30 - FF3F
+
+    /// Internal position counter that wraps at 32.
+    position: u8,
+
+    /// Internal timer which counts down. This value is reloaded with
+    /// `(2048 - self.freq()) * 2`.
+    timer: u16,
+}
+
+impl WaveChannel {
+    fn new() -> Self {
+        Self {
+            enable: Byte::zero(),
+            length: Byte::zero(),
+            volume: Byte::zero(),
+            freq_lo: Byte::zero(),
+            control_freq: Byte::zero(),
+            wave_table: Memory::zeroed(Word::new(0x10)),
+            position: 0,
+            timer: 0,
+        }
+    }
+
+    fn freq(&self) -> u16 {
+        self.freq_lo.get() as u16 + ((self.control_freq.get() as u16 & 0b111) << 8)
+    }
+
+    fn period(&self) -> u16 {
+        (2048 - self.freq()) * 2
+    }
+
+    fn enabled(&self) -> bool {
+        self.enable.get() & 0b1000_0000 != 0
+    }
+
+    pub(crate) fn load_byte(&self, addr: Word) -> Byte {
+        match addr.get() {
+            0x0A => self.enable,
+            0x0B => self.length,
+            0x0C => self.volume,
+            0x0D => self.freq_lo,
+            0x0E => self.control_freq,
+            0x20..=0x2F => self.wave_table[addr - 0x20],
+            _ => unreachable!(),
+        }
+    }
+
+
+    fn store_byte(&mut self, addr: Word, byte: Byte) {
+        match addr.get() {
+            0x0A => self.enable = byte.mask_or(0b1000_0000),
+            0x0B => self.length = byte,
+            0x0C => self.volume = byte.mask_or(0b0110_0000),
+            0x0D => self.freq_lo = byte,
+            0x0E => {
+                self.control_freq = byte.mask_or(0b1100_0111);
+                if byte.get() & 0b1000_0000 != 0 {
+                    self.trigger();
+                }
+            }
+            0x20..=0x2F => self.wave_table[addr - 0x20] = byte,
+            _ => unreachable!(),
+        }
+    }
+
+    fn trigger(&mut self) {
+        // TODO: "If length counter is zero, it is set to 64 (256 for wave channel)."
+        self.position = 0;
+        self.timer = self.period();
+    }
+
+    fn step(&mut self) {
+        if self.timer > 0 {
+            self.timer -= 1;
+        } else {
+            self.timer = self.period();
+            self.position = (self.position + 1) % 32;
+        }
+    }
+
+    fn output(&self) -> f32 {
+        if !self.enabled() {
+            return 0.0;
+        }
+
+        let mut v = self.wave_table[Word::new(self.position as u16 / 2)].get();
+        if self.position % 2 == 0 {
+            v >>= 4
+        }
+
+        let volume_shift = match (self.volume.get() & 0b0110_0000) >> 5 {
+            0 => 4,
+            1 => 0,
+            2 => 1,
+            3 => 2,
+            _ => unreachable!(),
+        };
+
+        dac(v >> volume_shift)
+    }
+}
+
+/// Mimics the digital analog converted that converts a 4 bit number into an
+/// analog signal.
+fn dac(input: u8) -> f32 {
+    (input as f32 / 7.5) - 1.0
 }

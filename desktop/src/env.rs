@@ -216,9 +216,10 @@ fn create_stream<T: Sample>(
         &config,
         move |out: &mut [T], _: &cpal::OutputCallbackInfo| {
             let mut buffer = audio_buffer.lock().unwrap();
+            // println!("src {} <-> dst {}", buffer.len(), out.len() / 2);
             if buffer.len() > sufficient_data_above as usize {
                 sufficient_source_data = true;
-            } else if buffer.len() < missing_data_below as usize{
+            } else if buffer.len() < missing_data_below as usize {
                 sufficient_source_data = false;
             }
 
