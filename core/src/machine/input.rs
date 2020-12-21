@@ -161,7 +161,7 @@ mod test {
         }
 
         fn write_lcd_line(&mut self, _: u8, _: &[PixelColor; SCREEN_WIDTH]) {}
-        fn offer_sound_sample(&mut self, _: impl FnOnce() -> f32) {}
+        fn offer_sound_sample(&mut self, _: impl FnOnce(f32) -> f32) {}
     }
 
     #[test]

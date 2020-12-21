@@ -34,6 +34,10 @@ pub(crate) struct SoundController {
     /// Hz). As the slowest clock we want to generate is 64Hz, this counter
     /// wraps at `1_048_576 / 64 = 16_384`.
     frame_sequencer: u32,
+
+    // For highpass filter.
+    last_filtered_out: f32,
+    last_unfiltered_out: f32,
 }
 
 impl SoundController {
@@ -55,6 +59,9 @@ impl SoundController {
             square2: SquareChannel2::new(),
             wave: WaveChannel::new(),
             frame_sequencer: 0,
+
+            last_filtered_out: 0.0,
+            last_unfiltered_out: 0.0,
         }
     }
 
@@ -151,9 +158,23 @@ impl SoundController {
         self.wave.step();
     }
 
-    pub(crate) fn output(&self) -> f32 {
-        // (self.counter as f32 * 2.0 * 3.1415926 / 2u16.pow(13) as f32).sin()
-        self.wave.output() + self.square2.output()
+    pub(crate) fn output(&mut self, sample_rate: f32) -> f32 {
+        // The high-pass filter needs a parameter alpha which determines how
+        // quickly the existing signal decays. This can be calculated from the
+        // sample rate and the cutoff frequency. The Gameboy's cutoff frequency
+        // is 60Hz according to https://github.com/bwhitman/pushpin/blob/master/src/gbsound.txt
+        //
+        // Resulting alpha for 60Hz is 0.9915, for 20Hz it's 0.9972.
+        const CUTOFF: f32 = 60.0;
+        let alpha = 1.0 / (2.0 * std::f32::consts::PI * 1.0 / sample_rate * CUTOFF + 1.0);
+
+        // We use a simple highpass filter to mainly remove the DC component.
+        let unfiltered_out = self.wave.output() + self.square2.output();
+        self.last_filtered_out = alpha * self.last_filtered_out
+            + alpha * (unfiltered_out - self.last_unfiltered_out);
+        self.last_unfiltered_out = unfiltered_out;
+
+        self.last_filtered_out
     }
 }
 

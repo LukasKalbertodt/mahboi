@@ -39,6 +39,7 @@ pub(crate) struct Env {
     audio_buffer: AudioBuffer,
     cycles_till_next_sample: f64,
     _stream: cpal::Stream,
+    sample_rate: f32,
 
     /// A fixed (set in `new`) value determining how many emulation cycles pass
     /// per host audio sample (without turbo mode).
@@ -71,6 +72,7 @@ impl Env {
             pixels,
             audio_buffer,
             _stream: stream,
+            sample_rate: stream_config.sample_rate.0 as f32,
             cycles_till_next_sample,
             cycles_per_host_sample,
         })
@@ -108,9 +110,9 @@ impl Peripherals for Env {
         }
     }
 
-    fn offer_sound_sample(&mut self, f: impl FnOnce() -> f32) {
+    fn offer_sound_sample(&mut self, f: impl FnOnce(f32) -> f32) {
         if self.cycles_till_next_sample <= 0.0 {
-            self.audio_buffer.lock().unwrap().push(f());
+            self.audio_buffer.lock().unwrap().push(f(self.sample_rate));
             self.cycles_till_next_sample += self.cycles_per_host_sample;
         }
         self.cycles_till_next_sample -= 1.0;

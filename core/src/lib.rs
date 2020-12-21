@@ -96,7 +96,9 @@ impl Emulator {
                 self.machine.dma_step();
 
                 self.machine.sound_controller.step();
-                peripherals.offer_sound_sample(|| self.machine.sound_controller.output());
+                peripherals.offer_sound_sample(|sample_rate| {
+                    self.machine.sound_controller.output(sample_rate)
+                });
             }
 
             // Handle input
