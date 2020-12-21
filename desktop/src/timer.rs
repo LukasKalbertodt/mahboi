@@ -78,7 +78,10 @@ impl LoopTimer {
     /// Call once per host frame and pass a closure that emulates one frame of
     /// the gameboy. This method will make sure that `emulate_frame` is called
     /// an appropriate number of times to keep the target frame rate.
-    pub(crate) fn drive_emulation(&mut self, mut emulate_frame: impl FnMut() -> Outcome) -> Outcome {
+    pub(crate) fn drive_emulation(
+        &mut self,
+        mut emulate_frame: impl FnMut() -> Outcome,
+    ) -> Outcome {
         let now = Instant::now();
         if let Some(last_host_frame) = self.last_host_frame {
             self.behind += now - last_host_frame;

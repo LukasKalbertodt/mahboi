@@ -50,7 +50,8 @@ impl Env {
         // Pixelbuffer for the Gameboy to render into
         let pixels = {
             let window_size = window.inner_size();
-            let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, window);
+            let surface_texture
+                = SurfaceTexture::new(window_size.width, window_size.height, window);
             Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
         };
 
