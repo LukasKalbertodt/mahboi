@@ -16,11 +16,6 @@ pub(crate) struct SoundController {
     channel1_frequency_lo: Byte,
     channel1_frequency_hi: Byte,
 
-    channel2_length: Byte,
-    channel2_volume: Byte,
-    channel2_frequency_lo: Byte,
-    channel2_frequency_hi: Byte,
-
     channel4_length: Byte,
     channel4_volume: Byte,
     channel4_polynomial_counter: Byte,
@@ -30,6 +25,7 @@ pub(crate) struct SoundController {
     selection_output: Byte,
     sound_on_off: Byte,
 
+    square2: SquareChannel2,
     wave: WaveChannel,
 
     /// A counter used to generate a 512Hz clock. This is used to control length
@@ -48,10 +44,6 @@ impl SoundController {
             channel1_volume: Byte::zero(),
             channel1_frequency_lo: Byte::zero(),
             channel1_frequency_hi: Byte::zero(),
-            channel2_length: Byte::zero(),
-            channel2_volume: Byte::zero(),
-            channel2_frequency_lo: Byte::zero(),
-            channel2_frequency_hi: Byte::zero(),
             channel4_length: Byte::zero(),
             channel4_volume: Byte::zero(),
             channel4_polynomial_counter: Byte::zero(),
@@ -60,6 +52,7 @@ impl SoundController {
             selection_output: Byte::zero(),
             sound_on_off: Byte::zero(),
 
+            square2: SquareChannel2::new(),
             wave: WaveChannel::new(),
             frame_sequencer: 0,
         }
@@ -77,12 +70,6 @@ impl SoundController {
             0x04 => self.channel1_frequency_hi,
 
             // TODO: This is only a placeholder implementation
-            0x06 => self.channel2_length,
-            0x07 => self.channel2_volume,
-            0x08 => self.channel2_frequency_lo,
-            0x09 => self.channel2_frequency_hi,
-
-            // TODO: This is only a placeholder implementation
             0x10 => self.channel4_length,
             0x11 => self.channel4_volume,
             0x12 => self.channel4_polynomial_counter,
@@ -93,9 +80,12 @@ impl SoundController {
             0x15 => self.selection_output,
             0x16 => self.sound_on_off,
 
+            0x06..=0x09 => self.square2.load_byte(addr),
             0x0A..=0x0E | 0x20..=0x2F => self.wave.load_byte(addr),
 
-            _ => unreachable!(),
+            0x17..=0x1F => todo!(),
+            0x05 | 0x0F => todo!(),
+            0x30..=0xFFFF => panic!("`Sound::load_byte` called with out of bounds address"),
         }
     }
 
@@ -111,12 +101,6 @@ impl SoundController {
             0x04 => self.channel1_frequency_hi = byte,
 
             // TODO: This is only a placeholder implementation
-            0x06 => self.channel2_length = byte,
-            0x07 => self.channel2_volume = byte,
-            0x08 => self.channel2_frequency_lo = byte,
-            0x09 => self.channel2_frequency_hi = byte,
-
-            // TODO: This is only a placeholder implementation
             0x10 => self.channel4_length = byte,
             0x11 => self.channel4_volume = byte,
             0x12 => self.channel4_polynomial_counter = byte,
@@ -127,6 +111,7 @@ impl SoundController {
             0x15 => self.selection_output = byte,
             0x16 => self.sound_on_off = byte,
 
+            0x06..=0x09 => self.square2.store_byte(addr, byte),
             0x0A..=0x0E | 0x20..=0x2F => self.wave.store_byte(addr, byte),
 
             _ => log::trace!("ignored write to {} in audio controller", addr),
@@ -140,35 +125,174 @@ impl SoundController {
 
         // This is the 512Hz clock (1_048_576 / 512 = 2048).
         if self.frame_sequencer % 2048 == 0 {
-            let rem = self.frame_sequencer % 2048;
+            let step = self.frame_sequencer / 2048;
 
             // 256Hz length clock.
-            if rem % 2 == 0 {
+            if step % 2 == 0 {
                 self.wave.clock_length();
             }
 
             // 128Hz sweep clock.
-            if rem == 2 || rem == 6 {
+            if step == 2 || step == 6 {
             }
 
             // 64Hz volume envelop clock.
-            if rem == 7 {
+            if step == 7 {
+                self.square2.clock_volume_envelope();
             }
 
             // Wrap frame sequencer.
-            if rem == 8 {
+            if step == 8 {
                 self.frame_sequencer = 0;
             }
         }
 
+        self.square2.step();
         self.wave.step();
     }
 
     pub(crate) fn output(&self) -> f32 {
         // (self.counter as f32 * 2.0 * 3.1415926 / 2u16.pow(13) as f32).sin()
-        self.wave.output()
+        self.wave.output() + self.square2.output()
     }
 }
+
+
+/// The pulse or square-wave channel 2. This one is the same as the first one,
+/// but doesn't have frequency sweep.
+///
+/// Things not implemented (and maybe never will, because weird):
+/// - TODO: Make sure the envelop operation is over once it
+///   overflows/underflows. (Is that even correct, only have one source).
+/// - TODO: length timer and stuff
+struct SquareChannel2 {
+    // Raw registers
+    duty_and_length: Byte,  // FF16   DDLL_LLLL
+    volume_envelope: Byte,  // FF17   VVVV_DNNN (initial Volume, Direction, Number)
+    freq_lo: Byte,          // FF18   FFFF_FFFF
+    control_and_freq: Byte, // FF19   TL11_1FFF
+
+    /// Internal "frequency" timer which counts down.
+    timer: u16,
+
+    /// The position within the 8 value waveform table. Wraps around at 8.
+    position: u8,
+
+    /// Internal volume of the volume envelope between 0 and 15.
+    volume: u8,
+
+    /// Counts down from "envelope period" to 0. When 0 is reached, it is reset
+    /// and an envelop operation happens.
+    volume_counter: u8,
+}
+
+impl SquareChannel2 {
+    fn new() -> Self {
+        Self {
+            duty_and_length: Byte::zero(),
+            volume_envelope: Byte::zero(),
+            freq_lo: Byte::zero(),
+            control_and_freq: Byte::zero(),
+            timer: 0,
+            position: 0,
+            volume: 0,
+            volume_counter: 0,
+        }
+    }
+
+    pub(crate) fn load_byte(&self, addr: Word) -> Byte {
+        match addr.get() {
+            0x06 => self.duty_and_length,
+            0x07 => self.volume_envelope,
+            0x08 => self.freq_lo,
+            0x09 => self.control_and_freq,
+            _ => unreachable!(),
+        }
+    }
+
+    fn store_byte(&mut self, addr: Word, byte: Byte) {
+        match addr.get() {
+            0x06 => self.duty_and_length = byte,
+            0x07 => self.volume_envelope = byte,
+            0x08 => self.freq_lo = byte,
+            0x09 => {
+                self.control_and_freq = byte.mask_or(0b1100_0111);
+                if byte.get() & 0b1000_0000 != 0 {
+                    self.trigger();
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn reset_timer(&mut self) {
+        let freq = self.freq_lo.get() as u16 + ((self.control_and_freq.get() as u16 & 0b111) << 8);
+        self.timer = 2048 - freq;
+    }
+
+    fn envelope_period(&self) -> u8 {
+        self.volume_envelope.get() & 0b111
+    }
+
+    fn trigger(&mut self) {
+        // TODO: length stuff
+        self.reset_timer();
+        self.position = 0;
+        self.volume = self.volume_envelope.get() >> 4;
+        self.volume_counter = self.envelope_period();
+    }
+
+    fn clock_volume_envelope(&mut self) {
+        if self.volume_envelope.get()  & 0b111 == 0 {
+            return;
+        }
+
+        if self.volume_counter > 0 {
+            self.volume_counter -= 1;
+        } else {
+            self.volume_counter = self.envelope_period();
+
+            // TODO: once it overflows/underflows, the envelop operation should
+            // stop.
+
+            if self.volume_envelope.get() & 0b1000 == 0 {
+                // Decrease volume
+                self.volume = self.volume.saturating_sub(1);
+            } else {
+                // Increase volume
+                if self.volume < 15 {
+                    self.volume += 1;
+                }
+            }
+        }
+    }
+
+    fn step(&mut self) {
+        if self.timer > 0 {
+            self.timer -= 1;
+        } else {
+            self.reset_timer();
+            self.position = (self.position + 1) % 8;
+        }
+    }
+
+    fn output(&self) -> f32 {
+        if (self.volume_envelope.get() & 0b1111_1000) == 0 {
+            return 0.0;
+        }
+
+        let waveform = match self.duty_and_length.get() >> 6 {
+            0b00 => [0, 0, 0, 0, 0, 0, 0, 1],
+            0b01 => [1, 0, 0, 0, 0, 0, 0, 1],
+            0b10 => [1, 0, 0, 0, 0, 1, 1, 1],
+            0b11 => [0, 1, 1, 1, 1, 1, 1, 0],
+            _ => unreachable!(),
+        };
+
+        dac(self.volume * waveform[self.position as usize])
+    }
+}
+
 
 /// The wave channel.
 ///
@@ -212,8 +336,7 @@ struct WaveChannel {
     /// Internal position counter that wraps at 32.
     position: u8,
 
-    /// Internal timer which counts down. This value is reloaded with
-    /// `(2048 - self.freq()) * 2`.
+    /// Internal "frequency" timer which counts down.
     timer: u16,
 
     // This is an internal counter which can be loaded by writing `length`.
