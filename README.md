@@ -1,24 +1,39 @@
 Mahboi – yet another Game Boy emulator
 ======================================
 
-Hobby project. WIP.
+This is merely a hobby project of ours.
+Our goal is just to play a couple games we enjoyed when we were young :)
+Feel free to check out the code or try it for yourself.
+But you most certainly want to use a different emulator if you plan on actually playing games.
+We have a somewhat nice debugger though!
 
 
-## Requirements
+<p align="center">
+    <img src=".github/readme/pokemon-gold.png" width="46%"></img>
+    <img src=".github/readme/zelda.png" width="46%"></img>
+</p>
 
-To compile this project, you need a nightly compiler. This is because we are already using the *Rust 2018* edition which is not quite stable yet. However, most features contained in *Rust 2018* are already fairly stable and are just waiting for stabilization. So it's not like we're using features that will break tomorrow. To use (and install) a nightly compiler for this project, run:
+<p align="center">
+    <img src=".github/readme/debugger.png" width="95%"></img>
+</p>
 
-```
-$ rustup override set nightly
-```
+## Building and Running
 
-You can also use `nightly-2018-08-06` instead, if you want to have the exact version I'm using right now. But as I said: future versions shouldn't break anything.
+You need a somewhat recent version of Rust and Cargo to compile this project.
+To run the emulator, your system needs to support Vulkan (as we depend on `pixels`, which uses `wgpu`, which uses Vulkan).
 
-To compile the WASM part of this project, additional software is required. See the README in the `web/` folder for more information.
+On Linux, you additionally need some native libraries:
+
+- ALSA sound (`libasound2-dev` on Ubuntu)
+- Ncurses (`libncurses-dev` and `libncursesw6` on Ubuntu)
+- You maybe need these ones as well (but I'm not sure, sorry :D): `libxkbcommon-dev libwayland-cursor0 libwayland-dev`
+
 
 ## Documentation and Information
 
-[In the wiki](https://github.com/LukasKalbertodt/mahboi/wiki).
+There is some information and a couple of links [in the wiki](https://github.com/LukasKalbertodt/mahboi/wiki).
+
+A very rough roadmap with things that still need to be fixed can be seen here: https://github.com/LukasKalbertodt/mahboi/issues/39
 
 ---
 
