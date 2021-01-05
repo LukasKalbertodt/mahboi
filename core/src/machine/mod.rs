@@ -9,6 +9,7 @@ use self::{
     interrupt::{InterruptController, Interrupt},
     input::InputController,
     timer::Timer,
+    sound::SoundController,
 };
 
 
@@ -22,6 +23,7 @@ pub mod ppu;
 mod step;
 mod interrupt;
 pub mod input;
+mod sound;
 mod timer;
 
 
@@ -33,6 +35,8 @@ pub struct Machine {
     // TODO These should be arrays!
     pub bios: Memory,
     pub wram: Memory,
+
+    // TODO: Remove this, if all IO registers are implemented as their one types
     pub io: Memory,
 
     pub ppu: Ppu,
@@ -43,6 +47,7 @@ pub struct Machine {
 
     pub(crate) interrupt_controller: InterruptController,
     pub(crate) input_controller: InputController,
+    pub(crate) sound_controller: SoundController,
 
     /// Because the EI instruction enables the interrupts during the next cycle we have to store
     /// the request for doing this. This is the purpose of this variable.
@@ -74,6 +79,7 @@ impl Machine {
             hram: Memory::zeroed(Word::new(0x7F)),
             interrupt_controller: InterruptController::new(),
             input_controller: InputController::new(),
+            sound_controller: SoundController::new(),
             enable_interrupts_next_step: false,
             state: State::Normal,
         }
