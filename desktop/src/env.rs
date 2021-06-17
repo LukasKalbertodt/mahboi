@@ -32,7 +32,7 @@ const SOURCE_BUFFER_TOO_SHORT_BELOW: u32 = 2;
 
 /// The environment of the Gameboy. Implements `Peripherals`.
 pub(crate) struct Env {
-    pub(crate) pixels: Pixels<Window>,
+    pub(crate) pixels: Pixels,
     keys: Keys,
 
     // Sound system

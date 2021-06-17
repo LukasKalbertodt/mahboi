@@ -122,7 +122,7 @@ fn run() -> Result<(), Error> {
             // Handle other non-Gameboy input events.
             timer.set_turbo_mode(input.key_held(VirtualKeyCode::Q));
             if let Some(size) = input.window_resized() {
-                env.pixels.resize(size.width, size.height);
+                env.pixels.resize_surface(size.width, size.height);
             }
 
             // Run the emulator.
