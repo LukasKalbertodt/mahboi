@@ -16,8 +16,8 @@ mahboi = { path = "../core" }
 pixels = "0.8"
 structopt = "0.3"
 unicode-width = "0.1.5"
-winit = "0.25"
-winit_input_helper = "0.10"
+winit = "0.27.2"
+winit_input_helper = "0.13"
 
 [target.'cfg(not(windows))'.dependencies]
 cursive = "0.15.0"
