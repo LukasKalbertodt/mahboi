@@ -53,7 +53,15 @@ impl Env {
             let window_size = window.inner_size();
             let surface_texture
                 = SurfaceTexture::new(window_size.width, window_size.height, window);
-            Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
+            let mut pixels =
+                Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?;
+
+            // Write 255 to all alpha channels here (well, to all channels for
+            // simplicity). Since pixels 0.9 we need to explicitly set the
+            // alpha values.
+            pixels.get_frame().fill(255);
+
+            pixels
         };
 
         // Audio stream for emulated audio
