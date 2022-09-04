@@ -18,7 +18,7 @@ use crate::args::Args;
 
 type AudioBuffer = Arc<Mutex<Vec<f32>>>;
 
-const OPTIMAL_AUDIO_BUFFER_SIZE: u32 = 735;
+const OPTIMAL_AUDIO_BUFFER_SIZE: u32 = 1024;
 
 /// The number of samples in the source buffer above which we consider it "full
 /// enough" to start copying it into the output buffer.
