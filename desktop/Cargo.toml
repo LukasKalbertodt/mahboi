@@ -8,7 +8,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
-cpal = "0.13"
+cpal = "0.14"
 failure = "0.1.2"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["release_max_level_debug"] }
