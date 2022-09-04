@@ -46,6 +46,7 @@ pub(crate) struct Args {
         parse(try_from_str = parse_breakpoint),
         requires = "debug",
     )]
+    #[cfg_attr(windows, allow(dead_code))]
     pub(crate) breakpoints: Vec<Word>,
 
     /// When starting in debugging mode, don't pause at the beginning, but
